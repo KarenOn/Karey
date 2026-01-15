@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
 
-export async function GET(_: Request, { params }: { params: { visitId: string } }) {
-  const visitId = Number(params.visitId);
+export async function GET(_: Request, { params }: { params: Promise<{ visitId: string }> }) {
+  const visitId = Number((await params).visitId);
   if (!Number.isFinite(visitId)) return NextResponse.json({ message: "ID inválido" }, { status: 400 });
 
   const attachments = await prisma.medicalAttachment.findMany({
@@ -14,8 +14,8 @@ export async function GET(_: Request, { params }: { params: { visitId: string } 
   return NextResponse.json(attachments);
 }
 
-export async function POST(req: Request, { params }: { params: { visitId: string } }) {
-  const visitId = Number(params.visitId);
+export async function POST(req: Request, { params }: { params: Promise<{ visitId: string }> }) {
+  const visitId = Number((await params).visitId);
   if (!Number.isFinite(visitId)) return NextResponse.json({ message: "ID inválido" }, { status: 400 });
 
   const body = await req.json().catch(() => null);

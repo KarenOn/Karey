@@ -8,9 +8,9 @@ function zodDetails(err: any) {
   return err.issues?.map((i: any) => ({ path: i.path?.join("."), message: i.message })) ?? [];
 }
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const id = Number(ctx.params.id);
+  const id = Number((await ctx.params).id);
 
   const body = await req.json().catch(() => null);
   const parsed = AppointmentStatusChangeSchema.safeParse(body);

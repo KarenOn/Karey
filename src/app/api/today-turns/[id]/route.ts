@@ -61,9 +61,9 @@ import { getClinicIdOrFail } from "@/lib/auth";
 import { TodayTurnUpdateSchema } from "@/lib/validators/today-turns";
 import { zodDetails } from "@/lib/zodDetails";
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const id = Number(params.id);
+  const id = Number((await params).id);
 
   const body = await req.json().catch(() => null);
   const parsed = TodayTurnUpdateSchema.safeParse(body);
@@ -96,9 +96,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const id = Number(params.id);
+  const id = Number((await params).id);
 
   const exists = await prisma.todayTurn.findFirst({ where: { id, clinicId }, select: { id: true } });
   if (!exists) return NextResponse.json({ error: "No encontrado" }, { status: 404 });

@@ -48,9 +48,9 @@ const BodySchema = z.object({
   status: TodayTurnStatusSchema,
 });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const id = Number(params.id);
+  const id = Number((await params).id);
 
   const body = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(body);

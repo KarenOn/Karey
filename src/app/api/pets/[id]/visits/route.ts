@@ -17,8 +17,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   return NextResponse.json(visits);
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const petId = Number(params.id);
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const petId = Number((await params).id);
   if (!Number.isFinite(petId)) return NextResponse.json({ message: "ID inválido" }, { status: 400 });
 
   const body = await req.json().catch(() => null);
