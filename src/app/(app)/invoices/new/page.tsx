@@ -92,6 +92,7 @@ export default function NewInvoicePOSPage() {
   const [selectedItemId, setSelectedItemId] = useState<string>("");
 
   const [qty, setQty] = useState<number>(1);
+  const [payAmount, setPayAmount] = useState<string>("");
 
   // SKU input (scanner-friendly)
   const [code, setCode] = useState("");
@@ -123,12 +124,15 @@ export default function NewInvoicePOSPage() {
           fetch("/api/pos/products", { cache: "no-store" }),
         ]);
 
+        const { walkInClientId, clients } = await cRes.json();
+
         if (!cRes.ok || !sRes.ok || !pRes.ok) throw new Error("Error cargando catálogo");
 
-        const [c, s, p] = await Promise.all([cRes.json(), sRes.json(), pRes.json()]);
+        const [s, p] = await Promise.all([sRes.json(), pRes.json()]);
         if (!mounted) return;
 
-        setClients(c);
+        setClients(clients);
+        setClientId(String(walkInClientId))
         setServices(s);
         setProducts(p);
       } catch (e: any) {
@@ -329,7 +333,7 @@ export default function NewInvoicePOSPage() {
       payment:
         mode === "SAVE_AND_PAY"
           ? {
-              amount: total,
+              amount: payAmount,
               method: payMethod,
               reference: payRef ? payRef : null,
             }
@@ -803,6 +807,10 @@ export default function NewInvoicePOSPage() {
 
               {payNow ? (
                 <>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Monto</label>
+                    <Input value={payAmount} onChange={(e) => setPayAmount(e.target.value)} type="number" />
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       type="button"

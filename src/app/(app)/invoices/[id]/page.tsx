@@ -26,6 +26,7 @@ import {
   PawPrint,
   Banknote,
   Building2,
+  Check,
 } from "lucide-react";
 
 import { apiCreatePayment, apiGetInvoice, apiUpdateInvoice, InvoiceDetail } from "@/lib/api/invoices";
@@ -46,6 +47,7 @@ const statusUI: Record<
 > = {
   ISSUED: { label: "Pendiente", icon: Clock, badge: "bg-amber-100 text-amber-700 border-amber-200", hint: "Aún no está pagada" },
   PAID: { label: "Pagada", icon: CheckCircle, badge: "bg-emerald-100 text-emerald-700 border-emerald-200", hint: "Pago completado" },
+  PARTIALLY_PAID: { label: "Parcialmente pagada", icon: Check, badge: "bg-blue-100 text-blue-700 border-blue-200", hint: "Pago parcial" },
   VOID: { label: "Anulada", icon: XCircle, badge: "bg-rose-100 text-rose-700 border-rose-200", hint: "Factura anulada" },
   CANCELLED: { label: "Anulada", icon: XCircle, badge: "bg-rose-100 text-rose-700 border-rose-200", hint: "Factura anulada" },
 };
@@ -336,54 +338,56 @@ export default function InvoiceDetailPage() {
         {/* RIGHT: Info cards */}
         <div className="space-y-6">
           {/* Cliente */}
-          <div className="rounded-2xl border bg-card p-6">
-            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-              <User className="w-5 h-5 text-teal-500" /> Cliente
-            </h3>
-
-            <p className="font-semibold text-lg text-foreground">{invoice.client.fullName}</p>
-
-            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-              {invoice.client.phone ? (
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4" /> <span className="text-foreground/90">{invoice.client.phone}</span>
-                </div>
-              ) : null}
-
-              {invoice.client.email ? (
-                <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" /> <span className="text-foreground/90">{invoice.client.email}</span>
-                </div>
-              ) : null}
-
-              {invoice.client.address ? (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" /> <span className="text-foreground/90">{invoice.client.address}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Paciente */}
-          {invoice.pet ? (
+          <div className={invoice.pet ? "grid grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
             <div className="rounded-2xl border bg-card p-6">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <PawPrint className="w-5 h-5 text-teal-500" /> Paciente
+                <User className="w-5 h-5 text-teal-500" /> Cliente
               </h3>
 
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center text-3xl">
-                  {petEmoji}
-                </div>
-                <div>
-                  <p className="font-semibold text-lg text-foreground">{invoice.pet.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {invoice.pet.species} {invoice.pet.breed ? `• ${invoice.pet.breed}` : ""}
-                  </p>
-                </div>
+              <p className="font-semibold text-lg text-foreground">{invoice.client.fullName}</p>
+
+              <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                {invoice.client.phone ? (
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4" /> <span className="text-foreground/90">{invoice.client.phone}</span>
+                  </div>
+                ) : null}
+
+                {invoice.client.email ? (
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4" /> <span className="text-foreground/90">{invoice.client.email}</span>
+                  </div>
+                ) : null}
+
+                {invoice.client.address ? (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4" /> <span className="text-foreground/90">{invoice.client.address}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
-          ) : null}
+
+            {/* Paciente */}
+            {invoice.pet ? (
+              <div className="rounded-2xl border bg-card p-6">
+                <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <PawPrint className="w-5 h-5 text-teal-500" /> Paciente
+                </h3>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center text-3xl">
+                    {petEmoji}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-lg text-foreground">{invoice.pet.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {invoice.pet.species} {invoice.pet.breed ? `• ${invoice.pet.breed}` : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           {/* Pago / resumen */}
           <div className="rounded-2xl border bg-card p-6">

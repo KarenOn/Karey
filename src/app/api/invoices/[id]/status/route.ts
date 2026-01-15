@@ -8,9 +8,9 @@ const BodySchema = z.object({
   status: z.nativeEnum(InvoiceStatus),
 });
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const id = Number(params.id);
+  const id = Number((await params).id);
 
   const body = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(body);

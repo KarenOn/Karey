@@ -5,9 +5,9 @@ import { PaymentCreateSchema } from "@/lib/validators/payment";
 import { InvoiceStatus, Prisma } from "@/generated/prisma/client";
 import { zodDetails } from "@/lib/zodDetails";
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const invoiceId = Number(params.id);
+  const invoiceId = Number((await params).id);
 
   const inv = await prisma.invoice.findFirst({
     where: { id: invoiceId, clinicId },
@@ -30,17 +30,19 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   );
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
-  const invoiceId = Number(params.id);
+  const invoiceId = Number((await params).id);
 
   const body = await req.json().catch(() => null);
   const parsed = PaymentCreateSchema.safeParse(body);
+  console.log("Entre a hacer un pago", parsed);
   if (!parsed.success) {
     return NextResponse.json({ error: "Pago inválido", details: zodDetails(parsed.error) }, { status: 422 });
   }
 
   const input = parsed.data;
+  console.log("Input payment:", input);
 
   const result = await prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findFirst({

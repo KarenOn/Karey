@@ -77,8 +77,9 @@ export async function apiCreateInvoice(data: InvoiceCreateInput) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+  const payload = await res.json().catch(() => null); // ✅ una sola vez
   if (!res.ok) throw new Error("Error creando factura");
-  return res.json();
+  return payload;
 }
 
 export async function apiUpdateInvoice(id: number, data: InvoiceUpdateInput) {

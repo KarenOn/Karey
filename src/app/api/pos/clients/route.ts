@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClinicIdOrFail } from "@/lib/auth";
+import { getWalkInClientId } from "@/lib/pos/getWalkInClient";
 
 export async function GET() {
   const clinicId = await getClinicIdOrFail();
+  const walkInClientId = await getWalkInClientId(clinicId!);
 
   const clients = await prisma.client.findMany({
     where: { clinicId },
@@ -16,5 +18,5 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json(clients);
+  return NextResponse.json({ walkInClientId, clients });
 }

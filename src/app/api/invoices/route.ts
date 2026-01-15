@@ -6,6 +6,7 @@ import { getClinicIdOrFail } from "@/lib/auth"; // usa tu helper real
 import { zodDetails } from "@/lib/zodDetails"; // usa tu helper real
 import { InvoiceItemType, PaymentMethod, InvoiceStatus, Prisma } from "@/generated/prisma/client";
 import { z } from "zod";
+import { getWalkInClientId } from "@/lib/pos/getWalkInClient";
 
 function yyyymmdd(d: Date) {
   const y = d.getFullYear();
@@ -47,7 +48,7 @@ const ItemSchema = z.object({
 });
 
 const CreateInvoiceSchema = z.object({
-  clientId: z.number().int().positive(),
+  clientId: z.number().int().positive().optional(),
   petId: z.number().int().positive().nullable().optional(),
   appointmentId: z.number().int().positive().nullable().optional(),
 
@@ -164,17 +165,19 @@ export async function POST(req: Request) {
 
   const dueDate = data.dueDate ? new Date(data.dueDate) : null;
 
+  const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
+
   const result = await prisma.$transaction(async (tx) => {
     // Crea invoice + items
     const invoice = await tx.invoice.create({
       data: {
         clinicId,
-        clientId: data.clientId,
+        clientId: resolvedClientId,
         petId: data.petId ?? null,
         appointmentId: data.appointmentId ?? null,
 
         number: (await nextInvoiceNumber(clinicId!, new Date())).toString(),
-        status: data.payNow ? InvoiceStatus.PAID : InvoiceStatus.ISSUED,
+        status: data.payNow ? new Prisma.Decimal(data.payment?.amount) < new Prisma.Decimal(total) ? InvoiceStatus.PARTIALLY_PAID : InvoiceStatus.PAID : InvoiceStatus.ISSUED,
         issueDate: new Date(),
         dueDate,
         paidAt: data.payNow ? new Date() : null,

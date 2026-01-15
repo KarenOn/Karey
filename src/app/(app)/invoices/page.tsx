@@ -18,6 +18,7 @@ import {
   Banknote,
   Building,
   Ban,
+  Check,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ import { apiListInvoices, apiUpdateInvoiceStatus, type InvoiceListRow } from "@/
 
 const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
   PAID: { icon: CheckCircle, label: "Pagada", color: "bg-emerald-100 text-emerald-700" },
+  PARTIALLY_PAID: { icon: Check, label: "Parcialmente pagada", color: "bg-blue-100 text-blue-700" },
   ISSUED: { icon: Clock, label: "Pendiente", color: "bg-amber-100 text-amber-700" },
   VOID: { icon: XCircle, label: "Anulada", color: "bg-rose-100 text-rose-700" },
   DRAFT: { icon: Clock, label: "Borrador", color: "bg-slate-100 text-slate-700" },
@@ -100,9 +102,27 @@ export default function InvoicesPage() {
     window.open(`/invoices/${id}/ticket?paper=58`, "_blank");
   };
 
-  const handleDownloadPdf = (id: number) => {
-    window.open(`/invoices/${id}/print`, "_blank", "noopener,noreferrer"); // crea este endpoint cuando quieras
+  // const handleDownloadPdf = (id: number) => {
+  //   window.open(`/invoices/${id}/print`, "_blank", "noopener,noreferrer"); // crea este endpoint cuando quieras
+  // };
+
+  const handleDownloadPdf = async (invoiceId: number, invoiceNumber: string) => {
+    const res = await fetch(`/api/invoices/${invoiceId}/pdf`);
+    if (!res.ok) throw new Error("No se pudo generar el PDF");
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `invoice-${invoiceNumber}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
   };
+
 
   if (loading) {
     return (
@@ -272,11 +292,26 @@ export default function InvoicesPage() {
                         </Link>
                       </DropdownMenuItem>
 
-                      <DropdownMenuItem className="gap-2" onClick={() => handlePrintTicket(invoice.id)}>
-                        <Receipt className="w-4 h-4" /> Imprimir ticket
+                      <DropdownMenuItem className="gap-2" asChild>
+                        <Link href={`/invoices/${invoice.id}/ticket`}>
+                          <Receipt className="w-4 h-4" /> Imprimir ticket
+                        </Link>
                       </DropdownMenuItem>
 
-                      <DropdownMenuItem className="gap-2" onClick={() => handleDownloadPdf(invoice.id)}>
+                      {/* <DropdownMenuItem className="gap-2" onClick={() => handleDownloadPdf(invoice.id)}>
+                        <Download className="w-4 h-4" /> Descargar PDF
+                      </DropdownMenuItem> */}
+
+                      {/* <DropdownMenuItem className="gap-2" asChild>
+                        <Link href={`/invoices/${invoice.id}/print`} download={`invoice-${invoice.number}.pdf`}>
+                          <Download className="w-4 h-4" /> Descargar PDF
+                        </Link>
+                      </DropdownMenuItem> */}
+
+                      <DropdownMenuItem
+                        className="gap-2"
+                        onClick={() => handleDownloadPdf(invoice.id, invoice.number)}
+                      >
                         <Download className="w-4 h-4" /> Descargar PDF
                       </DropdownMenuItem>
 

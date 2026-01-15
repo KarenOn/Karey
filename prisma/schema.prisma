@@ -47,6 +47,7 @@ enum InvoiceStatus {
   DRAFT
   ISSUED
   PAID
+  PARTIALLY_PAID
   VOID
 }
 
@@ -101,8 +102,28 @@ enum AppointmentType {
   CHECKUP
   EMERGENCY
   GROOMING
+  BATH
+  HOSPITALIZATION
   DEWORMING
   OTHER
+}
+
+enum TodayTurnStatus {
+  WAITING
+  IN_PROGRESS
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum Weekday {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
 }
 
 /**
@@ -198,12 +219,32 @@ model Clinic {
   currency String  @default("USD")
   timezone String  @default("America/Santo_Domingo")
 
+  logoUrl  String? @db.Text
+  slogan   String?
+  owner    String?
+  mobile   String?
+  website  String?
+
+  taxName  String?
+  taxId    String?
+
+  bankName    String?
+  bankAccount String?
+  bankClabe   String?
+
+  invoiceNotes String? @db.Text
+  invoiceTerms String? @db.Text
+
+  socialMedia Json? // { facebook, instagram, whatsapp }
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  schedules          ClinicSchedule[]
   members            ClinicMember[]
   clients            Client[]
   pets               Pet[]
+  todayTurn          TodayTurn[]
   appointments       Appointment[]
   services           Service[]
   products           Product[]
@@ -216,6 +257,21 @@ model Clinic {
   medicalAttachments MedicalAttachment[]
 
   @@index([createdAt])
+}
+
+model ClinicSchedule {
+  id       Int     @id @default(autoincrement())
+  clinicId Int
+  day      Weekday
+
+  open   String?  @db.VarChar(5) // "HH:MM"
+  close  String?  @db.VarChar(5) // "HH:MM"
+  closed Boolean  @default(false)
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, day])
+  @@index([clinicId])
 }
 
 model ClinicMember {
@@ -258,6 +314,7 @@ model Client {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   pets         Pet[]
+  todayTurn    TodayTurn[]
   appointments Appointment[]
   invoices     Invoice[]
   visits       ClinicalVisit[]
@@ -292,6 +349,7 @@ model Pet {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   appointments Appointment[]
+  todayTurn    TodayTurn[]
   visits       ClinicalVisit[]
   vaccinations VaccinationRecord[]
   invoices     Invoice[]
@@ -347,6 +405,50 @@ model Appointment {
 
 /**
  * =========================
+ * Turno de hoy
+ * =========================
+*/
+
+model TodayTurn {
+  id       Int @id @default(autoincrement())
+  clinicId Int
+
+  // opcionales: si lo enlazas a cliente/mascota existente
+  clientId Int?
+  petId    Int?
+
+  // datos rápidos para walk-in (aunque no exista client/pet aún)
+  petName    String
+  species    PetSpecies @default(DOG)
+  ownerName  String
+  ownerPhone String
+
+  type        AppointmentType @default(GROOMING)
+  serviceName String
+  notes       String? @db.Text
+
+  arrivalAt              DateTime @default(now())
+  estimatedDurationMins  Int      @default(60)
+
+  status     TodayTurnStatus @default(WAITING)
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  pet    Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, arrivalAt])
+  @@index([clinicId, status])
+  @@index([clinicId, type])
+  @@index([clientId])
+  @@index([petId])
+}
+
+/**
+ * =========================
  * SERVICIOS
  * =========================
  */
@@ -355,6 +457,7 @@ model Service {
   id           Int @id @default(autoincrement())
   clinicId     Int
   name         String
+  category     String?
   description  String? @db.Text
   durationMins Int?
   price        Decimal @db.Decimal(12, 2)
@@ -368,6 +471,7 @@ model Service {
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
+  @@index([clinicId, category])
 }
 
 /**

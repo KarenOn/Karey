@@ -69,6 +69,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const body = await req.json().catch(() => null);
   const parsed = InvoiceUpdateSchema.safeParse(body);
+  console.log("Parsed invoice update:", parsed);
 
   if (!parsed.success) {
     return NextResponse.json({ error: "Datos inválidos", details: zodDetails(parsed.error) }, { status: 422 });

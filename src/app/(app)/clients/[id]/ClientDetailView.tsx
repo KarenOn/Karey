@@ -56,7 +56,7 @@ type AppointmentDTO = {
 type InvoiceDTO = {
   id: number;
   number: string;
-  status: "DRAFT" | "ISSUED" | "PAID" | "VOID";
+  status: "DRAFT" | "ISSUED" | "PAID" | "PARTIALLY_PAID" | "VOID";
   issueDate: string; // ISO
   total: number;
 };
@@ -91,6 +91,7 @@ const invoiceStatusLabel: Record<InvoiceDTO["status"], string> = {
   DRAFT: "Borrador",
   ISSUED: "Emitida",
   PAID: "Pagada",
+  PARTIALLY_PAID: "Parcialmente pagada",
   VOID: "Anulada",
 };
 
@@ -338,6 +339,8 @@ export default function ClientDetailView({
                             className={
                               inv.status === "PAID"
                                 ? "bg-green-100 text-green-700"
+                                : inv.status === "PARTIALLY_PAID"
+                                ? "bg-blue-100 text-blue-700"
                                 : inv.status === "VOID"
                                 ? "bg-red-100 text-red-700"
                                 : "bg-yellow-100 text-yellow-700"

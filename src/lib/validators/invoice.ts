@@ -19,7 +19,7 @@ export const InvoiceItemInputSchema = z.object({
 });
 
 export const InvoiceCreateSchema = z.object({
-  clientId: z.coerce.number().int().positive(),
+  clientId: z.coerce.number().int().positive().optional(),
   petId: toOptionalNumber().optional(),
   appointmentId: toOptionalNumber().optional(),
 
