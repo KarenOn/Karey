@@ -13,6 +13,7 @@ const statusConfig: Record<InvoiceStatus, { label: string; icon: React.ElementTy
   DRAFT: { label: "Borrador", icon: Clock, color: "text-slate-600", bg: "bg-slate-100" },
   ISSUED: { label: "Emitida", icon: Clock, color: "text-yellow-600", bg: "bg-yellow-100" },
   PAID: { label: "Pagada", icon: CheckCircle, color: "text-green-600", bg: "bg-green-100" },
+  PARTIALLY_PAID: { label: "Pago parcial", icon: CheckCircle, color: "text-blue-600", bg: "bg-blue-100" },
   VOID: { label: "Anulada", icon: XCircle, color: "text-red-600", bg: "bg-red-100" },
 };
 

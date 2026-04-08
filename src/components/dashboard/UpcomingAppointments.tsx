@@ -91,7 +91,7 @@ export default function UpcomingAppointments({ appointments, patients, clients }
                     <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1 truncate">
                         <User className="w-3 h-3" />
-                        {client?.fullName || apt.client_name || "Cliente"}
+                        {client?.name || apt.client_name || "Cliente"}
                       </span>
 
                       <span className="flex items-center gap-1">

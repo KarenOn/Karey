@@ -23,7 +23,7 @@ type Props = {
 };
 
 export default function VaccineReminders({ vaccinations, patients }: Props) {
-  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getPatient = (id: number) => patients.find((p) => p.id === id);
 
   const upcomingVaccinations = vaccinations
     .filter((v) => !!v.next_due_at)

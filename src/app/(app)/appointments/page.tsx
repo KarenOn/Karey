@@ -950,7 +950,7 @@ export default function AppointmentsPage() {
 
         <TabsContent value="list" className="mt-6">
           <DataTable
-            columns={columns}
+            columns={columns as any}
             data={tableRows}
             searchKey="searchText"
             searchPlaceholder="Buscar por mascota, cliente, veterinario o motivo..."
@@ -977,7 +977,7 @@ export default function AppointmentsPage() {
       >
         <form onSubmit={(event) => { event.preventDefault(); void submitAppointment(); }} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
+            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={() => handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
 
             <div className="space-y-2">
               <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Propietario</label>
@@ -987,14 +987,14 @@ export default function AppointmentsPage() {
               </div>
             </div>
 
-            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
-            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
-            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={handleChange} required />
-            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={handleChange} required />
-            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={handleChange} />
-            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={handleChange} options={vetOptions} />
-            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={handleChange} className="sm:col-span-2" />
-            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={handleChange} className="sm:col-span-2" />
+            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={() => handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
+            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={() => handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
+            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={() => handleChange} required />
+            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={() => handleChange} required />
+            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={() => handleChange} />
+            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={() => handleChange} options={vetOptions} />
+            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={() => handleChange} className="sm:col-span-2" />
+            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={() => handleChange} className="sm:col-span-2" />
           </div>
         </form>
       </Modal>

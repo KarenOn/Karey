@@ -116,15 +116,18 @@ import {
 import { Switch } from "@/components/ui/switch";
 
 type Option = { value: string | number; label: string };
-type FieldType = "text" | "email" | "password" | "number" | "textarea" | "select" | "switch";
+type FieldType = "text" | "email" | "password" | "number" | "textarea" | "date" | "time" | "select" | "switch";
 type FieldValue = string | number | boolean | null | undefined;
+export type FormFieldChangeEvent = {
+  target: { name: string; value: string | number | boolean };
+};
 
 type FormFieldProps = {
   label?: string;
   name?: string;
   type?: FieldType;
   value?: FieldValue;
-  onChange?: (event: { target: { name: string; value: string | number | boolean } }) => void;
+  onChange?: (event: FormFieldChangeEvent) => void;
   placeholder?: string;
   options?: Option[];
   required?: boolean;
@@ -168,8 +171,8 @@ export default function FormField({
           <Textarea
             id={name}
             name={name}
-            value={value ?? ""}
-            onChange={onChange}
+            value={typeof value === "boolean" ? "" : (value ?? "")}
+            onChange={(event) => onChange?.({ target: { name, value: event.target.value } })}
             placeholder={placeholder}
             disabled={disabled}
             className="bg-input"
@@ -217,8 +220,8 @@ export default function FormField({
             id={name}
             name={name}
             type={type}
-            value={value ?? ""}
-            onChange={onChange}
+            value={typeof value === "boolean" ? "" : (value ?? "")}
+            onChange={(event) => onChange?.({ target: { name, value: event.target.value } })}
             placeholder={placeholder}
             disabled={disabled}
             className="bg-input"

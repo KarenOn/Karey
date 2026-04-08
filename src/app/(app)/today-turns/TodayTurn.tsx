@@ -83,8 +83,8 @@ export type TodayTurnService = "GROOMING" | "BATH" | "SURGERY" | "HOSPITALIZATIO
 export type TodayTurnDTO = {
   id: number;
 
-  petId: number;
-  clientId: number;
+  petId?: number | null;
+  clientId?: number | null;
 
   petName: string;
   species: PetOption["species"];
@@ -106,8 +106,8 @@ export type TodayTurnDTO = {
 };
 
 export type TodayTurnCreateDTO = {
-  petId: number;
-  clientId: number;
+  petId?: number;
+  clientId?: number;
   petName?: string;
   species?: PetOption["species"];
   ownerName?: string;
@@ -394,13 +394,13 @@ export default function TodayTurnsClient({
                 <span>Agregar Turno</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Agregar Nuevo Turno</DialogTitle>
-              </DialogHeader>
-              <AddTurnForm pets={pets} petOptions={petOptions} onSubmit={addNewTurn} onCancel={() => setDialogOpen(false)} />
-            </DialogContent>
-          </Dialog>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Agregar Nuevo Turno</DialogTitle>
+                </DialogHeader>
+              <AddTurnForm pets={pets} onSubmit={addNewTurn} onCancel={() => setDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
         </div>
       </div>
 
@@ -846,7 +846,7 @@ function AddTurnForm({
   onCancel,
 }: {
   pets: PetOption[];
-  onSubmit: (data: TodayTurnCreateDTO) => void;
+  onSubmit: (data: TodayTurnCreateDTO) => void | Promise<void>;
   onCancel: () => void;
 }) {
   // mode

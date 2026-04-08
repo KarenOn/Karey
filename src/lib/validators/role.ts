@@ -9,7 +9,7 @@ export const RoleCreateSchema = z.object({
   key: z.string().trim().min(2).max(50).regex(/^[a-z0-9-]+$/),
   name: z.string().trim().min(2).max(80),
   description: optionalString(),
-  permissions: z.record(z.array(z.string())).default({}),
+  permissions: z.record(z.string(), z.array(z.string())).default({}),
   isActive: z.boolean().optional().default(true),
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import SignedFileUploader from "@/components/shared/SignedFileUploader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ import {
 import { format, parseISO, differenceInYears, differenceInMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import Modal from "@/components/shared/Modal";
-import FormField from "@/components/shared/FormField";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
@@ -40,10 +40,6 @@ type AttachmentUploadDraft = {
   storageRef: string;
   previewUrl: string;
 };
-type FormFieldChangeEvent = React.ChangeEvent<
-  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
->;
-
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
   CAT: "🐱",
@@ -90,7 +86,7 @@ async function apiDelete(url: string, body?: unknown): Promise<void> {
   }
 }
 
-export default function PatientDetail() {
+function PatientDetailContent() {
   const params = useParams<{ id?: string }>();
   const searchParams = useSearchParams();
 
@@ -937,5 +933,13 @@ export default function PatientDetail() {
         description={alertState.description}
       />
     </div>
+  );
+}
+
+export default function PatientDetail() {
+  return (
+    <Suspense fallback={<div className="app-panel-strong p-6 text-sm text-muted-foreground">Cargando paciente...</div>}>
+      <PatientDetailContent />
+    </Suspense>
   );
 }

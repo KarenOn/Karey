@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AppAlert } from "@/components/shared/AppAlert";
 import DataTable from "@/components/shared/Datatable";
-import FormField from "@/components/shared/FormField";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { Badge } from "@/components/ui/badge";
@@ -339,12 +339,14 @@ export default function InventoryPage() {
     setMovementModalOpen(true);
   };
 
-  const handleProductChange = (event: { target: { name: keyof ProductFormState; value?: unknown } }) => {
-    setProductForm((prev) => ({ ...prev, [event.target.name]: event.target.value as never }));
+  const handleProductChange = (event: FormFieldChangeEvent) => {
+    const fieldName = event.target.name as keyof ProductFormState;
+    setProductForm((prev) => ({ ...prev, [fieldName]: event.target.value as never }));
   };
 
-  const handleMovementChange = (event: { target: { name: keyof MovementFormState; value?: unknown } }) => {
-    setMovementForm((prev) => ({ ...prev, [event.target.name]: String(event.target.value ?? "") }));
+  const handleMovementChange = (event: FormFieldChangeEvent) => {
+    const fieldName = event.target.name as keyof MovementFormState;
+    setMovementForm((prev) => ({ ...prev, [fieldName]: String(event.target.value ?? "") }));
   };
 
   const submitProduct = async (event?: React.FormEvent) => {
@@ -715,8 +717,8 @@ export default function InventoryPage() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input value={movementSearch} onChange={(event) => setMovementSearch(event.target.value)} placeholder="Buscar por producto, referencia o usuario" className="rounded-xl bg-input/60 pl-10" />
               </div>
-              <FormField label="Tipo" name="movementTypeFilter" type="select" value={movementTypeFilter} onChange={(event: { target: { value: string } }) => setMovementTypeFilter(event.target.value)} options={[{ value: "ALL", label: "Todos" }, ...movementTypeOptions]} />
-              <FormField label="Producto" name="movementProductFilter" type="select" value={movementProductFilter} onChange={(event: { target: { value: string } }) => setMovementProductFilter(event.target.value)} options={[{ value: "ALL", label: "Todos" }, ...productOptions]} />
+              <FormField label="Tipo" name="movementTypeFilter" type="select" value={movementTypeFilter} onChange={(event: { target: { name: string; value: string | number | boolean } }) => setMovementTypeFilter(String(event.target.value))} options={[{ value: "ALL", label: "Todos" }, ...movementTypeOptions]} />
+              <FormField label="Producto" name="movementProductFilter" type="select" value={movementProductFilter} onChange={(event: { target: { name: string; value: string | number | boolean } }) => setMovementProductFilter(String(event.target.value))} options={[{ value: "ALL", label: "Todos" }, ...productOptions]} />
             </div>
           </div>
           <DataTable columns={movementColumns} data={filteredMovements} searchKey={undefined} emptyMessage="No hay movimientos registrados" />

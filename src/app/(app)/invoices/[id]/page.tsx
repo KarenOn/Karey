@@ -29,7 +29,8 @@ import {
   Check,
 } from "lucide-react";
 
-import { apiCreatePayment, apiGetInvoice, apiUpdateInvoice, InvoiceDetail } from "@/lib/api/invoices";
+import { apiCreatePayment, apiGetInvoice, apiUpdateInvoiceStatus, InvoiceDetail } from "@/lib/api/invoices";
+import type { PaymentCreateInput } from "@/lib/validators/payment";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -80,7 +81,7 @@ export default function InvoiceDetailPage() {
 
   // pago rápido
   const [payAmount, setPayAmount] = useState<string>("");
-  const [payMethod, setPayMethod] = useState<string>("CASH");
+  const [payMethod, setPayMethod] = useState<PaymentCreateInput["method"]>("CASH");
   const [payRef, setPayRef] = useState<string>("");
 
   const issueDate = useMemo(() => safeDate(invoice?.issueDate), [invoice?.issueDate]);
@@ -131,7 +132,7 @@ export default function InvoiceDetailPage() {
 
   const markVoid = async () => {
     if (!invoice) return;
-    await apiUpdateInvoice(invoice.id, { status: "VOID" });
+    await apiUpdateInvoiceStatus(invoice.id, "VOID");
     await refresh();
   };
 
@@ -143,7 +144,7 @@ export default function InvoiceDetailPage() {
     await apiCreatePayment(invoice.id, {
       amount,
       method: payMethod,
-      reference: payRef ? payRef : null,
+      reference: payRef || undefined,
     });
 
     await refresh();

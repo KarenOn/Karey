@@ -21,9 +21,10 @@ export async function POST(req: Request) {
 
   await prisma.pushSubscription.upsert({
     where: {
-      clinicId_endpoint: { clinicId, endpoint: sub.endpoint },
+      clinicId,
     },
     update: {
+      endpoint: sub.endpoint,
       p256dh: sub.keys.p256dh,
       auth: sub.keys.auth,
       updatedAt: new Date(),

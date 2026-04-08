@@ -14,33 +14,33 @@ import { Button } from "@/components/ui/button";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
-type DataTableRow = Record<string, unknown> & {
+export type DataTableRow = Record<string, unknown> & {
   id?: string | number;
 };
 
-type DataTableColumn = {
+export type DataTableColumn<T extends DataTableRow = DataTableRow> = {
   header: string;
-  accessorKey?: string;
-  cell?: (row: DataTableRow) => React.ReactNode;
+  accessorKey?: keyof T & string;
+  cell?: (row: T) => React.ReactNode;
 };
 
-type DataTableProps = {
-  columns: DataTableColumn[];
-  data: DataTableRow[];
+type DataTableProps<T extends DataTableRow> = {
+  columns: DataTableColumn<T>[];
+  data: T[];
   searchPlaceholder?: string;
   searchKey?: string;
-  onRowClick?: (row: DataTableRow) => void;
+  onRowClick?: (row: T) => void;
   emptyMessage?: string;
 };
 
-export default function DataTable({ 
+export default function DataTable<T extends DataTableRow>({ 
   columns, 
   data, 
   searchPlaceholder = "Buscar...",
   searchKey,
   onRowClick,
   emptyMessage = "No hay datos disponibles"
-}: DataTableProps) {
+}: DataTableProps<T>) {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const pageSize = 10;
@@ -108,7 +108,7 @@ export default function DataTable({
                   >
                     {columns.map((col, colIndex) => (
                       <TableCell key={colIndex} className="py-4">
-                        {col.cell ? col.cell(row) : row[col.accessorKey!]}
+                        {col.cell ? col.cell(row) : (col.accessorKey ? (row[col.accessorKey] as React.ReactNode) : null)}
                       </TableCell>
                     ))}
                   </motion.tr>

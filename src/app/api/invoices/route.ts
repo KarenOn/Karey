@@ -85,8 +85,8 @@ export async function GET(req: Request) {
     ...(q
       ? {
           OR: [
-            { number: { contains: q, mode: "insensitive" } },
-            { client: { fullName: { contains: q, mode: "insensitive" } } },
+            { number: { contains: q } },
+            { client: { fullName: { contains: q } } },
           ],
         }
       : {}),
@@ -169,6 +169,8 @@ export async function POST(req: Request) {
 
   const result = await prisma.$transaction(async (tx) => {
     // Crea invoice + items
+    const payAmountValue = data.payment?.amount ?? total;
+
     const invoice = await tx.invoice.create({
       data: {
         clinicId,
@@ -177,7 +179,11 @@ export async function POST(req: Request) {
         appointmentId: data.appointmentId ?? null,
 
         number: (await nextInvoiceNumber(clinicId!, new Date())).toString(),
-        status: data.payNow ? new Prisma.Decimal(data.payment?.amount) < new Prisma.Decimal(total) ? InvoiceStatus.PARTIALLY_PAID : InvoiceStatus.PAID : InvoiceStatus.ISSUED,
+        status: data.payNow
+          ? new Prisma.Decimal(payAmountValue).lessThan(new Prisma.Decimal(total))
+            ? InvoiceStatus.PARTIALLY_PAID
+            : InvoiceStatus.PAID
+          : InvoiceStatus.ISSUED,
         issueDate: new Date(),
         dueDate,
         paidAt: data.payNow ? new Date() : null,
@@ -208,11 +214,10 @@ export async function POST(req: Request) {
 
     // Si payNow -> crea payment
     if (data.payNow) {
-      const payAmount = data.payment?.amount ?? total;
       await tx.payment.create({
         data: {
           invoiceId: invoice.id,
-          amount: new Prisma.Decimal(payAmount),
+          amount: new Prisma.Decimal(payAmountValue),
           method: data.payment?.method ?? PaymentMethod.CASH,
           reference: data.payment?.reference ?? null,
           paidAt: new Date(),

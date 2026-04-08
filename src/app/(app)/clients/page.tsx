@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Plus, Phone, Mail, MapPin, Edit, Trash2, PawPrint, Eye, FileText } from
 
 import DataTable from "@/components/shared/Datatable";
 import Modal from "@/components/shared/Modal";
-import FormField from "@/components/shared/FormField";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { AppAlert } from "@/components/shared/AppAlert";
 import AppPageHero from "@/components/shared/AppPageHero";
@@ -78,7 +78,7 @@ async function apiDeleteClient(id: number): Promise<void> {
   if (!res.ok) throw new Error("Error eliminando cliente");
 }
 
-export default function ClientsPage() {
+function ClientsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const action = searchParams.get("action");
@@ -116,8 +116,8 @@ export default function ClientsPage() {
       setError(null);
       const data = await apiGetClients();
       setClients(data);
-    } catch (e: any) {
-      setError(e?.message ?? "Error cargando clientes");
+    } catch (e: unknown) {
+      setError((e as Error)?.message ?? "Error cargando clientes");
     } finally {
       setLoading(false);
     }
@@ -147,7 +147,7 @@ export default function ClientsPage() {
     setModalOpen(true);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: FormFieldChangeEvent) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
 
@@ -206,8 +206,8 @@ export default function ClientsPage() {
       if (action === "new") router.replace("/clients");
 
       await loadClients();
-    } catch (e: any) {
-      setError(e?.message ?? "Error guardando cliente");
+    } catch (e: unknown) {
+      setError((e as Error)?.message ?? "Error guardando cliente");
     } finally {
       setSaving(false);
 
@@ -384,7 +384,7 @@ export default function ClientsPage() {
       )}
 
       <DataTable
-        columns={columns}
+        columns={columns as any[]}
         data={clients}
         searchKey="fullName"
         searchPlaceholder="Buscar cliente..."
@@ -437,7 +437,7 @@ export default function ClientsPage() {
               error={errors.email}
             />
 
-            <FormField label="Dirección" name="address" value={formData.address} onChange={handleChange} error={errors.address} />
+            <FormField label="Dirección" name="address" value={formData.address} onChange={() => handleChange} error={errors.address} />
 
             <FormField
               label="Notas"
@@ -469,5 +469,13 @@ export default function ClientsPage() {
         description={alert.description}
       />
     </div>
+  );
+}
+
+export default function ClientsPage() {
+  return (
+    <Suspense fallback={<div className="app-panel-strong p-6 text-sm text-muted-foreground">Cargando clientes...</div>}>
+      <ClientsPageContent />
+    </Suspense>
   );
 }
