@@ -1,4 +1,3 @@
-// src/app/(app)/today-turns/page.tsx
 export const dynamic = 'force-dynamic';
 import TodayTurns from "./TodayTurn";
 import { prisma } from "@/lib/prisma";
