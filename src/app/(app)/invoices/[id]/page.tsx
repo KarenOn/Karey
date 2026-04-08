@@ -116,7 +116,7 @@ export default function InvoiceDetailPage() {
     };
   }, [invoiceId]);
 
-  const ui = invoice ? (statusUI[invoice.status] ?? { label: invoice.status, icon: Clock, badge: "bg-slate-100 text-slate-700 border-slate-200", hint: "" }) : null;
+  const ui = invoice ? (statusUI[invoice.status] ?? { label: invoice.status, icon: Clock, badge: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20", hint: "" }) : null;
   const StatusIcon = ui?.icon ?? Clock;
 
   const canPay = invoice && invoice.status !== "PAID" && invoice.status !== "VOID" && invoice.status !== "CANCELLED";
@@ -231,7 +231,7 @@ export default function InvoiceDetailPage() {
             {/* Top brand bar */}
             <div className="bg-gradient-to-r from-teal-500 to-teal-600 text-white p-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-sm">
                   <PawPrint className="w-6 h-6" />
                 </div>
                 <div className="leading-tight">

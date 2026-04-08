@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getClinicIdOrFail } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { resolveStoredFileUrl } from "@/lib/storage";
 import { ClinicProfileSchema } from "@/lib/validators/clinic-profile";
 
-const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"] as const;
+const DAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
 
 function defaultSchedule() {
   return {
@@ -28,33 +37,25 @@ async function readProfile(clinicId: number) {
       address: true,
       currency: true,
       timezone: true,
-
       logoUrl: true,
       slogan: true,
       owner: true,
       mobile: true,
       website: true,
-
-    //   city: true,
-    //   state: true,
-    //   zipCode: true,
-    //   country: true,
-
       taxName: true,
       taxId: true,
-
       bankName: true,
       bankAccount: true,
       bankClabe: true,
-
       invoiceNotes: true,
       invoiceTerms: true,
-
       socialMedia: true,
     },
   });
 
-  if (!clinic) throw new Error("Clinic not found");
+  if (!clinic) {
+    throw new Error("Clinic not found");
+  }
 
   const schedRows = await prisma.clinicSchedule.findMany({
     where: { clinicId },
@@ -73,11 +74,14 @@ async function readProfile(clinicId: number) {
     };
   }
 
-  // socialMedia viene como Json | null
-  const sm = (clinic.socialMedia ?? {}) as any;
+  const sm = (clinic.socialMedia ?? {}) as Record<string, string>;
 
   return {
     ...clinic,
+    logoStorageRef: clinic.logoUrl ?? null,
+    logoUrl: await resolveStoredFileUrl(clinic.logoUrl, {
+      fileName: `logo-clinica-${clinic.id}.png`,
+    }),
     socialMedia: {
       facebook: sm.facebook ?? "",
       instagram: sm.instagram ?? "",
@@ -110,24 +114,19 @@ export async function PUT(req: Request) {
   }
 
   const data = parsed.data;
-
-  // separa schedule del resto
-  const { schedule, socialMedia, ...clinicData } = data as any;
+  const { schedule, socialMedia, logoStorageRef, ...clinicData } = data as any;
 
   try {
     await prisma.$transaction(async (tx) => {
-      // update clinic
       await tx.clinic.update({
         where: { id: clinicId },
         data: {
           ...clinicData,
-          ...(socialMedia
-            ? { socialMedia: { ...socialMedia } }
-            : {}),
+          ...(logoStorageRef !== undefined ? { logoUrl: logoStorageRef } : {}),
+          ...(socialMedia ? { socialMedia: { ...socialMedia } } : {}),
         },
       });
 
-      // upsert schedule
       if (schedule) {
         const entries = Object.entries(schedule) as Array<
           [string, { open?: string; close?: string; closed: boolean }]

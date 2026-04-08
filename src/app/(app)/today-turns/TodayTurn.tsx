@@ -196,26 +196,26 @@ const statusConfig: Record<
 > = {
   WAITING: {
     label: "En espera",
-    color: "bg-slate-100 text-slate-700 border-slate-200",
-    columnBg: "bg-slate-50",
+    color: "border-border bg-muted/70 text-muted-foreground",
+    columnBg: "bg-muted/40",
     accentRgb: "rgb(148 163 184)", // slate-400
   },
   IN_PROGRESS: {
     label: "En proceso",
-    color: "bg-amber-100 text-amber-700 border-amber-200",
-    columnBg: "bg-amber-50",
+    color: "border-amber-500/20 bg-amber-500/12 text-amber-700 dark:text-amber-300",
+    columnBg: "bg-amber-500/8",
     accentRgb: "rgb(251 191 36)", // amber-400
   },
   READY: {
     label: "Listo",
-    color: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    columnBg: "bg-emerald-50",
+    color: "border-emerald-500/20 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+    columnBg: "bg-emerald-500/8",
     accentRgb: "rgb(16 185 129)", // emerald-500
   },
   DELIVERED: {
     label: "Entregado",
-    color: "bg-blue-100 text-blue-700 border-blue-200",
-    columnBg: "bg-blue-50",
+    color: "border-blue-500/20 bg-blue-500/12 text-blue-700 dark:text-blue-300",
+    columnBg: "bg-blue-500/8",
     accentRgb: "rgb(96 165 250)", // blue-400
   },
 };
@@ -389,7 +389,7 @@ export default function TodayTurnsClient({
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="lg" className="gap-2 shadow-lg shadow-primary/25">
+              <Button size="lg" className="gap-2">
                 <Plus className="w-5 h-5" />
                 <span>Agregar Turno</span>
               </Button>
@@ -483,7 +483,7 @@ export default function TodayTurnsClient({
 
           {notifyDialog && (
             <div className="space-y-4">
-              <div className="bg-emerald-50 rounded-xl p-4 text-center">
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-center">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
                 <p className="font-semibold text-foreground">{notifyDialog.petName} está listo</p>
                 <p className="text-sm text-muted-foreground">Servicio: {notifyDialog.serviceName}</p>
@@ -513,7 +513,7 @@ export default function TodayTurnsClient({
                 </Button>
 
                 <Button
-                  className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  className="flex-1 gap-2"
                   disabled={!notifyDialog.ownerPhone || busyId === notifyDialog.id}
                   onClick={() => {
                     if (!notifyDialog.ownerPhone) return;
@@ -566,7 +566,7 @@ function TurnCard({
   const ServiceIcon = serviceType?.icon || Sparkles;
 
   return (
-    <Card className="p-4 shadow-sm hover:shadow-md transition-all border-0 bg-card">
+    <Card className="border-border/70 bg-card/94 p-4 transition-all hover:-translate-y-0.5">
       {/* Top row */}
       <div className="flex items-start gap-3 mb-3">
         <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white", serviceType?.color || "bg-primary")}>
@@ -603,10 +603,10 @@ function TurnCard({
           variant="secondary"
           className={cn(
             "gap-1.5 rounded-lg",
-            turn.service === "GROOMING" && "bg-pink-100 text-pink-700",
-            turn.service === "BATH" && "bg-blue-100 text-blue-700",
-            turn.service === "SURGERY" && "bg-red-100 text-red-700",
-            turn.service === "HOSPITALIZATION" && "bg-amber-100 text-amber-700"
+            turn.service === "GROOMING" && "bg-pink-500/12 text-pink-700 dark:text-pink-300",
+            turn.service === "BATH" && "bg-blue-500/12 text-blue-700 dark:text-blue-300",
+            turn.service === "SURGERY" && "bg-red-500/12 text-red-700 dark:text-red-300",
+            turn.service === "HOSPITALIZATION" && "bg-amber-500/12 text-amber-700 dark:text-amber-300"
           )}
         >
           <ServiceIcon className="w-3 h-3" />
@@ -631,7 +631,7 @@ function TurnCard({
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50 bg-transparent"
+            className="flex-1 gap-1.5 border-emerald-500/20 bg-transparent text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
             onClick={onNotify}
             disabled={busy}
           >
@@ -641,7 +641,7 @@ function TurnCard({
         )}
 
         {turn.status === "READY" && turn.notified && (
-          <Badge className="flex-1 justify-center gap-1.5 bg-emerald-100 text-emerald-700 border-0">
+          <Badge className="flex-1 justify-center gap-1.5 border-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Notificado
           </Badge>
@@ -968,7 +968,7 @@ function AddTurnForm({
                   variant="outline"
                   role="combobox"
                   aria-expanded={open}
-                  className="w-full justify-between bg-white"
+                        className="w-full justify-between bg-input"
                 >
                   <span className="truncate flex items-center gap-2">
                     <UserRound className="w-4 h-4 text-muted-foreground" />
@@ -1070,7 +1070,7 @@ function AddTurnForm({
                 value={walkin.species}
                 onValueChange={(v) => setWalkin((p) => ({ ...p, species: v as PetOption["species"] }))}
               >
-                <SelectTrigger className="bg-white">
+                  <SelectTrigger className="bg-input">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

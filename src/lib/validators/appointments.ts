@@ -1,69 +1,88 @@
 import { z } from "zod";
+import { AppointmentStatus, AppointmentType } from "@/generated/prisma/client";
 
-export const APPOINTMENT_TYPES = [
-  "CONSULTATION",
-  "VACCINATION",
-  "SURGERY",
-  "AESTHETIC",
-  "CHECKUP",
-  "EMERGENCY",
-  "GROOMING",
-  "DEWORMING",
-  "OTHER",
-] as const;
+export const APPOINTMENT_TYPES = Object.values(AppointmentType);
+export const APPOINTMENT_STATUSES = Object.values(AppointmentStatus);
 
-export const APPOINTMENT_STATUSES = [
-  "SCHEDULED",
-  "CONFIRMED",
-  "WAITING",
-  "COMPLETED",
-  "CANCELLED",
-  "NO_SHOW",
-] as const;
+export const AppointmentTypeSchema = z.nativeEnum(AppointmentType);
+export const AppointmentStatusSchema = z.nativeEnum(AppointmentStatus);
 
-// si tu enum AppointmentStatus ya existe pero con otros valores,
-// ajusta este array a tus valores reales.
-
-export const AppointmentTypeSchema = z.enum(APPOINTMENT_TYPES);
-export const AppointmentStatusSchema = z.enum(APPOINTMENT_STATUSES);
-
-const DateLike = z.preprocess((val) => {
-  if (typeof val === "string" || val instanceof Date) return new Date(val);
-  return val;
+const DateLike = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) return undefined;
+  if (typeof value === "string" || typeof value === "number" || value instanceof Date) {
+    return new Date(value);
+  }
+  return value;
 }, z.date());
 
-export const AppointmentCreateSchema = z
-  .object({
-    clientId: z.coerce.number().int().positive(),
-    petId: z.coerce.number().int().positive(),
+const NullableDateLike = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || value instanceof Date) {
+    return new Date(value);
+  }
+  return value;
+}, z.date().nullable());
 
-    type: AppointmentTypeSchema.default("CONSULTATION"),
+const toNullableTrimmedString = (max: number) =>
+  z.preprocess((value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }, z.string().max(max).nullable());
 
-    startAt: DateLike,
-    endAt: DateLike.optional().nullable(),
+const toNullableIdString = () =>
+  z.preprocess((value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }, z.string().min(1).nullable());
 
-    status: AppointmentStatusSchema.optional(), // opcional (server default)
-    reason: z.string().trim().max(200).optional().nullable(),
-    notes: z.string().trim().max(5000).optional().nullable(),
+const AppointmentWritableSchema = z.object({
+  clientId: z.coerce.number().int().positive().optional(),
+  petId: z.coerce.number().int().positive().optional(),
+  type: AppointmentTypeSchema.optional(),
+  startAt: DateLike.optional(),
+  endAt: NullableDateLike.optional(),
+  status: AppointmentStatusSchema.optional(),
+  reason: toNullableTrimmedString(200).optional(),
+  notes: toNullableTrimmedString(5000).optional(),
+  vetId: toNullableIdString().optional(),
+});
 
-    vetId: z.string().trim().min(1).optional().nullable(),
-  })
-  .superRefine((d, ctx) => {
-    if (d.endAt && d.endAt < d.startAt) {
-      ctx.addIssue({
-        code: "custom",
-        message: "endAt no puede ser menor que startAt",
-        path: ["endAt"],
-      });
-    }
-  });
+export const AppointmentCreateSchema = AppointmentWritableSchema.extend({
+  petId: z.coerce.number().int().positive(),
+  startAt: DateLike,
+  type: AppointmentTypeSchema.default(AppointmentType.CONSULTATION),
+}).superRefine((data, ctx) => {
+  if (data.endAt && data.endAt < data.startAt) {
+    ctx.addIssue({
+      code: "custom",
+      message: "endAt no puede ser menor que startAt",
+      path: ["endAt"],
+    });
+  }
+});
 
 export type AppointmentCreateInput = z.infer<typeof AppointmentCreateSchema>;
 
-export const AppointmentUpdateSchema = AppointmentCreateSchema.refine(
-  (d) => Object.keys(d).length > 0,
-  { message: "Debes enviar al menos un campo para actualizar." }
-);
+export const AppointmentUpdateSchema = AppointmentWritableSchema.superRefine((data, ctx) => {
+  if (Object.keys(data).length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Debes enviar al menos un campo para actualizar.",
+    });
+  }
+
+  if (data.startAt && data.endAt && data.endAt < data.startAt) {
+    ctx.addIssue({
+      code: "custom",
+      message: "endAt no puede ser menor que startAt",
+      path: ["endAt"],
+    });
+  }
+});
 
 export type AppointmentUpdateInput = z.infer<typeof AppointmentUpdateSchema>;
 

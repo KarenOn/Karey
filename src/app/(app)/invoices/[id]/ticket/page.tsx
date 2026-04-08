@@ -1,6 +1,7 @@
 // import InvoicePrintA4 from "@/components/invoices/print/InvoicePrintA4";
 import { prisma } from "@/lib/prisma";
 import { getClinicIdOrFail } from "@/lib/auth";
+import { resolveStoredFileUrl } from "@/lib/storage";
 import { notFound } from "next/navigation";
 import InvoiceTicket from "./InvoiceClientTicket";
 
@@ -40,7 +41,9 @@ export default async function InvoicePrintPage({
       email: invoice.clinic.email ?? null,
       address: invoice.clinic.address ?? null,
       rnc: (invoice.clinic as any).rnc ?? null,
-      logoUrl: (invoice.clinic as any).logoUrl ?? null,
+      logoUrl: await resolveStoredFileUrl((invoice.clinic as any).logoUrl ?? null, {
+        fileName: `logo-clinica-${invoice.clinic.id}.png`,
+      }),
     },
     invoice: {
       number: invoice.number,

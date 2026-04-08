@@ -757,7 +757,7 @@ export default function NewInvoicePOSPage() {
                       onClick={() => setApplyTax((v) => !v)}
                       className={cn(
                         "text-xs px-2 py-1 rounded-full border",
-                        applyTax ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-600 border-slate-200"
+                        applyTax ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20"
                       )}
                     >
                       {applyTax ? "Aplicado" : "No"}
@@ -798,7 +798,7 @@ export default function NewInvoicePOSPage() {
                   onClick={() => setPayNow((v) => !v)}
                   className={cn(
                     "text-xs px-2 py-1 rounded-full border",
-                    payNow ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-600 border-slate-200"
+                    payNow ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20"
                   )}
                 >
                   {payNow ? "Cobrar ahora" : "Solo guardar"}

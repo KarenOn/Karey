@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Info, AlertTriangle, XCircle, X } from "lucide-react";
+import { CheckCircle2, Info, AlertTriangle, XCircle } from "lucide-react";
 
 export type AppAlertVariant = "success" | "info" | "warning" | "destructive";
 
@@ -28,11 +28,21 @@ type Props = {
   hideIcon?: boolean;
 };
 
-const iconByVariant: Record<AppAlertVariant, React.ElementType> = {
-  success: CheckCircle2,
-  info: Info,
-  warning: AlertTriangle,
-  destructive: XCircle,
+const iconByVariant: Record<AppAlertVariant, React.ReactNode> = {
+  success: <CheckCircle2 className="h-4 w-4" />,
+  info: <Info className="h-4 w-4" />,
+  warning: <AlertTriangle className="h-4 w-4" />,
+  destructive: <XCircle className="h-4 w-4" />,
+};
+
+const toneByVariant: Record<AppAlertVariant, string> = {
+  success:
+    "!border-emerald-200 !bg-emerald-50 !text-emerald-950 [&_*]:!text-emerald-950",
+  info: "!border-sky-200 !bg-sky-50 !text-sky-950 [&_*]:!text-sky-950",
+  warning:
+    "!border-amber-200 !bg-amber-50 !text-amber-950 [&_*]:!text-amber-950",
+  destructive:
+    "!border-rose-200 !bg-rose-50 !text-rose-950 [&_*]:!text-rose-950",
 };
 
 export function AppAlert({
@@ -42,60 +52,62 @@ export function AppAlert({
   title,
   description,
   autoCloseMs = 3500,
-  dismissible = true,
+  dismissible = false,
   className,
   hideIcon = false,
 }: Props) {
-  const Icon = iconByVariant[variant];
-
-  // tonos para variants que shadcn no trae por defecto
-  const tone =
-    variant === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-950 [&_*]:text-emerald-950"
-      : variant === "warning"
-      ? "border-amber-200 bg-amber-50 text-amber-950 [&_*]:text-amber-950"
-      : variant === "info"
-      ? "border-sky-200 bg-sky-50 text-sky-950 [&_*]:text-sky-950"
-      : "";
+  const toastIdRef = React.useRef<string | number | null>(null);
+  const prevOpenRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (!open) return;
+    // Solo disparar toast cuando cambia de false -> true
+    if (open && !prevOpenRef.current) {
+      const icon = hideIcon ? null : iconByVariant[variant];
 
-    const t = window.setTimeout(() => {
-      onOpenChange(false);
-    }, autoCloseMs);
+      const baseOptions = {
+        description,
+        duration: autoCloseMs,
+        dismissible,
+        closeButton: dismissible,
+        icon,
+        className: cn("border shadow-lg", toneByVariant[variant], className),
+      };
 
-    return () => window.clearTimeout(t);
-  }, [open, autoCloseMs, onOpenChange]);
+      // Mapear tu variant al tipo de sonner
+      if (variant === "success") toastIdRef.current = toast.success(title, baseOptions);
+      else if (variant === "warning") toastIdRef.current = toast.warning(title, baseOptions);
+      else if (variant === "destructive") toastIdRef.current = toast.error(title, baseOptions);
+      else toastIdRef.current = toast.info(title, baseOptions);
 
-  if (!open) return null;
+      // Mantener tu comportamiento original: auto-cerrar controlado
+      const t = window.setTimeout(() => {
+        onOpenChange(false);
+      }, autoCloseMs);
 
-  return (
-    <Alert
-      variant={variant === "destructive" ? "destructive" : "default"}
-      className={cn("relative", tone, className)}
-      role="status"
-      aria-live="polite"
-    >
-      {!hideIcon && <Icon className="h-4 w-4" />}
+      return () => window.clearTimeout(t);
+    }
 
-      <div className="min-w-0">
-        <AlertTitle className="truncate">{title}</AlertTitle>
-        {description ? (
-          <AlertDescription className="mt-1">{description}</AlertDescription>
-        ) : null}
-      </div>
+    // Si el parent lo cierra manualmente, cerramos el toast también
+    if (!open && prevOpenRef.current) {
+      if (toastIdRef.current != null) {
+        toast.dismiss(toastIdRef.current);
+        toastIdRef.current = null;
+      }
+    }
 
-      {dismissible ? (
-        <button
-          type="button"
-          onClick={() => onOpenChange(false)}
-          className="absolute right-3 top-3 rounded-md p-1 opacity-70 hover:opacity-100"
-          aria-label="Cerrar alerta"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      ) : null}
-    </Alert>
-  );
+    prevOpenRef.current = open;
+  }, [
+    open,
+    variant,
+    title,
+    description,
+    autoCloseMs,
+    dismissible,
+    className,
+    hideIcon,
+    onOpenChange,
+  ]);
+
+  // Sonner no necesita renderizar nada aquí
+  return null;
 }

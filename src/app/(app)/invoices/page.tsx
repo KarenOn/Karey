@@ -29,7 +29,7 @@ const statusConfig: Record<string, { icon: any; label: string; color: string }> 
   PARTIALLY_PAID: { icon: Check, label: "Parcialmente pagada", color: "bg-blue-100 text-blue-700" },
   ISSUED: { icon: Clock, label: "Pendiente", color: "bg-amber-100 text-amber-700" },
   VOID: { icon: XCircle, label: "Anulada", color: "bg-rose-100 text-rose-700" },
-  DRAFT: { icon: Clock, label: "Borrador", color: "bg-slate-100 text-slate-700" },
+  DRAFT: { icon: Clock, label: "Borrador", color: "bg-zinc-100 text-zinc-700 dark:bg-zinc-500/10 dark:text-zinc-300" },
 };
 
 const paymentMethodConfig: Record<string, { icon: any; label: string }> = {
@@ -107,20 +107,21 @@ export default function InvoicesPage() {
   // };
 
   const handleDownloadPdf = async (invoiceId: number, invoiceNumber: string) => {
-    const res = await fetch(`/api/invoices/${invoiceId}/pdf`);
-    if (!res.ok) throw new Error("No se pudo generar el PDF");
+    // const res = await fetch(`/api/invoices/${invoiceId}/pdf`);
+    // if (!res.ok) throw new Error("No se pudo generar el PDF");
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    // const blob = await res.blob();
+    // const url = URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `invoice-${invoiceNumber}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    // const a = document.createElement("a");
+    // a.href = url;
+    // a.download = `invoice-${invoiceNumber}.pdf`;
+    // document.body.appendChild(a);
+    // a.click();
+    // a.remove();
 
-    URL.revokeObjectURL(url);
+    // URL.revokeObjectURL(url);
+    window.open(`/api/invoices/${invoiceId}/pdf`, "_blank", "noopener,noreferrer");
   };
 
 
@@ -207,7 +208,7 @@ export default function InvoicesPage() {
           </Button>
 
           {["ISSUED", "PAID", "VOID", "DRAFT"].map((key) => {
-            const cfg = statusConfig[key] || { label: key, icon: Clock, color: "bg-slate-100 text-slate-700" };
+            const cfg = statusConfig[key] || { label: key, icon: Clock, color: "bg-zinc-100 text-zinc-700 dark:bg-zinc-500/10 dark:text-zinc-300" };
             return (
               <Button key={key} variant={statusFilter === key ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(key)}>
                 {cfg.label}
@@ -232,7 +233,7 @@ export default function InvoicesPage() {
           return (
             <div
               key={invoice.id}
-              className="bg-card rounded-2xl border border-border p-6 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+              className="app-panel-strong rounded-2xl p-6 transition-all duration-300 hover:-translate-y-0.5"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">

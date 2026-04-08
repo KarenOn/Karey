@@ -14,6 +14,25 @@ import { Button } from "@/components/ui/button";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
+type DataTableRow = Record<string, unknown> & {
+  id?: string | number;
+};
+
+type DataTableColumn = {
+  header: string;
+  accessorKey?: string;
+  cell?: (row: DataTableRow) => React.ReactNode;
+};
+
+type DataTableProps = {
+  columns: DataTableColumn[];
+  data: DataTableRow[];
+  searchPlaceholder?: string;
+  searchKey?: string;
+  onRowClick?: (row: DataTableRow) => void;
+  emptyMessage?: string;
+};
+
 export default function DataTable({ 
   columns, 
   data, 
@@ -21,13 +40,13 @@ export default function DataTable({
   searchKey,
   onRowClick,
   emptyMessage = "No hay datos disponibles"
-}) {
+}: DataTableProps) {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
   const pageSize = 10;
 
   const filteredData = searchKey
-    ? data.filter(item => 
+    ? data.filter((item) => 
         String(item[searchKey] || '').toLowerCase().includes(search.toLowerCase())
       )
     : data;
@@ -36,62 +55,73 @@ export default function DataTable({
   const totalPages = Math.ceil(filteredData.length / pageSize);
 
   return (
-    <div className="space-y-4">
-      {searchKey && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            placeholder={searchPlaceholder}
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            className="pl-10 bg-white"
-          />
-        </div>
-      )}
+    <div className="space-y-5">
+      <div className="app-panel-strong overflow-hidden p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Vista estructurada</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {filteredData.length} registros encontrados {filteredData.length !== data.length ? `de ${data.length}` : ""}
+            </p>
+          </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-slate-100">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50 hover:bg-slate-50">
-              {columns.map((col, i) => (
-                <TableHead key={i} className="font-semibold text-slate-700">
-                  {col.header}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="text-center py-12 text-slate-500">
-                  {emptyMessage}
-                </TableCell>
+          {searchKey && (
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                className="pl-11"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-[1.6rem] border border-border/70 bg-background/70">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-secondary/65 hover:bg-secondary/65">
+                {columns.map((col, i) => (
+                  <TableHead key={i} className="font-semibold text-muted-foreground">
+                    {col.header}
+                  </TableHead>
+                ))}
               </TableRow>
-            ) : (
-              paginatedData.map((row, rowIndex) => (
-                <motion.tr
-                  key={row.id || rowIndex}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: rowIndex * 0.03 }}
-                  onClick={() => onRowClick?.(row)}
-                  className={`border-b border-slate-50 ${onRowClick ? 'cursor-pointer hover:bg-teal-50/50' : ''} transition-colors`}
-                >
-                  {columns.map((col, colIndex) => (
-                    <TableCell key={colIndex} className="py-3">
-                      {col.cell ? col.cell(row) : row[col.accessorKey]}
-                    </TableCell>
-                  ))}
-                </motion.tr>
-              ))
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {paginatedData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="py-16 text-center text-muted-foreground">
+                    {emptyMessage}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedData.map((row, rowIndex) => (
+                  <motion.tr
+                    key={row.id || rowIndex}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: rowIndex * 0.03 }}
+                    onClick={() => onRowClick?.(row)}
+                    className={`border-b border-border/60 ${onRowClick ? 'cursor-pointer hover:bg-secondary/55' : ''} transition-colors`}
+                  >
+                    {columns.map((col, colIndex) => (
+                      <TableCell key={colIndex} className="py-4">
+                        {col.cell ? col.cell(row) : row[col.accessorKey!]}
+                      </TableCell>
+                    ))}
+                  </motion.tr>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Mostrando {page * pageSize + 1} - {Math.min((page + 1) * pageSize, filteredData.length)} de {filteredData.length}
           </p>
           <div className="flex gap-2">

@@ -1,4 +1,3 @@
-// src/app/clients/[id]/ClientDetailView.tsx
 "use client";
 
 import React from "react";
@@ -15,6 +14,7 @@ import {
   Calendar,
   FileText,
   Eye,
+  UserRound,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -28,7 +28,7 @@ type ClientDTO = {
   email: string | null;
   address: string | null;
   notes: string | null;
-  createdAt: string; // ISO
+  createdAt: string;
 };
 
 type PetDTO = {
@@ -41,7 +41,7 @@ type PetDTO = {
 
 type AppointmentDTO = {
   id: number;
-  startAt: string; // ISO
+  startAt: string;
   status:
     | "SCHEDULED"
     | "CONFIRMED"
@@ -57,7 +57,7 @@ type InvoiceDTO = {
   id: number;
   number: string;
   status: "DRAFT" | "ISSUED" | "PAID" | "PARTIALLY_PAID" | "VOID";
-  issueDate: string; // ISO
+  issueDate: string;
   total: number;
 };
 
@@ -75,24 +75,32 @@ const appointmentStatusLabel: Record<AppointmentDTO["status"], string> = {
   IN_PROGRESS: "En progreso",
   COMPLETED: "Atendida",
   CANCELLED: "Cancelada",
-  NO_SHOW: "No asistió",
+  NO_SHOW: "No asistio",
 };
 
 const appointmentStatusColors: Record<AppointmentDTO["status"], string> = {
-  SCHEDULED: "bg-blue-100 text-blue-700",
-  CONFIRMED: "bg-green-100 text-green-700",
-  IN_PROGRESS: "bg-yellow-100 text-yellow-700",
-  COMPLETED: "bg-teal-100 text-teal-700",
-  CANCELLED: "bg-red-100 text-red-700",
-  NO_SHOW: "bg-slate-100 text-slate-700",
+  SCHEDULED: "border-blue-500/20 bg-blue-500/12 text-blue-700 dark:text-blue-300",
+  CONFIRMED: "border-green-500/20 bg-green-500/12 text-green-700 dark:text-green-300",
+  IN_PROGRESS: "border-yellow-500/20 bg-yellow-500/12 text-yellow-700 dark:text-yellow-300",
+  COMPLETED: "border-teal-500/20 bg-teal-500/12 text-teal-700 dark:text-teal-300",
+  CANCELLED: "border-red-500/20 bg-red-500/12 text-red-700 dark:text-red-300",
+  NO_SHOW: "border-border bg-muted/70 text-muted-foreground",
 };
 
 const invoiceStatusLabel: Record<InvoiceDTO["status"], string> = {
   DRAFT: "Borrador",
   ISSUED: "Emitida",
   PAID: "Pagada",
-  PARTIALLY_PAID: "Parcialmente pagada",
+  PARTIALLY_PAID: "Pago parcial",
   VOID: "Anulada",
+};
+
+const invoiceStatusColors: Record<InvoiceDTO["status"], string> = {
+  DRAFT: "border-border bg-muted/70 text-muted-foreground",
+  ISSUED: "border-amber-500/20 bg-amber-500/12 text-amber-700 dark:text-amber-300",
+  PAID: "border-green-500/20 bg-green-500/12 text-green-700 dark:text-green-300",
+  PARTIALLY_PAID: "border-blue-500/20 bg-blue-500/12 text-blue-700 dark:text-blue-300",
+  VOID: "border-red-500/20 bg-red-500/12 text-red-700 dark:text-red-300",
 };
 
 export default function ClientDetailView({
@@ -111,136 +119,93 @@ export default function ClientDetailView({
 }) {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button asChild variant="ghost" size="icon" className="rounded-xl">
+      <div className="app-page-hero flex items-center gap-4">
+        <Button asChild variant="outline" size="icon" className="rounded-2xl">
           <Link href="/clients">
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
 
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-slate-800">{client.fullName}</h2>
-          <p className="text-slate-500">
-            Cliente desde{" "}
-            {format(parseISO(client.createdAt), "MMMM yyyy", { locale: es })}
+          <p className="app-kicker mb-3 inline-flex border-0">Clientes y relacion</p>
+          <h2 className="app-heading text-3xl sm:text-4xl">{client.fullName}</h2>
+          <p className="mt-2 text-muted-foreground">
+            Cliente desde {format(parseISO(client.createdAt), "MMMM yyyy", { locale: es })}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Client Info */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl shadow-sm p-6"
+          className="app-panel-strong p-6"
         >
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center text-white text-2xl font-bold">
+          <div className="mb-6 flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--brand-teal)_82%,white_18%),color-mix(in_srgb,var(--brand-navy)_82%,white_18%))] text-2xl font-bold text-white">
               {client.fullName?.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h3 className="text-xl font-bold text-slate-800">{client.fullName}</h3>
-              <p className="text-slate-500 text-sm">Propietario</p>
+              <h3 className="text-xl font-bold text-foreground">{client.fullName}</h3>
+              <p className="text-sm text-muted-foreground">Propietario</p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-3 text-slate-600">
-              <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                <Phone className="w-5 h-5 text-slate-500" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">Teléfono</p>
-                <p className="font-medium">{client.phone ?? "-"}</p>
-              </div>
-            </div>
-
-            {client.email && (
-              <div className="flex items-center gap-3 text-slate-600">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                  <Mail className="w-5 h-5 text-slate-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Email</p>
-                  <p className="font-medium">{client.email}</p>
-                </div>
-              </div>
-            )}
-
-            {client.address && (
-              <div className="flex items-center gap-3 text-slate-600">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-slate-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Dirección</p>
-                  <p className="font-medium">{client.address}</p>
-                </div>
-              </div>
-            )}
+            <InfoRow icon={Phone} label="Telefono" value={client.phone ?? "-"} />
+            {client.email ? <InfoRow icon={Mail} label="Email" value={client.email} /> : null}
+            {client.address ? <InfoRow icon={MapPin} label="Direccion" value={client.address} /> : null}
           </div>
 
-          {client.notes && (
-            <div className="mt-6 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-400 mb-1">Notas</p>
-              <p className="text-slate-600">{client.notes}</p>
+          {client.notes ? (
+            <div className="mt-6 border-t border-border/70 pt-4">
+              <p className="mb-1 text-xs text-muted-foreground">Notas</p>
+              <p className="text-sm text-foreground">{client.notes}</p>
             </div>
-          )}
+          ) : null}
 
-          {/* Stats */}
-          <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-3 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-teal-600">{pets.length}</p>
-              <p className="text-xs text-slate-500">Mascotas</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{appointments.length}</p>
-              <p className="text-xs text-slate-500">Citas</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">
-                ${totalSpent.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-              </p>
-              <p className="text-xs text-slate-500">Total</p>
-            </div>
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-border/70 pt-4">
+            <MiniStat label="Mascotas" value={pets.length} tone="text-primary" />
+            <MiniStat label="Citas" value={appointments.length} tone="text-[var(--brand-navy)] dark:text-blue-300" />
+            <MiniStat
+              label="Total"
+              value={`$${totalSpent.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`}
+              tone="text-emerald-600 dark:text-emerald-300"
+            />
           </div>
         </motion.div>
 
-        {/* Pets */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl shadow-sm overflow-hidden"
+          className="app-panel-strong overflow-hidden"
         >
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-              <PawPrint className="w-5 h-5 text-teal-500" />
+          <div className="flex items-center justify-between border-b border-border/70 p-4">
+            <h3 className="flex items-center gap-2 font-semibold text-foreground">
+              <PawPrint className="h-5 w-5 text-primary" />
               Mascotas ({pets.length})
             </h3>
           </div>
 
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-border/50">
             {pets.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
+              <div className="p-8 text-center text-muted-foreground">
                 No tiene mascotas registradas
               </div>
             ) : (
               pets.map((pet) => (
                 <Link key={pet.id} href={`/pets/${pet.id}`}>
-                  <div className="p-4 hover:bg-slate-50 transition-colors">
+                  <div className="p-4 transition-colors hover:bg-muted/45">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center text-2xl">
-                        {speciesEmoji[pet.species] ?? "🐾"}
-                      </div>
+                      <div className="app-stat-icon text-2xl">{speciesEmoji[pet.species] ?? "🐾"}</div>
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-800">{pet.name}</p>
-                        <p className="text-sm text-slate-500">
+                        <p className="font-semibold text-foreground">{pet.name}</p>
+                        <p className="text-sm text-muted-foreground">
                           {pet.species} • {pet.breed || "Sin raza"}
                         </p>
                       </div>
-                      <Eye className="w-4 h-4 text-slate-400" />
+                      <Eye className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
                 </Link>
@@ -249,114 +214,146 @@ export default function ClientDetailView({
           </div>
         </motion.div>
 
-        {/* Recent Activity */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="space-y-6"
         >
-          {/* Recent Appointments */}
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-purple-500" />
-                Últimas Citas
-              </h3>
-            </div>
+          <ActivityPanel
+            title="Ultimas Citas"
+            icon={Calendar}
+            iconClassName="text-[var(--brand-navy)] dark:text-blue-300"
+            emptyMessage="Sin citas registradas"
+          >
+            {appointments.slice(0, 3).map((apt) => (
+              <div key={apt.id} className="p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">
+                      {apt.reason || "Consulta"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {apt.pet?.name ?? "Mascota"} • {format(parseISO(apt.startAt), "HH:mm")}
+                    </p>
+                  </div>
 
-            <div className="divide-y divide-slate-50">
-              {appointments.length === 0 ? (
-                <div className="p-6 text-center text-slate-500 text-sm">
-                  Sin citas registradas
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {format(parseISO(apt.startAt), "d MMM", { locale: es })}
+                    </p>
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${appointmentStatusColors[apt.status]}`}
+                    >
+                      {appointmentStatusLabel[apt.status]}
+                    </span>
+                  </div>
                 </div>
-              ) : (
-                appointments.slice(0, 3).map((apt) => (
-                  <div key={apt.id} className="p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-800 truncate">
-                          {apt.reason || "Consulta"}
-                        </p>
-                        <p className="text-sm text-slate-500">
-                          {apt.pet?.name ?? "Mascota"} •{" "}
-                          {format(parseISO(apt.startAt), "HH:mm")}
-                        </p>
-                      </div>
+              </div>
+            ))}
+          </ActivityPanel>
 
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-slate-600">
-                          {format(parseISO(apt.startAt), "d MMM", { locale: es })}
-                        </p>
-                        <span
-                          className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                            appointmentStatusColors[apt.status]
-                          }`}
-                        >
-                          {appointmentStatusLabel[apt.status]}
-                        </span>
-                      </div>
+          <ActivityPanel
+            title="Ultimas Facturas"
+            icon={FileText}
+            iconClassName="text-emerald-600 dark:text-emerald-300"
+            emptyMessage="Sin facturas registradas"
+          >
+            {invoices.slice(0, 3).map((inv) => (
+              <Link key={inv.id} href={`/invoices/${inv.id}`}>
+                <div className="p-4 transition-colors hover:bg-muted/45">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">{inv.number}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(parseISO(inv.issueDate), "d MMM yyyy", { locale: es })}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="font-bold text-foreground">
+                        ${inv.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </p>
+                      <Badge className={invoiceStatusColors[inv.status]}>
+                        {invoiceStatusLabel[inv.status]}
+                      </Badge>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Recent Invoices */}
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-green-500" />
-                Últimas Facturas
-              </h3>
-            </div>
-
-            <div className="divide-y divide-slate-50">
-              {invoices.length === 0 ? (
-                <div className="p-6 text-center text-slate-500 text-sm">
-                  Sin facturas registradas
                 </div>
-              ) : (
-                invoices.slice(0, 3).map((inv) => (
-                  <Link key={inv.id} href={`/invoices/${inv.id}`}>
-                    <div className="p-4 hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="font-medium text-slate-800">{inv.number}</p>
-                          <p className="text-sm text-slate-500">
-                            {format(parseISO(inv.issueDate), "d MMM yyyy", {
-                              locale: es,
-                            })}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="font-bold text-slate-800">
-                            ${inv.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </p>
-                          <Badge
-                            className={
-                              inv.status === "PAID"
-                                ? "bg-green-100 text-green-700"
-                                : inv.status === "PARTIALLY_PAID"
-                                ? "bg-blue-100 text-blue-700"
-                                : inv.status === "VOID"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-yellow-100 text-yellow-700"
-                            }
-                          >
-                            {invoiceStatusLabel[inv.status]}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </div>
+              </Link>
+            ))}
+          </ActivityPanel>
         </motion.div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 text-foreground">
+      <div className="app-stat-icon h-10 w-10 rounded-[1rem]">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="font-medium">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone: string;
+}) {
+  return (
+    <div className="text-center">
+      <p className={`text-2xl font-bold ${tone}`}>{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function ActivityPanel({
+  title,
+  icon: Icon,
+  iconClassName,
+  emptyMessage,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconClassName?: string;
+  emptyMessage: string;
+  children: React.ReactNode;
+}) {
+  const hasItems = React.Children.count(children) > 0;
+
+  return (
+    <div className="app-panel-strong overflow-hidden">
+      <div className="border-b border-border/70 p-4">
+        <h3 className="flex items-center gap-2 font-semibold text-foreground">
+          <Icon className={`h-5 w-5 ${iconClassName ?? "text-primary"}`} />
+          {title}
+        </h3>
+      </div>
+
+      <div className="divide-y divide-border/50">
+        {hasItems ? children : <div className="p-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>}
       </div>
     </div>
   );

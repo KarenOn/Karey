@@ -12,9 +12,12 @@ import Modal from "@/components/shared/Modal";
 import FormField from "@/components/shared/FormField";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { AppAlert } from "@/components/shared/AppAlert";
+import AppPageHero from "@/components/shared/AppPageHero";
 
 import { ClientFormSchema, zodFieldErrors } from "@/lib/validators/client";
 import z from "zod";
+import { useMaskito } from "@maskito/react";
+import options from '@/components/shared/PhoneMask';
 
 export type ClientPayload = z.infer<typeof ClientFormSchema>;
 
@@ -93,7 +96,7 @@ export default function ClientsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<{ id: number; name: string } | null>(null);
   const [loadingDelete, setLoadingDelete] = useState(false);
-
+  const maskedInputRef = useMaskito({options});
   
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
@@ -252,12 +255,12 @@ export default function ClientsPage() {
         header: "Cliente",
         cell: (row: ClientRow) => (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center text-white font-semibold">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--brand-teal)_84%,white_16%),color-mix(in_srgb,var(--brand-navy)_82%,white_18%))] text-sm font-bold text-white shadow-[0_16px_34px_-24px_rgba(15,118,110,0.5)]">
               {row.fullName?.charAt(0).toUpperCase()}
             </div>
             <div>
-              <p className="font-semibold text-slate-800">{row.fullName}</p>
-              {row.notes && <p className="flex items-center gap-1 text-xs text-slate-500"><FileText className="w-3 h-3" />{row.notes}</p>}
+              <p className="font-semibold text-foreground">{row.fullName}</p>
+              {row.notes && <p className="flex items-center gap-1 text-xs text-muted-foreground"><FileText className="w-3 h-3" />{row.notes}</p>}
             </div>
           </div>
         ),
@@ -266,11 +269,11 @@ export default function ClientsPage() {
         header: "Contacto",
         cell: (row: ClientRow) => (
           <div className="space-y-1">
-            <p className="flex items-center gap-2 text-sm text-slate-600">
-              <Phone className="w-3 h-3" /> {row.phone || <span className="text-slate-400">-</span>}
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Phone className="w-3 h-3" /> {row.phone || <span className="text-muted-foreground/60">-</span>}
             </p>
             {row.email ? (
-              <p className="flex items-center gap-2 text-sm text-slate-500">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="w-3 h-3" /> {row.email}
               </p>
             ) : null}
@@ -281,11 +284,11 @@ export default function ClientsPage() {
         header: "Dirección",
         cell: (row: ClientRow) =>
           row.address ? (
-            <p className="flex items-center gap-2 text-sm text-slate-600">
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <MapPin className="w-3 h-3" /> {row.address}
             </p>
           ) : (
-            <span className="text-slate-400">-</span>
+            <span className="text-muted-foreground/60">-</span>
           ),
       },
       {
@@ -293,7 +296,7 @@ export default function ClientsPage() {
         cell: (row: ClientRow) => {
           const count = row.petsCount ?? 0;
           return (
-            <Badge variant="secondary" className="bg-teal-50 text-teal-700">
+            <Badge variant="secondary" className="rounded-full border border-primary/15 bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary">
               <PawPrint className="w-3 h-3 mr-1" />
               {count} {count === 1 ? "mascota" : "mascotas"}
             </Badge>
@@ -305,28 +308,28 @@ export default function ClientsPage() {
         cell: (row: ClientRow) => (
           <div className="flex items-center gap-2">
             <Link href={`/clients/${row.id}`}>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Eye className="w-4 h-4 text-slate-600" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
+                <Eye className="w-4 h-4" />
               </Button>
             </Link>
 
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 handleEdit(row);
               }}
               disabled={saving}
             >
-              <Edit className="w-4 h-4 text-slate-600" />
+              <Edit className="w-4 h-4" />
             </Button>
 
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
               onClick={(e) => {
                 e.stopPropagation();
                 askDelete(row);
@@ -342,28 +345,40 @@ export default function ClientsPage() {
     [saving]
   );
 
+  const clientsWithEmail = clients.filter((client) => Boolean(client.email)).length;
+  const clientsWithPets = clients.filter((client) => (client.petsCount ?? 0) > 0).length;
+  const totalPets = clients.reduce((sum, client) => sum + (client.petsCount ?? 0), 0);
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Clientes</h2>
-          <p className="text-slate-500">Gestiona los propietarios de las mascotas</p>
-        </div>
-
-        <Button
-          onClick={() => {
-            setEditingClient(null);
-            setFormData(emptyForm);
-            setModalOpen(true);
-          }}
-          className="bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 shadow-lg"
-        >
-          <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
-        </Button>
-      </div>
+      <AppPageHero
+        badgeIcon={<PawPrint className="size-3.5" />}
+        badgeLabel="Clientes y familias"
+        title="Clientes"
+        description="Gestiona tus clientes y sus mascotas de manera eficiente"
+        actions={
+          <Button
+            className="gap-2"
+            onClick={() => {
+              setEditingClient(null);
+              setFormData(emptyForm);
+              setModalOpen(true);
+            }}
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo cliente
+          </Button>
+        }
+        stats={[
+          { label: "Clientes", value: clients.length, hint: "Base total" },
+          { label: "Con email", value: clientsWithEmail, hint: "Contacto digital" },
+          { label: "Con mascotas", value: clientsWithPets, hint: "Historias activas" },
+          { label: "Mascotas", value: totalPets, hint: "Pacientes vinculados" },
+        ]}
+      />
 
       {error && (
-        <div className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-700">
+        <div className="rounded-[1.5rem] border border-destructive/20 bg-destructive/8 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -385,11 +400,7 @@ export default function ClientsPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>
-            <Button
-              onClick={() => handleSubmit()}
-              className="bg-gradient-to-r from-teal-500 to-teal-600"
-              disabled={saving}
-            >
+            <Button onClick={() => handleSubmit()} disabled={saving}>
               {editingClient ? "Guardar Cambios" : "Crear Cliente"}
             </Button>
           </div>
@@ -413,6 +424,7 @@ export default function ClientsPage() {
               value={formData.phone} 
               onChange={handleChange} 
               required
+              inputMask={maskedInputRef}
               error={errors.phone}
             />
 
@@ -455,7 +467,6 @@ export default function ClientsPage() {
         variant={alert.variant}
         title={alert.title}
         description={alert.description}
-        autoCloseMs={3500}
       />
     </div>
   );

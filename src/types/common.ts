@@ -345,6 +345,8 @@ export interface MedicalAttachment {
   fileName: string;
   fileType?: string | null;
   url: string;
+  storageRef?: string;
+  downloadUrl?: string | null;
   createdAt: DateTime;
 }
 

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Eye, User as UserIcon } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, User as UserIcon, PawPrint } from "lucide-react";
 import { format, differenceInYears, differenceInMonths, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -20,6 +20,7 @@ import { apiCreatePet, apiDeletePet, apiListPets, apiUpdatePet, type PetRow } fr
 import { apiListClients, type ClientRow } from "@/lib/api/clients";
 import { apiListVaccinations, type VaccinationRow } from "@/lib/api/vaccinations";
 import Link from "next/link";
+import AppPageHero from "@/components/shared/AppPageHero";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -42,6 +43,32 @@ const sexOptions = [
   { value: "FEMALE", label: "Hembra" },
   { value: "UNKNOWN", label: "Desconocido" },
 ];
+
+type PatientForm = {
+  name: string,
+  clientId: number,
+  species: string,
+  sex: string,
+  breed: string,
+  birthDate: string,
+  weightKg: string,
+  color: string,
+  microchip: string,
+  notes: string,
+};
+
+const emptyForm: PatientForm = {
+  name: "",
+  clientId: 0,
+  species: "",
+  sex: "",
+  breed: "",
+  birthDate: "",
+  weightKg: "",
+  color: "",
+  microchip: "",
+  notes: "",
+}
 
 type PetFormState = {
   name?: string;
@@ -184,12 +211,12 @@ export default function PatientsPage() {
       header: "Paciente",
       cell: (row: PetRow) => (
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center text-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] border border-border/70 bg-secondary text-2xl">
             {speciesEmoji[row.species] || "🐾"}
           </div>
           <div>
-            <p className="font-semibold text-slate-800">{row.name}</p>
-            <p className="text-sm text-slate-500">
+              <p className="font-semibold text-foreground">{row.name}</p>
+              <p className="text-sm text-muted-foreground">
               {row.species} • {row.breed || "Sin raza"}
             </p>
           </div>
@@ -200,20 +227,20 @@ export default function PatientsPage() {
       header: "Propietario",
       cell: (row: PetRow) => (
         <div className="flex items-center gap-2">
-          <UserIcon className="w-4 h-4 text-slate-400" />
-          <span className="text-slate-700">{getClientName(row.clientId)}</span>
+            <UserIcon className="w-4 h-4 text-muted-foreground" />
+            <span className="text-foreground">{getClientName(row.clientId)}</span>
         </div>
       ),
     },
     {
       header: "Edad",
       cell: (row: PetRow) =>
-        calculateAge(row.birthDate) || <span className="text-slate-400">-</span>,
+        calculateAge(row.birthDate) || <span className="text-muted-foreground/60">-</span>,
     },
     {
       header: "Sexo",
       cell: (row: PetRow) => (
-        <Badge className={row.sex === "MALE" ? "bg-blue-100 text-blue-800 font-semibold" : row.sex === "FEMALE" ? "bg-pink-100 text-pink-800 font-semibold" : "bg-slate-100 text-slate-800 font-semibold"} variant="secondary">
+          <Badge className={row.sex === "MALE" ? "bg-secondary text-foreground font-semibold" : row.sex === "FEMALE" ? "bg-primary/12 text-primary font-semibold" : "bg-muted text-foreground font-semibold"} variant="secondary">
           {row.sex === "MALE" ? "Macho" : row.sex === "FEMALE" ? "Hembra" : "Desconocido"}
         </Badge>
       ),
@@ -223,13 +250,13 @@ export default function PatientsPage() {
       cell: (row: PetRow) => (
         <div className="flex items-center gap-2">
           <Link href={`/pets/${row.id}`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Eye className="w-4 h-4 text-slate-600" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
+              <Eye className="w-4 h-4" />
             </Button>
           </Link>
           
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
-            <Edit className="w-4 h-4 text-slate-600" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => openEdit(row)}>
+            <Edit className="w-4 h-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDelete(row)}>
             <Trash2 className="w-4 h-4 text-red-500" />
@@ -247,7 +274,7 @@ export default function PatientsPage() {
           <div className="w-10 h-10 rounded-lg bg-pink-50 flex items-center justify-center text-xl">
             {row.pet ? speciesEmoji[row.pet.species] : "🐾"}
           </div>
-          <span className="font-medium text-slate-800">{row.pet?.name || "-"}</span>
+          <span className="font-medium text-foreground">{row.pet?.name || "-"}</span>
         </div>
       ),
     },
@@ -262,7 +289,7 @@ export default function PatientsPage() {
       cell: (row: VaccinationRow) =>
         row.nextDueAt
           ? format(parseISO(row.nextDueAt), "d MMM yyyy", { locale: es })
-          : <span className="text-slate-400">-</span>,
+          : <span className="text-muted-foreground/60">-</span>,
     },
   ];
 
@@ -276,21 +303,47 @@ export default function PatientsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* <div className="app-page-hero flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Pacientes</h2>
-          <p className="text-slate-500">Gestiona las mascotas y su historial</p>
+          <div className="app-kicker mb-3 border-0">Pacientes y vacunas</div>
+          <h2 className="app-heading text-3xl sm:text-4xl">Mascotas con mejor contexto y una lectura mÃ¡s cÃ³moda.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Gestiona pacientes, propietarios y su historial con una interfaz mÃ¡s densa, amable y consistente con el resto de la app.</p>
         </div>
         <Button
           onClick={openCreate}
-          className="bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 shadow-lg"
         >
           <Plus className="w-4 h-4 mr-2" /> Nuevo Paciente
         </Button>
-      </div>
+      </div> */}
+
+      <AppPageHero
+        badgeIcon={<PawPrint className="size-3.5" />}
+        badgeLabel="Pacientes y vacunas"
+        title="Pacientes"
+        description="Gestiona pacientes, propietarios y su historial"
+        actions={
+          <Button
+            className="gap-2"
+            onClick={() => {
+              setEditingPet(null);
+              setFormData(emptyForm);
+              setModalOpen(true);
+            }}
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo paciente
+          </Button>
+        }
+        stats={[
+          { label: "Pacientes", value: pets.length, hint: "Total de pacientes" },
+          { label: "Vacunas", value: vaccinations.length, hint: "Total de vacunas" },
+          // { label: "Con mascotas", value: clientsWithPets, hint: "Historias activas" },
+          // { label: "Mascotas", value: totalPets, hint: "Pacientes vinculados" },
+        ]}
+      />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-        <TabsList className="bg-white shadow-sm">
+        <TabsList>
           <TabsTrigger value="patients">Pacientes</TabsTrigger>
           <TabsTrigger value="vaccinations">Vacunas</TabsTrigger>
         </TabsList>

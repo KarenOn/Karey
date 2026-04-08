@@ -17,83 +17,47 @@ export default function LowStockAlerts({ products }: Props) {
     .sort((a, b) => a.stockOnHand - b.stockOnHand);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.5 }}
-      className="bg-white rounded-2xl shadow-sm overflow-hidden"
-    >
-      <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="app-panel-strong overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border/70 p-6">
         <div className="flex items-center gap-2">
-          <Package className="w-5 h-5 text-orange-500" />
-          <h3 className="text-lg font-bold text-slate-800">Stock Bajo</h3>
+          <Package className="w-5 h-5 text-(--brand-gold)" />
+          <h3 className="font-display text-2xl font-semibold text-foreground">Stock Bajo</h3>
         </div>
 
-        <Link
-          href={"/inventory"}
-          className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
-        >
+        <Link href="/inventory" className="text-sm text-primary hover:text-primary/80 font-semibold flex items-center gap-1">
           Ver inventario <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
 
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-border/60">
         {lowStockProducts.length === 0 ? (
-          <div className="p-8 text-center text-slate-500">
-            <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-            <p>Todo el inventario está bien</p>
+          <div className="p-8 text-center text-muted-foreground">
+            <Package className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
+            <p>Todo el inventario esta bien</p>
           </div>
         ) : (
           lowStockProducts.slice(0, 4).map((product, index) => {
             const isCritical = product.stockOnHand === 0;
 
             return (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 * index }}
-                className={`p-4 ${
-                  isCritical ? "bg-red-50/50" : "hover:bg-slate-50"
-                } transition-colors`}
-              >
+              <motion.div key={product.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 * index }} className={`p-4 ${isCritical ? "bg-red-500/8" : "hover:bg-secondary/55"} transition-colors`}>
                 <div className="flex items-center gap-4">
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      isCritical ? "bg-red-100" : "bg-orange-100"
-                    }`}
-                  >
-                    <Package
-                      className={`w-5 h-5 ${
-                        isCritical ? "text-red-600" : "text-orange-600"
-                      }`}
-                    />
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-3xl ${isCritical ? "bg-red-500/15" : "bg-[rgba(216,162,87,0.16)]"}`}>
+                    <Package className={`w-5 h-5 ${isCritical ? "text-red-500" : "text-(--brand-gold)"}`} />
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-800 truncate">
-                      {product.name}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {product.category ?? "—"}
-                    </p>
+                    <p className="truncate font-semibold text-foreground">{product.name}</p>
+                    <p className="text-sm text-muted-foreground">{product.category ?? "—"}</p>
                   </div>
 
                   <div className="text-right">
-                    <div
-                      className={`flex items-center gap-1 ${
-                        isCritical ? "text-red-600" : "text-orange-600"
-                      }`}
-                    >
+                    <div className={`flex items-center gap-1 ${isCritical ? "text-red-500" : "text-(--brand-gold)"}`}>
                       {isCritical && <AlertTriangle className="w-4 h-4" />}
-                      <span className="text-lg font-bold">
-                        {product.stockOnHand}
-                      </span>
+                      <span className="text-lg font-bold">{product.stockOnHand}</span>
                     </div>
 
-                    <p className="text-xs text-slate-400">
-                      Min: {product.minStock ?? 5}
-                    </p>
+                    <p className="text-xs text-muted-foreground">Min: {product.minStock ?? 5}</p>
                   </div>
                 </div>
               </motion.div>
