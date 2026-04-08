@@ -29,7 +29,7 @@ export type AppointmentStatus =
   | "CANCELLED"
   | "NO_SHOW";
 
-export type InvoiceStatus = "DRAFT" | "ISSUED" | "PAID" | "VOID";
+export type InvoiceStatus = "DRAFT" | "ISSUED" | "PAID" | "PARTIALLY_PAID" | "VOID";
 
 export type InvoiceItemType = "SERVICE" | "PRODUCT" | "CUSTOM";
 
@@ -345,6 +345,8 @@ export interface MedicalAttachment {
   fileName: string;
   fileType?: string | null;
   url: string;
+  storageRef?: string;
+  downloadUrl?: string | null;
   createdAt: DateTime;
 }
 
@@ -517,7 +519,7 @@ export interface DashboardVaccinationDTO {
   client_name: string;
   vaccine_name: string;
   next_due_at: string | null; // yyyy-MM-dd
-  applied_at: string; // yyyy-MM-dd
+  applied_at: string | null; // yyyy-MM-dd
 }
 
 export interface DashboardDataDTO {

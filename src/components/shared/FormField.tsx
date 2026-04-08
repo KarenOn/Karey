@@ -116,6 +116,26 @@ import {
 import { Switch } from "@/components/ui/switch";
 
 type Option = { value: string | number; label: string };
+type FieldType = "text" | "email" | "password" | "number" | "textarea" | "date" | "time" | "select" | "switch";
+type FieldValue = string | number | boolean | null | undefined;
+export type FormFieldChangeEvent = {
+  target: { name: string; value: string | number | boolean };
+};
+
+type FormFieldProps = {
+  label?: string;
+  name?: string;
+  type?: FieldType;
+  value?: FieldValue;
+  onChange?: (event: FormFieldChangeEvent) => void;
+  placeholder?: string;
+  options?: Option[];
+  required?: boolean;
+  disabled?: boolean;
+  className?: string;
+  error?: string;
+  inputMask?: React.Ref<HTMLInputElement>;
+};
 
 export default function FormField({
   label = "",
@@ -129,8 +149,9 @@ export default function FormField({
   disabled = false,
   className = "",
   error = "",
-}: any) {
-  const emitChange = (newValue: any) => {
+  inputMask,
+}: FormFieldProps) {
+  const emitChange = (newValue: string | number | boolean) => {
     onChange?.({ target: { name, value: newValue } });
   };
 
@@ -139,7 +160,7 @@ export default function FormField({
   return (
     <div className={`space-y-2 ${className}`}>
       {label && (
-        <Label htmlFor={name} className="text-sm font-medium text-slate-700">
+        <Label htmlFor={name} className="text-sm font-semibold text-foreground/90">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
         </Label>
@@ -150,13 +171,13 @@ export default function FormField({
           <Textarea
             id={name}
             name={name}
-            value={value ?? ""}
-            onChange={onChange}
+            value={typeof value === "boolean" ? "" : (value ?? "")}
+            onChange={(event) => onChange?.({ target: { name, value: event.target.value } })}
             placeholder={placeholder}
             disabled={disabled}
-            className="bg-white"
+            className="bg-input"
           />
-          {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
         </>
       ) : type === "select" ? (
         <>
@@ -165,7 +186,7 @@ export default function FormField({
             onValueChange={(val) => emitChange(val)}
             disabled={disabled}
           >
-            <SelectTrigger className="bg-white">
+            <SelectTrigger className="w-full bg-input">
               <SelectValue placeholder={placeholder || "Seleccionar..."} />
             </SelectTrigger>
             <SelectContent>
@@ -176,7 +197,7 @@ export default function FormField({
               ))}
             </SelectContent>
           </Select>
-          {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
         </>
       ) : type === "switch" ? (
         <>
@@ -187,11 +208,11 @@ export default function FormField({
               onCheckedChange={(checked) => emitChange(checked)}
               disabled={disabled}
             />
-            <Label htmlFor={name} className="text-sm text-slate-600">
+            <Label htmlFor={name} className="text-sm text-muted-foreground">
               {placeholder}
             </Label>
           </div>
-          {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
         </>
       ) : (
         <>
@@ -199,13 +220,14 @@ export default function FormField({
             id={name}
             name={name}
             type={type}
-            value={value ?? ""}
-            onChange={onChange}
+            value={typeof value === "boolean" ? "" : (value ?? "")}
+            onChange={(event) => onChange?.({ target: { name, value: event.target.value } })}
             placeholder={placeholder}
             disabled={disabled}
-            className="bg-white"
+            className="bg-input"
+            ref={inputMask}
           />
-          {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
         </>
       )}
     </div>

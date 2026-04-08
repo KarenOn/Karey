@@ -29,7 +29,8 @@ import {
   Check,
 } from "lucide-react";
 
-import { apiCreatePayment, apiGetInvoice, apiUpdateInvoice, InvoiceDetail } from "@/lib/api/invoices";
+import { apiCreatePayment, apiGetInvoice, apiUpdateInvoiceStatus, InvoiceDetail } from "@/lib/api/invoices";
+import type { PaymentCreateInput } from "@/lib/validators/payment";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -80,7 +81,7 @@ export default function InvoiceDetailPage() {
 
   // pago rápido
   const [payAmount, setPayAmount] = useState<string>("");
-  const [payMethod, setPayMethod] = useState<string>("CASH");
+  const [payMethod, setPayMethod] = useState<PaymentCreateInput["method"]>("CASH");
   const [payRef, setPayRef] = useState<string>("");
 
   const issueDate = useMemo(() => safeDate(invoice?.issueDate), [invoice?.issueDate]);
@@ -116,7 +117,7 @@ export default function InvoiceDetailPage() {
     };
   }, [invoiceId]);
 
-  const ui = invoice ? (statusUI[invoice.status] ?? { label: invoice.status, icon: Clock, badge: "bg-slate-100 text-slate-700 border-slate-200", hint: "" }) : null;
+  const ui = invoice ? (statusUI[invoice.status] ?? { label: invoice.status, icon: Clock, badge: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20", hint: "" }) : null;
   const StatusIcon = ui?.icon ?? Clock;
 
   const canPay = invoice && invoice.status !== "PAID" && invoice.status !== "VOID" && invoice.status !== "CANCELLED";
@@ -131,7 +132,7 @@ export default function InvoiceDetailPage() {
 
   const markVoid = async () => {
     if (!invoice) return;
-    await apiUpdateInvoice(invoice.id, { status: "VOID" });
+    await apiUpdateInvoiceStatus(invoice.id, "VOID");
     await refresh();
   };
 
@@ -143,7 +144,7 @@ export default function InvoiceDetailPage() {
     await apiCreatePayment(invoice.id, {
       amount,
       method: payMethod,
-      reference: payRef ? payRef : null,
+      reference: payRef || undefined,
     });
 
     await refresh();
@@ -231,7 +232,7 @@ export default function InvoiceDetailPage() {
             {/* Top brand bar */}
             <div className="bg-gradient-to-r from-teal-500 to-teal-600 text-white p-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-sm">
                   <PawPrint className="w-6 h-6" />
                 </div>
                 <div className="leading-tight">

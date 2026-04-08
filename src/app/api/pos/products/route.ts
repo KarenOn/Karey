@@ -14,9 +14,9 @@ export async function GET(req: Request) {
       ...(q
         ? {
             OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { sku: { contains: q, mode: "insensitive" } },
-              { category: { contains: q, mode: "insensitive" } },
+              { name: { contains: q } },
+              { sku: { contains: q } },
+              { category: { contains: q } },
             ],
           }
         : {}),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import SignedFileUploader from "@/components/shared/SignedFileUploader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,9 @@ import {
   Camera, Save, Facebook, Instagram, MessageCircle, Pencil, Check, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {useMaskito} from '@maskito/react';
+  
+import options from '@/components/shared/PhoneMask';
 
 const dayNames: Record<string, string> = {
   monday: "Lunes",
@@ -34,6 +38,7 @@ type ClinicProfile = {
   timezone: string;
 
   logoUrl: string | null;
+  logoStorageRef: string | null;
   slogan: string | null;
   owner: string | null;
   mobile: string | null;
@@ -82,6 +87,8 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const maskedInputRef = useMaskito({options});
+
   const tabs = useMemo(() => ([
     { id: "general", label: "General", icon: Building2 },
     { id: "fiscal", label: "Fiscal", icon: FileText },
@@ -129,7 +136,7 @@ export default function ProfilePage() {
 
       const payload = {
         name: profile.name,
-        logoUrl: profile.logoUrl ?? "",
+        logoStorageRef: profile.logoStorageRef ?? "",
         slogan: profile.slogan ?? "",
         owner: profile.owner ?? "",
         email: profile.email ?? "",
@@ -138,10 +145,10 @@ export default function ProfilePage() {
         website: profile.website ?? "",
 
         address: profile.address ?? "",
-        city: profile.city ?? "",
-        state: profile.state ?? "",
-        zipCode: profile.zipCode ?? "",
-        country: profile.country ?? "",
+        // city: profile.city ?? "",
+        // state: profile.state ?? "",
+        // zipCode: profile.zipCode ?? "",
+        // country: profile.country ?? "",
 
         socialMedia: {
           facebook: profile.socialMedia?.facebook ?? "",
@@ -180,6 +187,22 @@ export default function ProfilePage() {
     }
   };
 
+  const handleLogoUploaded = (file: {
+    fileName: string;
+    fileType: string;
+    previewUrl: string;
+    storageRef: string;
+  }) => {
+    if (!profile) return;
+
+    setProfile({
+      ...profile,
+      logoStorageRef: file.storageRef,
+      logoUrl: file.previewUrl,
+    });
+    setErr(null);
+  };
+
   const updateSchedule = (day: DayKey, field: "open" | "close" | "closed", value: string | boolean) => {
     if (!profile) return;
     setProfile((prev) => {
@@ -210,13 +233,13 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-3xl p-8 border border-border relative overflow-hidden">
+      <div className="app-page-hero">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
         <div className="relative flex flex-col md:flex-row items-start md:items-center gap-6">
           {/* Logo */}
           <div className="relative group">
-            <div className="w-28 h-28 rounded-2xl bg-card border-2 border-border flex items-center justify-center overflow-hidden shadow-xl">
+            <div className="app-panel-muted flex h-28 w-28 items-center justify-center overflow-hidden rounded-[1.75rem] border-2">
               {profile.logoUrl ? (
                 <img src={profile.logoUrl} alt={profile.name} className="w-full h-full object-cover" />
               ) : (
@@ -224,13 +247,17 @@ export default function ProfilePage() {
               )}
             </div>
             {isEditing && (
-              <button
-                type="button"
-                className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg opacity-70 cursor-not-allowed"
-                title="Luego conectamos subida de imagen (S3)"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
+              <div className="absolute -bottom-2 -right-2">
+                <SignedFileUploader
+                  accept="image/*"
+                  buttonLabel=""
+                  className="h-8 w-8 rounded-full bg-primary p-0 text-primary-foreground"
+                  disabled={!isEditing}
+                  onError={(message) => setErr(message)}
+                  onUploaded={handleLogoUploaded}
+                  scope="clinic-logo"
+                />
+              </div>
             )}
           </div>
 
@@ -289,10 +316,10 @@ export default function ProfilePage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                "flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all whitespace-nowrap",
+                "flex items-center gap-2 rounded-2xl px-5 py-3 font-medium transition-all whitespace-nowrap",
                 activeTab === tab.id
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                  : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted",
+                  ? "bg-primary text-primary-foreground"
+                  : "app-panel-muted text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon className="w-4 h-4" />
@@ -303,20 +330,56 @@ export default function ProfilePage() {
       </div>
 
       {/* Content */}
-      <div className="bg-card rounded-2xl border border-border p-6">
+      <div className="app-panel-strong p-6">
         {/* GENERAL */}
         {activeTab === "general" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
               <div className="space-y-2 md:col-span-2">
-                <Label>Logo URL</Label>
-                <Input
-                  value={profile.logoUrl ?? ""}
-                  onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })}
-                  disabled={!isEditing}
-                  placeholder="https://..."
-                />
+                <Label>Logo de la clínica</Label>
+                <div className="rounded-2xl border border-dashed border-border p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Camera className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {profile.logoStorageRef ? "Logo listo" : "Sin logo cargado"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Se guarda de forma privada en S3 y se consulta con URL firmada.
+                        </p>
+                      </div>
+                    </div>
+
+                    {isEditing ? (
+                      <div className="flex gap-2">
+                        <SignedFileUploader
+                          accept="image/*"
+                          buttonLabel="Subir logo"
+                          onError={(message) => setErr(message)}
+                          onUploaded={handleLogoUploaded}
+                          scope="clinic-logo"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            setProfile({
+                              ...profile,
+                              logoStorageRef: null,
+                              logoUrl: null,
+                            })
+                          }
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -337,11 +400,11 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Teléfono Fijo</Label>
-                <Input value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} disabled={!isEditing} />
+                <Input value={profile.phone ?? ""} ref={maskedInputRef} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} disabled={!isEditing} />
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Teléfono Móvil</Label>
-                <Input value={profile.mobile ?? ""} onChange={(e) => setProfile({ ...profile, mobile: e.target.value })} disabled={!isEditing} />
+                <Input value={profile.mobile ?? ""} ref={maskedInputRef} onChange={(e) => setProfile({ ...profile, mobile: e.target.value })} disabled={!isEditing} />
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Sitio Web</Label>
@@ -415,7 +478,7 @@ export default function ProfilePage() {
         {/* FISCAL */}
         {activeTab === "fiscal" && (
           <div className="space-y-6">
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="rounded-[1.5rem] border border-amber-500/20 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-800">Esta información aparecerá en las facturas generadas.</p>
             </div>
 
@@ -467,8 +530,8 @@ export default function ProfilePage() {
                 <div
                   key={day}
                   className={cn(
-                    "flex flex-col md:flex-row md:items-center gap-4 p-4 rounded-xl border transition-colors",
-                    hours.closed ? "bg-muted/50 border-border" : "bg-card border-border hover:border-primary/30",
+                    "flex flex-col gap-4 rounded-[1.5rem] border p-4 transition-colors md:flex-row md:items-center",
+                    hours.closed ? "bg-muted/45 border-border/70" : "bg-card/70 border-border/80 hover:border-primary/30",
                   )}
                 >
                   <div className="w-32 flex items-center gap-3">
@@ -540,7 +603,7 @@ export default function ProfilePage() {
 
           <div className="pt-6 border-t border-border">
               <h3 className="font-semibold text-foreground mb-4">Vista Previa en Factura</h3>
-              <div className="bg-muted/30 rounded-xl p-6 border border-dashed border-border">
+              <div className="rounded-[1.5rem] border border-dashed border-border bg-muted/30 p-6">
                 <div className="flex items-start gap-4 mb-4 pb-4 border-b border-border">
                   <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
                     <Building2 className="w-8 h-8 text-primary" />

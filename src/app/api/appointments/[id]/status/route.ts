@@ -10,6 +10,10 @@ function zodDetails(err: any) {
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();
+  if (!clinicId) {
+    return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  }
+
   const id = Number((await ctx.params).id);
 
   const body = await req.json().catch(() => null);

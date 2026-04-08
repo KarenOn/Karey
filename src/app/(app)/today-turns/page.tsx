@@ -3,15 +3,25 @@ import TodayTurns from "./TodayTurn";
 import { prisma } from "@/lib/prisma";
 import { getClinicIdOrFail } from "@/lib/auth"; // ajusta a tu helper real
 import { startOfDay, endOfDay } from "date-fns";
+import type { TodayTurnDTO } from "./TodayTurn";
 
-function toISO<T extends Record<string, any>>(row: T) {
-  // Convierte Date -> string para poder pasar a Client Component sin líos
+function toTodayTurnDTO<T extends Record<string, any>>(row: T): TodayTurnDTO {
   return {
-    ...row,
+    id: row.id,
+    petId: row.petId ?? null,
+    clientId: row.clientId ?? null,
+    petName: row.petName,
+    species: row.species,
+    ownerName: row.ownerName,
+    ownerPhone: row.ownerPhone ?? null,
+    service: row.type,
+    serviceName: row.serviceName,
+    notes: row.notes ?? null,
+    estimatedDuration: row.estimatedDurationMins,
     arrivalAt: row.arrivalAt?.toISOString?.() ?? row.arrivalAt,
-    notifiedAt: row.notifiedAt?.toISOString?.() ?? row.notifiedAt,
-    createdAt: row.createdAt?.toISOString?.() ?? row.createdAt,
-    updatedAt: row.updatedAt?.toISOString?.() ?? row.updatedAt,
+    status: row.status,
+    notified: Boolean(row.notifiedAt),
+    notifiedAt: row.notifiedAt?.toISOString?.() ?? row.notifiedAt ?? null,
   };
 }
 
@@ -50,7 +60,7 @@ export default async function TodayTurnsPage({
 
   return (
     <TodayTurns
-      initialTurns={turns.map(toISO)}
+      initialTurns={turns.map(toTodayTurnDTO)}
       pets={pets}
       date={day.toISOString().slice(0, 10)}
     />

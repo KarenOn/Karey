@@ -1,4 +1,4 @@
-import type { MedicalRecordCreateInput } from "@/lib/validators/visits";
+import type { ClinicalVisitCreateInput } from "@/lib/validators/visits";
 
 export type MedicalRecordRow = {
   id: number;
@@ -19,7 +19,7 @@ export async function apiListMedicalRecords(petId: number): Promise<MedicalRecor
   return res.json();
 }
 
-export async function apiCreateMedicalRecord(petId: number, data: MedicalRecordCreateInput): Promise<MedicalRecordRow> {
+export async function apiCreateMedicalRecord(petId: number, data: ClinicalVisitCreateInput): Promise<MedicalRecordRow> {
   const res = await fetch(`/api/pets/${petId}/medical-records`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

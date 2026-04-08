@@ -12,7 +12,7 @@ export async function GET(req: Request) {
       clinicId,
       isActive: true,
       ...(q
-        ? { name: { contains: q, mode: "insensitive" } }
+        ? { name: { contains: q } }
         : {}),
     },
     orderBy: { name: "asc" },

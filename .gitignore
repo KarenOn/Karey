@@ -10,6 +10,11 @@
 !.yarn/releases
 !.yarn/versions
 
+# agents
+/.agents
+/.claude
+/skills
+
 # testing
 /coverage
 
@@ -41,3 +46,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+/certificates/*
+!/certificates/.gitkeep

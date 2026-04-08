@@ -244,9 +244,6 @@ export async function POST(req: Request) {
   const created = await prisma.todayTurn.create({
     data: {
       clinic: { connect: { id: clinicId } },
-      petId: null,
-      clientId: null,
-
       petName: input.petName!,     // tu zod lo exige en walk-in
       ownerName: input.ownerName!, // tu zod lo exige en walk-in
       ownerPhone: input.ownerPhone!, // si quieres permitir null, dime y lo ajusto al modelo

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Users, PawPrint, Calendar, DollarSign } from "lucide-react";
+import { Users, PawPrint, Calendar, DollarSign, Sparkles } from "lucide-react";
 import StatsCard from "@/components/dashboard/StatsCard";
 import QuickActions from "@/components/dashboard/QuickActions";
 import UpcomingAppointments from "@/components/dashboard/UpcomingAppointments";
@@ -25,12 +25,46 @@ export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
 
   return (
     <div className="space-y-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Clientes Totales" value={clients.length} icon={Users} color="blue" delay={0} />
-        <StatsCard title="Pacientes Registrados" value={patients.length} icon={PawPrint} color="teal" delay={0.1} />
-        <StatsCard title="Citas Hoy" value={todayAppointmentsCount} icon={Calendar} color="purple" delay={0.2} />
-        <StatsCard title="Ingresos del Mes" value={`$${monthlyRevenue.toLocaleString("es-MX")}`} icon={DollarSign} color="green" delay={0.3} />
+      <section className="app-panel-strong relative overflow-hidden p-6 lg:p-8">
+        <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(13,148,136,0.16),transparent_55%)] lg:block" />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="app-kicker mb-3">
+              <Sparkles className="size-3.5" />
+              Centro de control clinico
+            </div>
+            <h2 className="app-heading text-3xl sm:text-4xl">Un dashboard mas calido, mas legible y con mejor pulso operativo.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+              Manten citas, vacunas, stock y facturacion en una misma superficie visual, con densidad util y una jerarquia que ayuda a decidir rapido.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[30rem]">
+            <div className="app-panel-muted p-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Clientes</p>
+              <p className="mt-2 text-2xl font-extrabold text-foreground">{clients.length}</p>
+            </div>
+            <div className="app-panel-muted p-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Pacientes</p>
+              <p className="mt-2 text-2xl font-extrabold text-foreground">{patients.length}</p>
+            </div>
+            <div className="app-panel-muted p-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Citas hoy</p>
+              <p className="mt-2 text-2xl font-extrabold text-foreground">{todayAppointmentsCount}</p>
+            </div>
+            <div className="app-panel-muted p-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Ingresos</p>
+              <p className="mt-2 text-2xl font-extrabold text-foreground">${monthlyRevenue.toLocaleString("es-MX")}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatsCard title="Clientes Totales" value={clients.length} icon={Users} color="blue" delay={0} trend="up" trendValue="Base activa" />
+        <StatsCard title="Pacientes Registrados" value={patients.length} icon={PawPrint} color="teal" delay={0.1} trend="up" trendValue="Historial vivo" />
+        <StatsCard title="Citas Hoy" value={todayAppointmentsCount} icon={Calendar} color="purple" delay={0.2} trend="up" trendValue="Agenda en curso" />
+        <StatsCard title="Ingresos del Mes" value={`$${monthlyRevenue.toLocaleString("es-MX")}`} icon={DollarSign} color="green" delay={0.3} trend="up" trendValue="Caja saludable" />
       </div>
 
       <QuickActions />

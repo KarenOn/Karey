@@ -138,21 +138,30 @@ model User {
   email         String    @unique
   emailVerified Boolean   @default(false)
   image         String?   @db.Text
+
+  role          String?   @db.Text
+  banned        Boolean?  @default(false)
+  banReason     String?   @db.Text
+  banExpires    DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
 
   // relaciones del dominio (no agregan columnas nuevas aquí)
-  memberships     ClinicMember[]
-  vetAppointments Appointment[]   @relation("AppointmentVet")
-  createdInvoices Invoice[]       @relation("InvoiceCreatedBy")
-  createdPayments Payment[]       @relation("PaymentCreatedBy")
-  stockMovements  StockMovement[] @relation("StockMovementCreatedBy")
-  clinicalVisits  ClinicalVisit[] @relation("ClinicalVisitVet")
+  puchSubscription   PushSubscription[]
+  memberships        ClinicMember[]
+  vetAppointments    Appointment[]   @relation("AppointmentVet")
+  createdInvoices    Invoice[]       @relation("InvoiceCreatedBy")
+  createdPayments    Payment[]       @relation("PaymentCreatedBy")
+  stockMovements     StockMovement[] @relation("StockMovementCreatedBy")
+  clinicalVisits     ClinicalVisit[] @relation("ClinicalVisitVet")
 
-  notificationRecipients NotificationRecipient[]
-  createdNotifications   Notification[] @relation("NotificationCreatedBy")
+  notificationRecipients  NotificationRecipient[]
+  createdNotifications    Notification[]   @relation("NotificationCreatedBy")
+  employeeInvitesCreated  EmployeeInvite[] @relation("EmployeeInviteCreatedBy")
+  employeeInvitesReceived EmployeeInvite[] @relation("EmployeeInviteInvitedUser")
 
   @@map("user")
 }
@@ -165,6 +174,7 @@ model Session {
   updatedAt DateTime @updatedAt
   ipAddress String?  @db.Text
   userAgent String?  @db.Text
+  impersonatedBy String? // ✅ admin plugin :contentReference[oaicite:1]{index=1}
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -204,6 +214,56 @@ model Verification {
   @@map("verification")
 }
 
+model Role {
+  id       Int  @id @default(autoincrement())
+  clinicId Int
+
+  key         String  // ej: "owner", "vet", "reception"
+  name        String  // ej: "Veterinario"
+  description String? @db.Text
+
+  // Ej: { invoices:["read","create"], inventory:["read"], employees:["create","update"] }
+  permissions Json
+
+  isActive Boolean @default(true)
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic  Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  members ClinicMember[]
+  employeeInvite EmployeeInvite[]
+
+  @@unique([clinicId, key])
+  @@index([clinicId, isActive])
+}
+
+model EmployeeInvite {
+  id       Int @id @default(autoincrement())
+  clinicId Int
+
+  email  String
+  roleId Int
+
+  userId String?
+  invitedUser   User? @relation("EmployeeInviteInvitedUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  tokenHash String @unique
+  expiresAt DateTime
+  acceptedAt DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  clinic    Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  role      Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdBy User?  @relation("EmployeeInviteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, createdAt])
+  @@index([email])
+}
+
 /**
  * =========================
  * CORE (Clínica + membresía)
@@ -240,10 +300,13 @@ model Clinic {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  puchSubscription   PushSubscription[]
   schedules          ClinicSchedule[]
   members            ClinicMember[]
   clients            Client[]
   pets               Pet[]
+  role               Role[]
+  employeeInvite     EmployeeInvite[]
   todayTurn          TodayTurn[]
   appointments       Appointment[]
   services           Service[]
@@ -278,7 +341,7 @@ model ClinicMember {
   id       Int        @id @default(autoincrement())
   clinicId Int
   userId   String
-  role     ClinicRole @default(ADMIN)
+  roleId   Int        
   isActive Boolean    @default(true)
 
   createdAt DateTime @default(now())
@@ -286,11 +349,12 @@ model ClinicMember {
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@unique([clinicId, userId])
   @@index([clinicId])
   @@index([userId])
-  @@index([clinicId, role])
+  @@index([clinicId, roleId])
 }
 
 /**
@@ -796,4 +860,23 @@ model NotificationRecipient {
   @@index([notificationId])
   @@index([userId])
   @@index([clientId])
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  clinicId  Int
+  userId    String?
+  endpoint  String   @db.Text
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([clinicId])
+  @@index([clinicId])
+  @@index([userId])
 }

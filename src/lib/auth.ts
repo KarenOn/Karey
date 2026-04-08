@@ -3,6 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 // If your Prisma file is located elsewhere, you can change the path
 import { prisma } from "@/lib/prisma";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins"; // 👈
 
 // const prisma = new PrismaClient();
 export const auth = betterAuth({
@@ -12,10 +13,17 @@ export const auth = betterAuth({
     emailAndPassword: {    
         enabled: true
     },
-    plugins: [nextCookies()]
+    plugins: [nextCookies(), admin({
+      adminRoles: ["admin"], // default
+      // opcional: adminUserIds: ["..."] si quieres
+    })]
 });
 
 export const getClinicIdOrFail = async () => {
   const clinic = await prisma.clinic.findFirst({ select: { id: true } });
-  return clinic?.id ?? null;
-}
+  if (!clinic) {
+    throw new Error("No se pudo identificar la clinica activa");
+  }
+
+  return clinic.id;
+};
