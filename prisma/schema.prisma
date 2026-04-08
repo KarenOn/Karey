@@ -237,6 +237,7 @@ model Role {
 
   @@unique([clinicId, key])
   @@index([clinicId, isActive])
+  @@map("role")
 }
 
 model EmployeeInvite {
@@ -262,6 +263,7 @@ model EmployeeInvite {
 
   @@index([clinicId, createdAt])
   @@index([email])
+  @@map("employeeinvite")
 }
 
 /**
@@ -320,6 +322,7 @@ model Clinic {
   medicalAttachments MedicalAttachment[]
 
   @@index([createdAt])
+  @@map("clinic")
 }
 
 model ClinicSchedule {
@@ -335,6 +338,7 @@ model ClinicSchedule {
 
   @@unique([clinicId, day])
   @@index([clinicId])
+  @@map("clinicschedule")
 }
 
 model ClinicMember {
@@ -355,6 +359,7 @@ model ClinicMember {
   @@index([clinicId])
   @@index([userId])
   @@index([clinicId, roleId])
+  @@map("clinicmember")
 }
 
 /**
@@ -389,6 +394,7 @@ model Client {
   @@index([clinicId, fullName])
   @@index([clinicId, phone])
   @@index([clinicId, email])
+  @@map("client")
 }
 
 model Pet {
@@ -422,6 +428,7 @@ model Pet {
   @@index([clinicId])
   @@index([clientId])
   @@index([clinicId, name])
+  @@map("pet")
 }
 
 /**
@@ -465,6 +472,7 @@ model Appointment {
   @@index([petId])
   @@index([clientId])
   @@index([vetId])
+  @@map("appointment")
 }
 
 /**
@@ -509,6 +517,7 @@ model TodayTurn {
   @@index([clinicId, type])
   @@index([clientId])
   @@index([petId])
+  @@map("todayturn")
 }
 
 /**
@@ -536,6 +545,7 @@ model Service {
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
   @@index([clinicId, category])
+  @@map("service")
 }
 
 /**
@@ -577,6 +587,7 @@ model Product {
   @@index([clinicId, isActive])
   @@index([clinicId, stockOnHand])
   @@index([clinicId, minStock])
+  @@map("product")
 }
 
 model StockMovement {
@@ -601,6 +612,7 @@ model StockMovement {
   @@index([clinicId, createdAt])
   @@index([productId])
   @@index([createdById])
+  @@map("stockmovement")
 }
 
 /**
@@ -650,6 +662,7 @@ model Invoice {
   @@index([clinicId, createdAt])
   @@index([clinicId, status])
   @@index([clientId])
+  @@map("invoice")
 }
 
 model InvoiceItem {
@@ -675,6 +688,7 @@ model InvoiceItem {
   @@index([invoiceId])
   @@index([serviceId])
   @@index([productId])
+  @@map("invoiceitem")
 }
 
 model Payment {
@@ -694,6 +708,7 @@ model Payment {
   @@index([invoiceId])
   @@index([paidAt])
   @@index([createdById])
+  @@map("payment")
 }
 
 /**
@@ -735,6 +750,7 @@ model ClinicalVisit {
   @@index([petId])
   @@index([clientId])
   @@index([vetId])
+  @@map("clinicalvisit")
 }
 
 model MedicalAttachment {
@@ -753,6 +769,7 @@ model MedicalAttachment {
 
   @@index([visitId])
   @@index([clinicId, createdAt])
+  @@map("medicalattachment")
 }
 
 model VaccineCatalog {
@@ -776,6 +793,7 @@ model VaccineCatalog {
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
+  @@map("vaccinecatalog")
 }
 
 model VaccinationRecord {
@@ -801,6 +819,7 @@ model VaccinationRecord {
   @@index([clinicId, nextDueAt])
   @@index([petId])
   @@index([vaccineId])
+  @@map("vaccinationrecord")
 }
 
 /**
@@ -837,6 +856,7 @@ model Notification {
   @@index([clinicId, status])
   @@index([scheduledAt])
   @@index([createdById])
+  @@map("notification")
 }
 
 model NotificationRecipient {
@@ -860,6 +880,7 @@ model NotificationRecipient {
   @@index([notificationId])
   @@index([userId])
   @@index([clientId])
+  @@map("notificationrecipient")
 }
 
 model PushSubscription {
@@ -879,4 +900,5 @@ model PushSubscription {
   @@unique([clinicId])
   @@index([clinicId])
   @@index([userId])
+  @@map("pushsubscription")
 }
