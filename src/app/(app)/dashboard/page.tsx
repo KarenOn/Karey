@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import DashboardClient from "./DashboardClient";
 import { getDashboardData } from "@/server/queries/dashboard";
 
