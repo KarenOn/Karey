@@ -745,8 +745,8 @@ export default function AppointmentsPage() {
       <AppPageHero
         badgeIcon={<CalendarIcon className="size-3.5" />}
         badgeLabel="Agenda clínica"
-        title="Agenda y seguimiento diario con una vibra más clara y consistente"
-        description="La agenda ahora prioriza lectura rápida, bloques más limpios y una jerarquía visual uniforme para citas, estados y horarios tanto en claro como en oscuro."
+        title="Agenda y seguimiento diario"
+        description="Organiza citas, horarios y disponibilidad en un solo lugar."
         actions={
           <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
             <Plus className="mr-2 h-4 w-4" />
@@ -787,7 +787,7 @@ export default function AppointmentsPage() {
                   onSelect={(day) => day && setSelectedDay(startOfDay(day))}
                   disabled={(day) => Boolean(scheduleByDay.get(getWeekdayKey(day))?.closed)}
                   components={{ DayButton: renderCalendarDayButton }}
-                  className="rounded-xl"
+                  className="rounded-xl w-full border border-border/70"
                 />
 
                 <div className="mt-4 border-t border-border/70 pt-4">

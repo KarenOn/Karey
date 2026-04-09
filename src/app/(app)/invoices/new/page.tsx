@@ -24,6 +24,7 @@ import {
   CreditCard,
   Banknote,
   Building2,
+  Receipt,
 } from "lucide-react";
 
 import {
@@ -32,6 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import AppPageHero from "@/components/shared/AppPageHero";
 
 type Client = { id: number; fullName: string; phone: string | null; email: string | null };
 type Pet = { id: number; name: string; species: string; breed: string | null };
@@ -264,7 +266,7 @@ export default function NewInvoicePOSPage() {
 
     const res = await fetch(`/api/pos/products/lookup?code=${encodeURIComponent(c)}`, { cache: "no-store" });
     if (!res.ok) {
-      setErr("No encontré ese código/SKU.");
+      setErr("No se encontró ese código/SKU.");
       return;
     }
 
@@ -368,9 +370,9 @@ export default function NewInvoicePOSPage() {
 
   return (
     <TooltipProvider>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-8xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        {/* <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href="/invoices">
               <Button variant="ghost" size="icon" className="rounded-xl">
@@ -387,7 +389,30 @@ export default function NewInvoicePOSPage() {
             <Badge variant="secondary" className="rounded-full">Enter = agregar código</Badge>
             <Badge variant="secondary" className="rounded-full">Tip: escáner funciona como teclado</Badge>
           </div>
-        </div>
+        </div> */}
+
+        <AppPageHero
+          badgeIcon={<Receipt className="size-3.5" />}
+          badgeLabel="POS - Facturación"
+          title="Nueva Factura"
+          description="Rápido, para caja: busca por código y cobra en segundos"
+          back={true}
+          actions={
+            <>
+              <Badge variant="secondary" className="rounded-full">Enter = agregar código</Badge>
+              <Badge variant="secondary" className="rounded-full">Tip: escáner funciona como teclado</Badge>
+            </>
+            // <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+            //   <Plus className="mr-2 h-4 w-4" />
+            //   Nueva Cita
+            // </Button>
+          }
+          // stats={[
+          //   { label: "Del día", value: dayAppointments.length, hint: "Citas registradas" },
+          //   { label: "Activas", value: activeDayAppointments.length, hint: "Sin canceladas ni no-show" },
+          //   { label: "Veterinarios", value: vets.length, hint: "Disponibles para asignación" },
+          // ]}
+        />
 
         {err ? (
           <div className="rounded-2xl border bg-card p-4">
@@ -405,8 +430,8 @@ export default function NewInvoicePOSPage() {
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                      <HelpCircle className="w-4 h-4" /> ayuda
+                    <button type="button" className="inline-flex items-center gap-2 text-xs text-primary">
+                      <HelpCircle className="w-4 h-4" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
@@ -421,7 +446,7 @@ export default function NewInvoicePOSPage() {
                     <Label>Cliente</Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="text-muted-foreground cursor-help"><HelpCircle className="w-4 h-4" /></span>
+                        <span className="text-primary cursor-help"><HelpCircle className="w-4 h-4" /></span>
                       </TooltipTrigger>
                       <TooltipContent>Requerido. Si no aparece, revisa que el cliente tenga el mismo clinicId.</TooltipContent>
                     </Tooltip>
@@ -434,7 +459,7 @@ export default function NewInvoicePOSPage() {
                       setPetId("");
                     }}
                   >
-                    <SelectTrigger className="mt-1.5">
+                    <SelectTrigger className="mt-1.5 w-full">
                       <SelectValue placeholder="Seleccionar cliente" />
                     </SelectTrigger>
                     <SelectContent>
@@ -459,14 +484,14 @@ export default function NewInvoicePOSPage() {
                     <Label>Paciente</Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="text-muted-foreground cursor-help"><HelpCircle className="w-4 h-4" /></span>
+                        <span className="text-primary cursor-help"><HelpCircle className="w-4 h-4" /></span>
                       </TooltipTrigger>
                       <TooltipContent>Opcional. Útil para historial y reportes por mascota.</TooltipContent>
                     </Tooltip>
                   </div>
 
                   <Select value={petId} onValueChange={setPetId} disabled={!clientId}>
-                    <SelectTrigger className="mt-1.5">
+                    <SelectTrigger className="mt-1.5 w-full">
                       <SelectValue placeholder={clientId ? "Seleccionar paciente" : "Selecciona un cliente primero"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -528,7 +553,7 @@ export default function NewInvoicePOSPage() {
 
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="text-muted-foreground cursor-help"><HelpCircle className="w-4 h-4" /></span>
+                        <span className="text-primary cursor-help"><HelpCircle className="w-4 h-4" /></span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
                         Ideal para escáner: el escáner escribe el SKU y manda Enter. Aquí, Enter agrega el producto.
@@ -536,7 +561,7 @@ export default function NewInvoicePOSPage() {
                     </Tooltip>
                   </div>
 
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex gap-2 items-center">
                     <Input
                       ref={codeRef}
                       value={code}
@@ -563,11 +588,11 @@ export default function NewInvoicePOSPage() {
               {/* Selector por lista (servicios / productos) */}
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1">
-                  <Label className="text-xs text-muted-foreground">
-                    {selectedType === "SERVICE" ? "Servicio (lista)" : "Producto (lista)"}
+                  <Label>
+                    {selectedType === "SERVICE" ? "Servicios" : "Productos"}
                   </Label>
                   <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                    <SelectTrigger className="mt-1.5">
+                    <SelectTrigger className="mt-1.5 w-3xl">
                       <SelectValue
                         placeholder={`Seleccionar ${selectedType === "SERVICE" ? "servicio" : "producto"}`}
                       />
@@ -590,8 +615,8 @@ export default function NewInvoicePOSPage() {
                   </Select>
                 </div>
 
-                <div className="w-full md:w-28">
-                  <Label className="text-xs text-muted-foreground">Cant.</Label>
+                <div className="w-full md:w-38">
+                  <Label>Cantidad</Label>
                   <Input
                     className="mt-1.5"
                     type="number"
@@ -706,14 +731,14 @@ export default function NewInvoicePOSPage() {
             <div className="bg-card rounded-2xl p-6 border border-border space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-foreground">Resumen</h3>
-                <Tooltip>
+                {/* <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="text-muted-foreground cursor-help"><HelpCircle className="w-4 h-4" /></span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
                     El sistema recalcula totales en el backend al guardar (esto evita inconsistencias).
                   </TooltipContent>
-                </Tooltip>
+                </Tooltip> */}
               </div>
 
               <div className="space-y-2 text-sm">

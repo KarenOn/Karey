@@ -75,13 +75,22 @@ export default async function ClientDetailPage({
         status: true,
         issueDate: true,
         total: true, // Decimal
+        payments: {
+          select: {
+            id: true,
+            amount: true, // Decimal
+          },
+        },
       },
     }),
+
   ]);
 
-  const totalSpent = invoices
-    .filter((i) => i.status === "PAID")
-    .reduce((sum, i) => sum + i.total.toNumber(), 0);
+  const totalSpent = invoices.map(
+    (i) => i.payments.reduce((sum, p) => sum + p.amount.toNumber(), 0)
+  ).reduce((sum, i) => sum + i, 0);
+    // .filter((i) => i.status === "PAID" || i.status === "PARTIALLY_PAID" || i.status === "ISSUED")
+    // .reduce((sum, i) => sum + i.total.toNumber(), 0);
 
   // ✅ DTO serializable (sin Date/Decimal)
   return (

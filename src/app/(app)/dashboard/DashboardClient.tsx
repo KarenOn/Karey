@@ -33,13 +33,13 @@ export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
               <Sparkles className="size-3.5" />
               Centro de control clinico
             </div>
-            <h2 className="app-heading text-3xl sm:text-4xl">Un dashboard mas calido, mas legible y con mejor pulso operativo.</h2>
+            <h2 className="app-heading text-3xl sm:text-4xl">Panel Principal</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-              Manten citas, vacunas, stock y facturacion en una misma superficie visual, con densidad util y una jerarquia que ayuda a decidir rapido.
+              Resumen operativo con foco clínico, agenda y finanzas.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[30rem]">
+          {/* <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[30rem]">
             <div className="app-panel-muted p-3">
               <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Clientes</p>
               <p className="mt-2 text-2xl font-extrabold text-foreground">{clients.length}</p>
@@ -56,7 +56,7 @@ export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
               <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Ingresos</p>
               <p className="mt-2 text-2xl font-extrabold text-foreground">${monthlyRevenue.toLocaleString("es-MX")}</p>
             </div>
-          </div>
+          </div> */}
         </div>
       </section>
 

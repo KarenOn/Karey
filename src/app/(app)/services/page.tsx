@@ -302,8 +302,8 @@ export default function ServicesPage() {
       <AppPageHero
         badgeIcon={<Sparkles className="size-3.5" />}
         badgeLabel="Servicios y catálogo"
-        title="Servicios veterinarios con una presentación más clara y útil"
-        description="Organiza tu catálogo con más contexto visual, precios fáciles de escanear y tarjetas más vivas para que el equipo encuentre rápido lo que necesita sin perder orden."
+        title="Servicios veterinarios"
+        description="Organiza tu catálogo."
         actions={
           <>
             <Button variant="outline" onClick={() => setOnlyActive((v) => !v)} className="gap-2">
@@ -347,7 +347,7 @@ export default function ServicesPage() {
         </div>
 
         <Badge variant="secondary" className="rounded-full w-fit">
-          {filtered.length} servicios
+          {filtered.length} servicio(s)
         </Badge>
       </div>
 

@@ -370,10 +370,10 @@ function ClientsPageContent() {
           </Button>
         }
         stats={[
-          { label: "Clientes", value: clients.length, hint: "Base total" },
-          { label: "Con email", value: clientsWithEmail, hint: "Contacto digital" },
-          { label: "Con mascotas", value: clientsWithPets, hint: "Historias activas" },
-          { label: "Mascotas", value: totalPets, hint: "Pacientes vinculados" },
+          { label: "Clientes", value: clients.length, hint: "Total de clientes" },
+          { label: "Con acceso", value: clientsWithEmail, hint: "Clientes con acceso" }, //Hacer que el cliente pueda tener acceso a la app
+          { label: "Con mascotas", value: clientsWithPets, hint: "Clientes con mascotas" },
+          { label: "Mascotas", value: totalPets, hint: "Mascotas vinculadas" },
         ]}
       />
 

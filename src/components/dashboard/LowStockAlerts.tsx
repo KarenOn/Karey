@@ -33,7 +33,7 @@ export default function LowStockAlerts({ products }: Props) {
         {lowStockProducts.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <Package className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
-            <p>Todo el inventario esta bien</p>
+            <p>Todo el inventario está bien</p>
           </div>
         ) : (
           lowStockProducts.slice(0, 4).map((product, index) => {

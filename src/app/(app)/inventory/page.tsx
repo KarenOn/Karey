@@ -39,6 +39,7 @@ import {
 } from "@/lib/api/stock-movements";
 import type { ProductCreateInput } from "@/lib/validators/product";
 import type { StockMovementType } from "@/types/common";
+import AppPageHero from "@/components/shared/AppPageHero";
 
 type ProductRow = {
   id: number;
@@ -597,7 +598,7 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="app-page-hero text-foreground">
+      {/* <div className="app-page-hero text-foreground">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
             <Badge className="app-kicker border-0">Control de inventario</Badge>
@@ -615,9 +616,38 @@ export default function InventoryPage() {
             </Button>
           </div>
         </div>
-      </div>
+      </div> */}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+      <AppPageHero
+        badgeIcon={<Package className="size-3.5" />}
+        badgeLabel="Inventario"
+        title="Inventario y movimientos"
+        description="Gestiona productos y registra entradas, salidas y ajustes desde el mismo modulo."
+        actions={
+          // <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+          //   <Plus className="mr-2 h-4 w-4" />
+          //   Nueva Cita
+          // </Button>
+          <>
+            <Button variant="outline" onClick={() => openMovementModal()}>
+              <Waypoints className="mr-2 h-4 w-4" />
+              Registrar movimiento
+            </Button>
+            <Button onClick={openCreateProduct}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo producto
+            </Button>
+          </>
+        }
+        stats={[
+          { label: "Productos", value: products.length, hint: "Productos cargados" },
+          { label: "Stock", value: lowStockProducts.length, hint: "Stock bajo" },
+          { label: "Movimientos", value: movementStats.recent, hint: "Movimientos recientes" },
+          { label: "Valor", value: totalValue, hint: "Stock valorizado" },
+        ]}
+      />
+
+      {/* <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
         <div className="app-stat-card">
           <div className="flex items-center justify-between">
             <div className="app-stat-icon"><Boxes className="h-5 w-5" /></div>
@@ -650,7 +680,7 @@ export default function InventoryPage() {
           <p className="mt-4 text-sm text-muted-foreground">Stock valorizado</p>
           <p className="mt-2 text-3xl font-bold text-foreground">{money(totalValue)}</p>
         </div>
-      </div>
+      </div> */}
 
       <Tabs defaultValue="products" className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

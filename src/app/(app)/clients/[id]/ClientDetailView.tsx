@@ -127,7 +127,7 @@ export default function ClientDetailView({
         </Button>
 
         <div className="flex-1">
-          <p className="app-kicker mb-3 inline-flex border-0">Clientes y relacion</p>
+          <p className="app-kicker mb-3 inline-flex border-0">Detalle de cliente</p>
           <h2 className="app-heading text-3xl sm:text-4xl">{client.fullName}</h2>
           <p className="mt-2 text-muted-foreground">
             Cliente desde {format(parseISO(client.createdAt), "MMMM yyyy", { locale: es })}
@@ -154,7 +154,7 @@ export default function ClientDetailView({
           <div className="space-y-4">
             <InfoRow icon={Phone} label="Telefono" value={client.phone ?? "-"} />
             {client.email ? <InfoRow icon={Mail} label="Email" value={client.email} /> : null}
-            {client.address ? <InfoRow icon={MapPin} label="Direccion" value={client.address} /> : null}
+            {client.address ? <InfoRow icon={MapPin} label="Dirección" value={client.address} /> : null}
           </div>
 
           {client.notes ? (
@@ -221,7 +221,7 @@ export default function ClientDetailView({
           className="space-y-6"
         >
           <ActivityPanel
-            title="Ultimas Citas"
+            title="Últimas Citas"
             icon={Calendar}
             iconClassName="text-[var(--brand-navy)] dark:text-blue-300"
             emptyMessage="Sin citas registradas"
@@ -254,7 +254,7 @@ export default function ClientDetailView({
           </ActivityPanel>
 
           <ActivityPanel
-            title="Ultimas Facturas"
+            title="Últimas Facturas"
             icon={FileText}
             iconClassName="text-emerald-600 dark:text-emerald-300"
             emptyMessage="Sin facturas registradas"

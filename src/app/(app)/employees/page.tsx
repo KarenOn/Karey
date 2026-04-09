@@ -281,8 +281,8 @@ export default function EmployeesPage() {
       <AppPageHero
         badgeIcon={<ShieldCheck className="size-3.5" />}
         badgeLabel="Equipo y permisos"
-        title="Empleados, roles y accesos con una vista mas ordenada y consistente"
-        description="La administracion del equipo vuelve a compartir la misma vibra del resto de la app: paneles cuidados, tablas con mejor lectura y permisos mas faciles de revisar."
+        title="Empleados, roles y accesos"
+        description="Gestiona el acceso de tu equipo, asigna roles y permisos según sus funciones en la clínica."
         actions={
           <>
             {capabilities.canManageRoles ? (

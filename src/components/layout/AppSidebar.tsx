@@ -69,21 +69,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const navigation: NavItem[] = useMemo(
     () => [
-      { name: "Dashboard", icon: LayoutDashboard, pageKey: "Dashboard", href: "/dashboard", hint: "Pulso general" },
+      { name: "Dashboard", icon: LayoutDashboard, pageKey: "Dashboard", href: "/dashboard", hint: "Panel de control" },
       { name: "Clientes", icon: Users, pageKey: "Clients", href: "/clients", hint: "Propietarios" },
-      { name: "Turno de Hoy", icon: ClipboardList, pageKey: "TodayTurns", href: "/today-turns", hint: "Fila clinica" },
+      { name: "Turno de Hoy", icon: ClipboardList, pageKey: "TodayTurns", href: "/today-turns", hint: "Fila clínica" },
       { name: "Pacientes", icon: PawPrint, pageKey: "Patients", href: "/pets", hint: "Mascotas" },
       { name: "Agenda", icon: Calendar, pageKey: "Appointments", href: "/appointments", hint: "Citas" },
       { name: "Inventario", icon: Package, pageKey: "Inventory", href: "/inventory", hint: "Stock" },
-      { name: "Facturacion", icon: FileText, pageKey: "Invoices", href: "/invoices", hint: "Cobros" },
-      { name: "Servicios", icon: Stethoscope, pageKey: "Services", href: "/services", hint: "Catalogo" },
+      { name: "Facturación", icon: FileText, pageKey: "Invoices", href: "/invoices", hint: "Cobros" },
+      { name: "Servicios", icon: Stethoscope, pageKey: "Services", href: "/services", hint: "Catálogo" },
       { name: "Empleados", icon: IdCardLanyard, pageKey: "Employees", href: "/employees", hint: "Equipo" },
     ],
     []
   );
 
   const clinicCta = useMemo(
-    () => ({ name: "Mi Clinica", icon: Building2, pageKey: "ClinicProfile", href: "/clinic-profile" }),
+    () => ({ name: "Mi Clínica", icon: Building2, pageKey: "ClinicProfile", href: "/clinic-profile" }),
     []
   );
 
@@ -100,7 +100,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const currentTitle = useMemo(() => {
     const item = navigation.find((n) => pathname === n.href || pathname.startsWith(n.href + "/"));
     if (!item) return "VetCare";
-    if (item.pageKey === "Dashboard") return "Panel Principal";
+    if (item.pageKey === "Dashboard") return "Bienvenido/a";
     return item.name;
   }, [navigation, pathname]);
 
@@ -280,19 +280,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
 
               <div className="min-w-0">
-                <div className="app-kicker mb-2 hidden md:inline-flex">
+                {/* <div className="app-kicker mb-2 hidden md:inline-flex">
                   <Activity className="size-3.5" />
                   Operacion diaria
-                </div>
-                <h1 className="app-heading truncate text-2xl lg:text-[2rem]">{currentTitle}</h1>
-                <p className="app-subtle hidden truncate text-sm md:block">{currentDescription}</p>
+                </div> */}
+                {/* <h1 className="app-heading truncate text-2xl lg:text-[2rem]">{currentTitle}</h1> */}
+                <h1 className="app-heading truncate text-2xl lg:text-[2rem]">Bienvenido/a</h1>
+                {/* <p className="app-subtle hidden truncate text-sm md:block">{currentDescription}</p> */}
               </div>
             </div>
 
             <div className="flex items-center gap-2 lg:gap-3">
-              <button className="relative hidden rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background md:inline-flex" aria-label="Search">
+              {/* <button className="relative hidden rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background md:inline-flex" aria-label="Search">
                 <Search className="size-4 text-muted-foreground" />
-              </button>
+              </button> */}
 
               <button className="relative rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background" aria-label="Notifications">
                 <Bell className="size-4 text-muted-foreground" />

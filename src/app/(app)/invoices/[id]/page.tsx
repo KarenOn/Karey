@@ -27,10 +27,14 @@ import {
   Banknote,
   Building2,
   Check,
+  ReceiptText,
+  Plus,
 } from "lucide-react";
 
 import { apiCreatePayment, apiGetInvoice, apiUpdateInvoiceStatus, InvoiceDetail } from "@/lib/api/invoices";
 import type { PaymentCreateInput } from "@/lib/validators/payment";
+import AppPageHero from "@/components/shared/AppPageHero";
+import Link from "next/link";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -175,6 +179,9 @@ export default function InvoiceDetailPage() {
   }
 
   const petEmoji = invoice.pet?.species ? (speciesEmoji[invoice.pet.species] ?? "🐾") : "🐾";
+  const heroInvoiceDate = issueDate ? format(issueDate, "d 'de' MMMM, yyyy", { locale: es }) : "—";
+  const heroInvoiceStatus = ui ? `${ui.hint ? ` • ${ui.hint}` : ""}` : "";
+  const heroDescription = `${heroInvoiceDate}${heroInvoiceStatus}`;
 
   return (
     <div className="space-y-6">
@@ -189,7 +196,7 @@ export default function InvoiceDetailPage() {
       `}</style>
 
       {/* Header */}
-      <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {/* <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => router.back()}>
             <ArrowLeft className="w-5 h-5" />
@@ -223,7 +230,33 @@ export default function InvoiceDetailPage() {
             </Button>
           )}
         </div>
-      </div>
+      </div> */}
+
+      <AppPageHero
+        badgeIcon={<ReceiptText className="size-3.5" />}
+        badgeLabel="Detalle de factura"
+        title={invoice.number}
+        description={heroDescription}
+        back={true}
+        actions={
+          <>
+            <Badge className={`${ui?.badge} border px-3 py-1`}>
+              <StatusIcon className="w-4 h-4 mr-1" />
+              {ui?.label}
+            </Badge>
+
+            <Button variant="outline" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" /> Imprimir
+            </Button>
+
+            {canVoid && (
+              <Button variant="outline" className="text-rose-600 hover:bg-rose-50" onClick={markVoid}>
+                <XCircle className="w-4 h-4 mr-2" /> Anular
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT: Invoice sheet */}
