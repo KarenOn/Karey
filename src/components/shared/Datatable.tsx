@@ -61,7 +61,7 @@ export default function DataTable<T extends DataTableRow>({
           <div>
             <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Vista estructurada</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filteredData.length} registros encontrados {filteredData.length !== data.length ? `de ${data.length}` : ""}
+              {filteredData.length} registro(s) encontrado(s) {filteredData.length !== data.length ? `de ${data.length}` : ""}
             </p>
           </div>
 

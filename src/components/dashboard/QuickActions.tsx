@@ -16,6 +16,7 @@ const actions = [
     icon: UserPlus,
     page: "/clients",
     params: "?action=new",
+    description: "Registrar un nuevo cliente en el sistema",
     color: "bg-linear-to-br from-blue-500 to-blue-600",
   },
   {
@@ -24,6 +25,7 @@ const actions = [
     page: "/pets",
     params: "?action=new",
     color: "bg-linear-to-br from-teal-500 to-teal-600",
+    description: "Agregar un nuevo paciente a la base de datos",
   },
   {
     name: "Agendar Cita",
@@ -31,6 +33,7 @@ const actions = [
     page: "/appointments",
     params: "?action=new",
     color: "bg-linear-to-br from-purple-500 to-purple-600",
+    description: "Programar una nueva cita para un paciente",
   },
   {
     name: "Nueva Factura",
@@ -38,6 +41,7 @@ const actions = [
     page: "/invoices",
     params: "?action=new",
     color: "bg-linear-to-br from-orange-500 to-orange-600",
+    description: "Crear una nueva factura en el sistema",
   },
   {
     name: "Vacunacion",
@@ -45,6 +49,7 @@ const actions = [
     page: "/pets",
     params: "?tab=vaccinations",
     color: "bg-linear-to-br from-pink-500 to-pink-600",
+    description: "Registrar una nueva vacunación para un paciente",
   },
   {
     name: "Inventario",
@@ -52,6 +57,7 @@ const actions = [
     page: "/inventory",
     params: "",
     color: "bg-linear-to-br from-green-500 to-green-600",
+    description: "Gestionar el inventario de la clinica",
   },
 ];
 
@@ -66,9 +72,9 @@ export default function QuickActions() {
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Acciones rapidas</p>
-          <h3 className="font-display text-2xl font-semibold text-foreground">Atajos con intencion clinica</h3>
+          <h3 className="font-display text-2xl font-semibold text-foreground">Funciones rápidas</h3>
         </div>
-        <p className="hidden max-w-sm text-right text-sm text-muted-foreground lg:block">Cada acceso mantiene el mismo lenguaje visual para que la navegacion se sienta consistente y rapida.</p>
+        {/* <p className="hidden max-w-sm text-right text-sm text-muted-foreground lg:block">Cada acceso mantiene el mismo lenguaje visual para que la navegacion se sienta consistente y rapida.</p> */}
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {actions.map((action, index) => (
@@ -84,7 +90,7 @@ export default function QuickActions() {
               </div>
               <div>
                 <span className="block text-sm font-extrabold text-foreground">{action.name}</span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ir directo con contexto y menos clics.</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{action.description}</span>
               </div>
             </motion.div>
           </Link>

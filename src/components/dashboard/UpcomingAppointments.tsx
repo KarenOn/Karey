@@ -46,7 +46,7 @@ export default function UpcomingAppointments({ appointments, patients, clients }
       <div className="flex items-center justify-between border-b border-border/70 p-6">
         <div>
           <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Agenda viva</p>
-          <h3 className="font-display text-2xl font-semibold text-foreground">Proximas Citas</h3>
+          <h3 className="font-display text-2xl font-semibold text-foreground">Próximas Citas</h3>
         </div>
 
         <Link href="/appointments" className="text-sm text-primary hover:text-primary/80 font-semibold flex items-center gap-1">

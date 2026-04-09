@@ -43,13 +43,13 @@ export default function StatsCard({
       transition={{ delay, duration: 0.4 }}
       className="app-stat-card group relative p-6"
     >
-      <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.28),transparent_62%)]" />
+      <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-full" />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-3">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
           <p className="text-3xl font-extrabold tracking-[-0.04em] text-foreground">{value}</p>
 
-          {trend && (
+          {/* {trend && (
             <p
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] ${
                 trend === "up"
@@ -59,7 +59,7 @@ export default function StatsCard({
             >
               {trend === "up" ? "↑" : "↓"} {trendValue ?? ""}
             </p>
-          )}
+          )} */}
         </div>
 
         <div
@@ -69,9 +69,9 @@ export default function StatsCard({
         </div>
       </div>
 
-      <div className="mt-5 flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Lectura rapida</span>
-        <span className="font-semibold text-foreground">Actualizado hoy</span>
+      <div className="mt-5 flex items-center text-sm">
+        {/* <span className="text-muted-foreground">Lectura rapida</span> */}
+        <span className="font-semibold text-muted-foreground">Actualizado hoy</span>
       </div>
     </motion.div>
   );

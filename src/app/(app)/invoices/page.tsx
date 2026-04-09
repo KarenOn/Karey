@@ -19,10 +19,12 @@ import {
   Building,
   Ban,
   Check,
+  ReceiptText,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { apiListInvoices, apiUpdateInvoiceStatus, type InvoiceListRow } from "@/lib/api/invoices";
+import AppPageHero from "@/components/shared/AppPageHero";
 
 const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
   PAID: { icon: CheckCircle, label: "Pagada", color: "bg-emerald-100 text-emerald-700" },
@@ -136,7 +138,7 @@ export default function InvoicesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Facturación</h1>
           <p className="text-muted-foreground">Gestiona las facturas de tu clínica</p>
@@ -151,7 +153,6 @@ export default function InvoicesPage() {
         </Link>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-card rounded-2xl p-6 border border-border">
           <div className="flex items-center gap-3">
@@ -188,7 +189,31 @@ export default function InvoicesPage() {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
+
+      <AppPageHero
+        badgeIcon={<ReceiptText className="size-3.5" />}
+        badgeLabel="Facturación"
+        title="Gestión de facturas"
+        description="Organiza y realiza un seguimiento de las facturas de tu clínica."
+        actions={
+          // <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+          //   <Plus className="mr-2 h-4 w-4" />
+          //   Nueva Cita
+          // </Button>
+          <Link href="/invoices/new">
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              Nueva Factura
+            </Button>
+          </Link>
+        }
+        stats={[
+          { label: "Facturas", value: invoices.length, hint: "Total Facturas" },
+          { label: "Cobrado", value: totalPaid.toLocaleString(), hint: "Total Cobrado" },
+          { label: "Pendiente", value: totalPending.toLocaleString(), hint: "Total Pendiente" },
+        ]}
+      />
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4">
