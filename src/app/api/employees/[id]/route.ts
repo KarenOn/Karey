@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { z } from "zod";
+import { syncUserRoleFromMembership } from "@/lib/current-user-profile";
 
 const UpdateMemberSchema = z.object({
   roleId: z.number().int().optional(),
@@ -37,6 +38,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         isActive: body.isActive ?? existing.isActive,
       },
     });
+
+    await syncUserRoleFromMembership(updated.userId, clinicId);
 
     return NextResponse.json(updated);
   } catch (e: unknown) {

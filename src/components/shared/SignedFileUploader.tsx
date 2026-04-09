@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Upload, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type UploadScope = "clinic-logo" | "medical-attachment";
+type UploadScope = "clinic-logo" | "medical-attachment" | "user-avatar";
 
 type SignedFileUploaderProps = {
   accept?: string;
