@@ -1,8 +1,9 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth, getClinicIdOrFail } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
 import {
   StockMovementCreateSchema,
   stockMovementTypes,
@@ -35,14 +36,7 @@ async function getCurrentUserId() {
 }
 
 export async function GET(req: Request) {
-  const clinicId = await getClinicIdOrFail();
-  if (!clinicId) {
-    return NextResponse.json(
-      { error: "No existe clinica configurada" },
-      { status: 409 }
-    );
-  }
-
+  const { clinicId } = await requireClinicPermission("inventory.read");
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const type = (searchParams.get("type") ?? "").trim();
@@ -106,14 +100,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
-  if (!clinicId) {
-    return NextResponse.json(
-      { error: "No existe clinica configurada" },
-      { status: 409 }
-    );
-  }
-
+  const { clinicId } = await requireClinicPermission("inventory.update");
   const body = await req.json().catch(() => null);
   const parsed = StockMovementCreateSchema.safeParse(body);
 
@@ -137,10 +124,7 @@ export async function POST(req: Request) {
   });
 
   if (!product) {
-    return NextResponse.json(
-      { error: "Producto no encontrado" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
   }
 
   if (!product.trackStock) {
@@ -154,10 +138,7 @@ export async function POST(req: Request) {
   const nextStock = product.stockOnHand + delta;
 
   if (nextStock < 0) {
-    return NextResponse.json(
-      { error: "El movimiento deja el stock en negativo" },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: "El movimiento deja el stock en negativo" }, { status: 409 });
   }
 
   const result = await prisma.$transaction(async (tx) => {

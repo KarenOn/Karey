@@ -40,6 +40,7 @@ import {
 import type { ProductCreateInput } from "@/lib/validators/product";
 import type { StockMovementType } from "@/types/common";
 import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 type ProductRow = {
   id: number;
@@ -189,6 +190,7 @@ function signed(value: number) {
 }
 
 export default function InventoryPage() {
+  const access = useCurrentUserAccess();
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [movements, setMovements] = useState<StockMovementRow[]>([]);
@@ -208,6 +210,9 @@ export default function InventoryPage() {
   const [loadingDelete, setLoadingDelete] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<AlertState>({ variant: "info", title: "" });
+  const canCreateInventory = !!access?.actions.inventory.create;
+  const canUpdateInventory = !!access?.actions.inventory.update;
+  const canDeleteInventory = !!access?.actions.inventory.delete;
 
   async function loadInventory() {
     setLoading(true);
@@ -307,12 +312,14 @@ export default function InventoryPage() {
   const invalidMovement = !!selectedMovementProduct && movementNextStock < 0;
 
   const openCreateProduct = () => {
+    if (!canCreateInventory) return;
     setEditingProduct(null);
     setProductForm(emptyProductForm);
     setProductModalOpen(true);
   };
 
   const openEditProduct = (product: ProductRow) => {
+    if (!canUpdateInventory) return;
     setEditingProduct(product);
     setProductForm({
       name: product.name ?? "",
@@ -332,6 +339,7 @@ export default function InventoryPage() {
   };
 
   const openMovementModal = (product?: ProductRow) => {
+    if (!canUpdateInventory) return;
     const target = product?.trackStock ? product : products.find((item) => item.trackStock);
     setMovementForm({
       ...emptyMovementForm,
@@ -352,6 +360,11 @@ export default function InventoryPage() {
 
   const submitProduct = async (event?: React.FormEvent) => {
     event?.preventDefault();
+    if ((editingProduct && !canUpdateInventory) || (!editingProduct && !canCreateInventory)) {
+      setAlert({ variant: "warning", title: "No tienes permisos para guardar productos" });
+      setAlertOpen(true);
+      return;
+    }
     const payload: ProductCreateInput = {
       name: productForm.name.trim(),
       sku: productForm.sku.trim() || null,
@@ -395,6 +408,11 @@ export default function InventoryPage() {
 
   const submitMovement = async (event?: React.FormEvent) => {
     event?.preventDefault();
+    if (!canUpdateInventory) {
+      setAlert({ variant: "warning", title: "No tienes permisos para registrar movimientos" });
+      setAlertOpen(true);
+      return;
+    }
 
     if (!movementForm.productId || movementForm.quantity.trim() === "") {
       setAlert({ variant: "warning", title: "Selecciona producto y cantidad" });
@@ -436,6 +454,11 @@ export default function InventoryPage() {
 
   const removeProduct = async () => {
     if (!selectedDelete) return;
+    if (!canDeleteInventory) {
+      setAlert({ variant: "warning", title: "No tienes permisos para eliminar productos" });
+      setAlertOpen(true);
+      return;
+    }
     setLoadingDelete(true);
     try {
       await apiDeleteProduct(selectedDelete.id);
@@ -522,15 +545,21 @@ export default function InventoryPage() {
       header: "Acciones",
       cell: (row: ProductRow) => (
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" disabled={!row.trackStock} onClick={() => openMovementModal(row)}>
-            <Waypoints className="h-4 w-4 text-emerald-700" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => openEditProduct(row)}>
-            <Edit className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => { setSelectedDelete({ id: row.id, name: row.name }); setDeleteOpen(true); }}>
-            <Trash2 className="h-4 w-4 text-rose-500" />
-          </Button>
+          {canUpdateInventory ? (
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" disabled={!row.trackStock} onClick={() => openMovementModal(row)}>
+              <Waypoints className="h-4 w-4 text-emerald-700" />
+            </Button>
+          ) : null}
+          {canUpdateInventory ? (
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => openEditProduct(row)}>
+              <Edit className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          ) : null}
+          {canDeleteInventory ? (
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => { setSelectedDelete({ id: row.id, name: row.name }); setDeleteOpen(true); }}>
+              <Trash2 className="h-4 w-4 text-rose-500" />
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -624,19 +653,19 @@ export default function InventoryPage() {
         title="Inventario y movimientos"
         description="Gestiona productos y registra entradas, salidas y ajustes desde el mismo modulo."
         actions={
-          // <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
-          //   <Plus className="mr-2 h-4 w-4" />
-          //   Nueva Cita
-          // </Button>
           <>
-            <Button variant="outline" onClick={() => openMovementModal()}>
-              <Waypoints className="mr-2 h-4 w-4" />
-              Registrar movimiento
-            </Button>
-            <Button onClick={openCreateProduct}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo producto
-            </Button>
+            {canUpdateInventory ? (
+              <Button variant="outline" onClick={() => openMovementModal()}>
+                <Waypoints className="mr-2 h-4 w-4" />
+                Registrar movimiento
+              </Button>
+            ) : null}
+            {canCreateInventory ? (
+              <Button onClick={openCreateProduct}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo producto
+              </Button>
+            ) : null}
           </>
         }
         stats={[
@@ -755,7 +784,7 @@ export default function InventoryPage() {
         </TabsContent>
       </Tabs>
 
-      <Modal open={productModalOpen} onClose={() => setProductModalOpen(false)} title={editingProduct ? "Editar producto" : "Nuevo producto"} size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setProductModalOpen(false)}>Cancelar</Button><Button onClick={submitProduct} className="bg-emerald-700 hover:bg-emerald-800" disabled={savingProduct}>{savingProduct ? "Guardando..." : editingProduct ? "Guardar cambios" : "Crear producto"}</Button></div>}>
+      <Modal open={productModalOpen} onClose={() => setProductModalOpen(false)} title={editingProduct ? "Editar producto" : "Nuevo producto"} size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setProductModalOpen(false)}>Cancelar</Button>{(editingProduct ? canUpdateInventory : canCreateInventory) ? <Button onClick={submitProduct} className="bg-emerald-700 hover:bg-emerald-800" disabled={savingProduct}>{savingProduct ? "Guardando..." : editingProduct ? "Guardar cambios" : "Crear producto"}</Button> : null}</div>}>
         <form onSubmit={submitProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Nombre" name="name" value={productForm.name} onChange={handleProductChange} required className="sm:col-span-2" />
           <FormField label="Categoria" name="category" type="select" value={productForm.category} onChange={handleProductChange} options={categoryOptions} />
@@ -774,7 +803,7 @@ export default function InventoryPage() {
         </form>
       </Modal>
 
-      <Modal open={movementModalOpen} onClose={() => setMovementModalOpen(false)} title="Registrar movimiento" size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setMovementModalOpen(false)}>Cancelar</Button><Button onClick={submitMovement} className="bg-emerald-700 hover:bg-emerald-800" disabled={savingMovement}>{savingMovement ? "Registrando..." : "Guardar movimiento"}</Button></div>}>
+      <Modal open={movementModalOpen} onClose={() => setMovementModalOpen(false)} title="Registrar movimiento" size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setMovementModalOpen(false)}>Cancelar</Button>{canUpdateInventory ? <Button onClick={submitMovement} className="bg-emerald-700 hover:bg-emerald-800" disabled={savingMovement}>{savingMovement ? "Registrando..." : "Guardar movimiento"}</Button> : null}</div>}>
         <form onSubmit={submitMovement} className="grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-4">
             <FormField label="Producto" name="productId" type="select" value={movementForm.productId} onChange={handleMovementChange} options={productOptions} required />

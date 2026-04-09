@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { ServiceCreateSchema } from "@/lib/validators/service";
 import { Prisma } from "@/generated/prisma/client";
 import { zodDetails } from "@/lib/zodDetails";
 
 export async function GET(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("services.read");
   const { searchParams } = new URL(req.url);
 
   const q = searchParams.get("q")?.trim() || "";
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("services.create");
   const body = await req.json().catch(() => null);
 
   const parsed = ServiceCreateSchema.safeParse(body);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { ServiceUpdateSchema } from "@/lib/validators/service";
 import { Prisma } from "@/generated/prisma/client";
 import { zodDetails } from "@/lib/zodDetails";
@@ -8,7 +8,7 @@ import { zodDetails } from "@/lib/zodDetails";
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Params) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("services.read");
   const id = Number((await params).id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
@@ -38,7 +38,7 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 export async function PUT(req: Request, { params }: Params) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("services.update");
   const id = Number((await params).id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
@@ -74,7 +74,7 @@ export async function PUT(req: Request, { params }: Params) {
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("services.delete");
   const id = Number((await params).id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 

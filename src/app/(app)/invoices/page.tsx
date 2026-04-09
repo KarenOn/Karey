@@ -25,6 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from "@/lib/utils";
 import { apiListInvoices, apiUpdateInvoiceStatus, type InvoiceListRow } from "@/lib/api/invoices";
 import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
   PAID: { icon: CheckCircle, label: "Pagada", color: "bg-emerald-100 text-emerald-700" },
@@ -46,12 +47,15 @@ const toMoney = (v: any) => {
 };
 
 export default function InvoicesPage() {
+  const access = useCurrentUserAccess();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<InvoiceListRow[]>([]);
+  const canCreateInvoices = !!access?.actions.invoices.create;
+  const canUpdateInvoices = !!access?.actions.invoices.update;
 
   async function load() {
     setLoading(true);
@@ -95,6 +99,7 @@ export default function InvoicesPage() {
   );
 
   const handleVoid = async (id: number) => {
+    if (!canUpdateInvoices) return;
     await apiUpdateInvoiceStatus(id, "VOID");
     await load();
   };
@@ -201,12 +206,14 @@ export default function InvoicesPage() {
           //   <Plus className="mr-2 h-4 w-4" />
           //   Nueva Cita
           // </Button>
-          <Link href="/invoices/new">
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              Nueva Factura
-            </Button>
-          </Link>
+          canCreateInvoices ? (
+            <Link href="/invoices/new">
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                Nueva Factura
+              </Button>
+            </Link>
+          ) : null
         }
         stats={[
           { label: "Facturas", value: invoices.length, hint: "Total Facturas" },
@@ -341,7 +348,7 @@ export default function InvoicesPage() {
                         <Download className="w-4 h-4" /> Descargar PDF
                       </DropdownMenuItem>
 
-                      {invoice.status !== "VOID" && (
+                      {canUpdateInvoices && invoice.status !== "VOID" && (
                         <DropdownMenuItem className="gap-2 text-rose-600" onClick={() => handleVoid(invoice.id)}>
                           <Ban className="w-4 h-4" /> Anular factura
                         </DropdownMenuItem>

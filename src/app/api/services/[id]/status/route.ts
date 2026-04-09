@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { z } from "zod";
 
 const Schema = z.object({ isActive: z.coerce.boolean() });
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(req: Request, { params }: Params) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("services.update");
   const id = Number((await params).id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 

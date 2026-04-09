@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, addMinutes, format, isToday, isTomorrow, parse, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -18,11 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppAlert } from "@/components/shared/AppAlert";
-import DataTable from "@/components/shared/Datatable";
+import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
 import FormField from "@/components/shared/FormField";
 import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { safeDate } from "@/lib/utility";
 import { cn } from "@/lib/utils";
 
@@ -213,6 +214,7 @@ function LegendItem({ colorClass, label }: { colorClass: string; label: string }
 }
 
 export default function AppointmentsPage() {
+  const access = useCurrentUserAccess();
   const [view, setView] = useState<"agenda" | "list">("agenda");
   const [selectedDay, setSelectedDay] = useState<Date>(startOfDay(new Date()));
   const [loading, setLoading] = useState(true);
@@ -250,17 +252,20 @@ export default function AppointmentsPage() {
     title: string;
     description?: string;
   }>({ variant: "info", title: "" });
+  const canCreateAppointments = !!access?.actions.appointments.create;
+  const canUpdateAppointments = !!access?.actions.appointments.update;
+  const canDeleteAppointments = !!access?.actions.appointments.delete;
 
-  function showAlert(
+  const showAlert = useCallback((
     variant: "success" | "info" | "warning" | "destructive",
     title: string,
     description?: string
-  ) {
+  ) => {
     setAlert({ variant, title, description });
     setAlertOpen(true);
-  }
+  }, []);
 
-  async function refreshAll() {
+  const refreshAll = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -285,11 +290,11 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [showAlert]);
 
   useEffect(() => {
     void refreshAll();
-  }, []);
+  }, [refreshAll]);
 
   const selectedDayStr = useMemo(() => format(selectedDay, "yyyy-MM-dd"), [selectedDay]);
   const scheduleByDay = useMemo(() => new Map(schedules.map((schedule) => [schedule.day, schedule])), [schedules]);
@@ -496,12 +501,14 @@ export default function AppointmentsPage() {
   }
 
   function openCreateAt(day: Date, time: string) {
+    if (!canCreateAppointments) return;
     setEditing(null);
     resetForm(day, time);
     setModalOpen(true);
   }
 
   function openEdit(appointment: AppointmentDTO) {
+    if (!canUpdateAppointments) return;
     const start = safeDate(appointment.startAt);
     const end = safeDate(appointment.endAt);
 
@@ -521,6 +528,7 @@ export default function AppointmentsPage() {
   }
 
   function askDelete(appointment: AppointmentDTO) {
+    if (!canDeleteAppointments) return;
     setDeleteTarget({
       id: appointment.id,
       label: `${appointment.pet?.name ?? "Cita"} · ${formatAppointmentType(appointment.type)}`,
@@ -534,6 +542,10 @@ export default function AppointmentsPage() {
   }
 
   async function submitAppointment() {
+    if ((editing && !canUpdateAppointments) || (!editing && !canCreateAppointments)) {
+      showAlert("warning", "No tienes permisos para guardar citas");
+      return;
+    }
     const petId = Number(formData.petId);
     const pet = petById.get(petId);
 
@@ -645,6 +657,10 @@ export default function AppointmentsPage() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
+    if (!canDeleteAppointments) {
+      showAlert("warning", "No tienes permisos para eliminar citas");
+      return;
+    }
 
     setDeleting(true);
     try {
@@ -661,7 +677,7 @@ export default function AppointmentsPage() {
     }
   }
 
-  const columns = [
+  const columns: DataTableColumn<AppointmentTableRow>[] = [
     {
       header: "Fecha/Hora",
       cell: (row: AppointmentTableRow) => {
@@ -709,12 +725,16 @@ export default function AppointmentsPage() {
       header: "Acciones",
       cell: (row: AppointmentTableRow) => (
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
-            <Edit className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => askDelete(row)}>
-            <Trash2 className="h-4 w-4 text-red-500" />
-          </Button>
+          {canUpdateAppointments ? (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
+              <Edit className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          ) : null}
+          {canDeleteAppointments ? (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => askDelete(row)}>
+              <Trash2 className="h-4 w-4 text-red-500" />
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -748,10 +768,12 @@ export default function AppointmentsPage() {
         title="Agenda y seguimiento diario"
         description="Organiza citas, horarios y disponibilidad en un solo lugar."
         actions={
-          <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva Cita
-          </Button>
+          canCreateAppointments ? (
+            <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva Cita
+            </Button>
+          ) : null
         }
         stats={[
           { label: "Del día", value: dayAppointments.length, hint: "Citas registradas" },
@@ -765,10 +787,12 @@ export default function AppointmentsPage() {
           <p className="text-muted-foreground">Gestiona las citas según mascotas, clientes, veterinarios y horario de la clínica</p>
         </div>
 
-        <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nueva Cita
-        </Button>
+        {canCreateAppointments ? (
+          <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva Cita
+          </Button>
+        ) : null}
       </div>
 
       <Tabs value={view} onValueChange={(value) => setView(value as "agenda" | "list")}>
@@ -859,7 +883,7 @@ export default function AppointmentsPage() {
                             className="border-b border-border/70 px-3 py-3"
                             style={{ height: `${TIMELINE_SLOT_HEIGHT}px` }}
                           >
-                            {!occupiedSlots.has(slot) ? (
+                            {!occupiedSlots.has(slot) && canCreateAppointments ? (
                               <button
                                 type="button"
                                 onClick={() => openCreateAt(selectedDay, slot)}
@@ -873,15 +897,14 @@ export default function AppointmentsPage() {
                         ))}
                       </div>
 
-                      <div className="absolute inset-0 px-3 py-3">
-                        {appointmentLayouts.map(({ appointment, top, height }) => {
-                          console.log(appointment, top, height);
+                      <div className="pointer-events-none absolute inset-0 px-3 py-3">
+                        {appointmentLayouts.map(({ appointment, top }) => {
                           const styles = TYPE_STYLES[appointment.type] ?? TYPE_STYLES.OTHER;
 
                           return (
                             <div
                               key={appointment.id}
-                              className="absolute left-3 right-3 cursor-pointer overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition hover:-translate-y-0.5"
+                              className="pointer-events-auto absolute left-3 right-3 cursor-pointer overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition hover:-translate-y-0.5"
                               style={{
                                 top: `${top + 4}px`,
                                 // height: `${height}px`,
@@ -912,28 +935,32 @@ export default function AppointmentsPage() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      openEdit(appointment);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4 text-muted-foreground" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      askDelete(appointment);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                  </Button>
+                                  {canUpdateAppointments ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openEdit(appointment);
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  ) : null}
+                                  {canDeleteAppointments ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        askDelete(appointment);
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-500" />
+                                    </Button>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
@@ -950,7 +977,7 @@ export default function AppointmentsPage() {
 
         <TabsContent value="list" className="mt-6">
           <DataTable
-            columns={columns as any}
+            columns={columns}
             data={tableRows}
             searchKey="searchText"
             searchPlaceholder="Buscar por mascota, cliente, veterinario o motivo..."
@@ -969,15 +996,17 @@ export default function AppointmentsPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => void submitAppointment()} disabled={saving}>
-              {saving ? "Guardando..." : editing ? "Guardar Cambios" : "Crear Cita"}
-            </Button>
+            {(editing ? canUpdateAppointments : canCreateAppointments) ? (
+              <Button onClick={() => void submitAppointment()} disabled={saving}>
+                {saving ? "Guardando..." : editing ? "Guardar Cambios" : "Crear Cita"}
+              </Button>
+            ) : null}
           </div>
         }
       >
         <form onSubmit={(event) => { event.preventDefault(); void submitAppointment(); }} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={() => handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
+            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
 
             <div className="space-y-2">
               <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Propietario</label>
@@ -987,14 +1016,14 @@ export default function AppointmentsPage() {
               </div>
             </div>
 
-            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={() => handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
-            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={() => handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
-            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={() => handleChange} required />
-            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={() => handleChange} required />
-            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={() => handleChange} />
-            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={() => handleChange} options={vetOptions} />
-            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={() => handleChange} className="sm:col-span-2" />
-            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={() => handleChange} className="sm:col-span-2" />
+            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
+            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
+            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={handleChange} required />
+            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={handleChange} required />
+            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={handleChange} />
+            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={handleChange} options={vetOptions} />
+            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={handleChange} className="sm:col-span-2" />
+            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={handleChange} className="sm:col-span-2" />
           </div>
         </form>
       </Modal>

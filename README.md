@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KiskeyaVet
 
-## Getting Started
-
-First, run the development server:
+## Desarrollo
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+La app usa Next.js, Prisma y Better Auth.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Recordatorios automáticos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+La app programa recordatorios automáticos para:
 
-## Learn More
+- Citas programadas o confirmadas.
+- Facturas emitidas o parcialmente pagadas con fecha de vencimiento.
 
-To learn more about Next.js, take a look at the following resources:
+Los recordatorios se guardan en `Notification` y `NotificationRecipient` y se procesan desde:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+GET /api/notifications/process
+POST /api/notifications/process
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Seguridad del procesador
 
-## Deploy on Vercel
+- En Vercel, el `vercel.json` incluido lo ejecuta cada 15 minutos.
+- Fuera de Vercel, protégelo con `CRON_SECRET` y llama el endpoint con:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+Authorization: Bearer <CRON_SECRET>
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Variables de entorno
+
+Correo:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `MAIL_FROM`
+- `MAIL_FROM_NAME`
+
+WhatsApp por Twilio:
+
+- `WHATSAPP_PROVIDER=twilio`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_WHATSAPP_FROM`
+
+Cron:
+
+- `CRON_SECRET`
+
+## Confirmación de citas
+
+Los recordatorios al cliente incluyen un enlace público a:
+
+```bash
+/confirm-appointment?token=...
+```
+
+Cuando el cliente confirma desde correo o WhatsApp, la cita cambia a `CONFIRMED`.

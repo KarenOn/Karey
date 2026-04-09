@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { ProductCreateSchema } from "@/lib/validators/product";
 import { z } from "zod";
-import { getClinicIdOrFail } from "@/lib/auth"; // usa tu misma función
+import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
+import { ProductCreateSchema } from "@/lib/validators/product";
 
 function zodDetails(err: z.ZodError) {
   const flat = err.flatten();
@@ -10,16 +10,12 @@ function zodDetails(err: z.ZodError) {
 }
 
 export async function GET(req: Request) {
-  const clinicId = await getClinicIdOrFail();
-  if (!clinicId) {
-    return NextResponse.json({ error: "No existe clínica configurada" }, { status: 409 });
-  }
-
+  const { clinicId } = await requireClinicPermission("inventory.read");
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const category = (searchParams.get("category") ?? "").trim();
 
-  const where: any = { clinicId };
+  const where: Record<string, unknown> = { clinicId };
 
   if (category) where.category = category;
 
@@ -58,17 +54,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
-  if (!clinicId) {
-    return NextResponse.json({ error: "No existe clínica configurada" }, { status: 409 });
-  }
-
+  const { clinicId } = await requireClinicPermission("inventory.create");
   const body = await req.json().catch(() => null);
   const parsed = ProductCreateSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Datos inválidos", details: zodDetails(parsed.error) },
+      { error: "Datos invalidos", details: zodDetails(parsed.error) },
       { status: 422 }
     );
   }
@@ -83,7 +75,7 @@ export async function POST(req: Request) {
       category: input.category ?? null,
       unit: input.unit ?? "unidad",
       cost: input.cost ?? null,
-      price: input.price!, // ya validado
+      price: input.price!,
       trackStock: input.trackStock,
       stockOnHand: input.stockOnHand,
       minStock: input.minStock,

@@ -27,6 +27,7 @@ import ModalDelete from "@/components/shared/ModalDelete";
 import { AppAlert } from "@/components/shared/AppAlert";
 import { ServiceCategoryTabs } from "@/components/shared/ServiceCategoryTabs";
 import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 const categoryOptions = [
   { value: "Consulta", label: "🩺 Consulta" },
@@ -79,6 +80,7 @@ const emptyForm: FormState = {
 };
 
 export default function ServicesPage() {
+  const access = useCurrentUserAccess();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<ServiceRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -104,6 +106,9 @@ export default function ServicesPage() {
   }>({ variant: "info", title: "" });
 
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const canCreateServices = !!access?.actions.services.create;
+  const canUpdateServices = !!access?.actions.services.update;
+  const canDeleteServices = !!access?.actions.services.delete;
 
   const load = async () => {
     setErr(null);
@@ -198,12 +203,14 @@ export default function ServicesPage() {
   }, [rows]);
 
   const openCreate = () => {
+    if (!canCreateServices) return;
     setEditing(null);
     setForm(emptyForm);
     setOpen(true);
   };
 
   const openEdit = (s: ServiceRow) => {
+    if (!canUpdateServices) return;
     setEditing(s);
     setForm({
       name: s.name,
@@ -217,6 +224,10 @@ export default function ServicesPage() {
   };
 
   const submit = async () => {
+    if ((editing && !canUpdateServices) || (!editing && !canCreateServices)) {
+      setErr("No tienes permisos para realizar esta accion.");
+      return;
+    }
     setErr(null);
 
     if (!form.name.trim()) {
@@ -260,6 +271,7 @@ export default function ServicesPage() {
   };
 
   const toggleStatus = async (s: ServiceRow) => {
+    if (!canUpdateServices) return;
     setErr(null);
     try {
       await apiSetServiceStatus(s.id, !s.isActive);
@@ -270,12 +282,17 @@ export default function ServicesPage() {
   };
 
   const askDelete = (row: ServiceRow) => {
+    if (!canDeleteServices) return;
     setSelected({ id: row.id, name: row.name });
     setDeleteOpen(true);
   };
 
   const doDelete = async () => {
     if (!selected) return;
+    if (!canDeleteServices) {
+      setErr("No tienes permisos para eliminar servicios.");
+      return;
+    }
     setErr(null);
     try {
       await apiDeleteService(selected.id);
@@ -310,9 +327,11 @@ export default function ServicesPage() {
               {onlyActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
               {onlyActive ? "Mostrando activos" : "Mostrando todos"}
             </Button>
-            <Button onClick={openCreate} className="gap-2">
-              <Plus className="w-4 h-4" /> Nuevo servicio
-            </Button>
+            {canCreateServices ? (
+              <Button onClick={openCreate} className="gap-2">
+                <Plus className="w-4 h-4" /> Nuevo servicio
+              </Button>
+            ) : null}
           </>
         }
         stats={[
@@ -333,9 +352,11 @@ export default function ServicesPage() {
             {onlyActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
             {onlyActive ? "Mostrando activos" : "Mostrando todos"}
           </Button>
-          <Button onClick={openCreate} className="gap-2">
-            <Plus className="w-4 h-4" /> Nuevo servicio
-          </Button>
+          {canCreateServices ? (
+            <Button onClick={openCreate} className="gap-2">
+              <Plus className="w-4 h-4" /> Nuevo servicio
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -380,9 +401,11 @@ export default function ServicesPage() {
           <Stethoscope className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
           <h3 className="text-lg font-semibold text-foreground">No hay servicios</h3>
           <p className="text-muted-foreground mt-1">Crea tu catálogo para facturación y agenda.</p>
-          <Button className="mt-6 gap-2" onClick={openCreate}>
-            <Plus className="w-4 h-4" /> Agregar servicio
-          </Button>
+          {canCreateServices ? (
+            <Button className="mt-6 gap-2" onClick={openCreate}>
+              <Plus className="w-4 h-4" /> Agregar servicio
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-8">
@@ -415,20 +438,26 @@ export default function ServicesPage() {
                       </div>
 
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleStatus(s)} title="Activar/Desactivar">
-                          {s.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => askDelete(s)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canUpdateServices ? (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleStatus(s)} title="Activar/Desactivar">
+                              {s.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </>
+                        ) : null}
+                        {canDeleteServices ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            onClick={() => askDelete(s)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
 
@@ -550,7 +579,9 @@ export default function ServicesPage() {
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={submit}>{editing ? "Guardar cambios" : "Crear servicio"}</Button>
+            {(editing ? canUpdateServices : canCreateServices) ? (
+              <Button onClick={submit}>{editing ? "Guardar cambios" : "Crear servicio"}</Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

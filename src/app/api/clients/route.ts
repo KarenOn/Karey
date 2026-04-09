@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
 
 export async function GET() {
-  const clinic = await prisma.clinic.findFirst({ select: { id: true } });
-
-  if (!clinic) return NextResponse.json([]);
+  const { clinicId } = await requireClinicPermission("clients.read");
 
   const clients = await prisma.client.findMany({
-    where: { clinicId: clinic.id },
+    where: { clinicId },
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { pets: true } } },
   });
@@ -26,13 +25,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const clinic = await prisma.clinic.findFirst({ select: { id: true } });
-  if (!clinic) return NextResponse.json({ error: "No clinic found" }, { status: 400 });
+  const { clinicId } = await requireClinicPermission("clients.create");
 
   const body = await req.json();
   const client = await prisma.client.create({
     data: {
-      clinicId: clinic.id,
+      clinicId,
       fullName: String(body.fullName ?? "").trim(),
       phone: body.phone ? String(body.phone).trim() : null,
       email: body.email ? String(body.email).trim() : null,

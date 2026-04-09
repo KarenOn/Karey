@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import {
+  clearInvoicePaymentReminderNotifications,
+  syncInvoicePaymentReminderNotifications,
+} from "@/lib/reminders";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { InvoiceStatus } from "@/generated/prisma/client";
 import { z } from "zod";
 
@@ -9,7 +13,7 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("invoices.update");
   const id = Number((await params).id);
 
   const body = await req.json().catch(() => null);
@@ -28,6 +32,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     },
     select: { id: true, status: true },
   });
+
+  if (
+    updated.status === InvoiceStatus.PAID ||
+    updated.status === InvoiceStatus.VOID ||
+    updated.status === InvoiceStatus.DRAFT
+  ) {
+    await clearInvoicePaymentReminderNotifications(updated.id);
+  } else {
+    await syncInvoicePaymentReminderNotifications(updated.id);
+  }
 
   return NextResponse.json(updated);
 }

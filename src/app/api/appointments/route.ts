@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AppointmentStatus, AppointmentType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { syncAppointmentReminderNotifications } from "@/lib/reminders";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentCreateSchema } from "@/lib/validators/appointments";
 
 function zodDetails(err: unknown) {
@@ -205,7 +206,7 @@ async function validateAppointmentRelations(params: {
 }
 
 export async function GET(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.read");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -249,7 +250,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.create");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -322,6 +323,8 @@ export async function POST(req: Request) {
     },
     include: appointmentInclude,
   });
+
+  await syncAppointmentReminderNotifications(created.id);
 
   return NextResponse.json(created, { status: 201 });
 }

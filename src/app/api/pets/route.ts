@@ -1,19 +1,19 @@
-import { prisma } from "@/lib/prisma";
-import { PetCreateSchema } from "@/lib/validators/pet";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
+import { PetCreateSchema } from "@/lib/validators/pet";
 
-function zodDetails(err: any) {
-  return err.issues?.map((i: any) => ({ path: i.path?.join("."), message: i.message })) ?? [];
-}
-
-async function getClinicIdOrFail() {
-  const clinic = await prisma.clinic.findFirst({ select: { id: true } });
-  return clinic?.id ?? null;
+function zodDetails(err: { issues?: Array<{ path?: PropertyKey[]; message: string }> }) {
+  return (
+    err.issues?.map((issue) => ({
+      path: issue.path?.map((part) => String(part)).join("."),
+      message: issue.message,
+    })) ?? []
+  );
 }
 
 export async function GET() {
-  const clinicId = await getClinicIdOrFail();
-  if (!clinicId) return NextResponse.json([], { status: 200 });
+  const { clinicId } = await requireClinicPermission("pets.read");
 
   const pets = await prisma.pet.findMany({
     where: { clinicId },
@@ -39,21 +39,27 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
-  console.log("Creating pet for clinic ID:", clinicId);
-  if (!clinicId) return NextResponse.json({ error: "No existe clínica configurada" }, { status: 409 });
-
+  const { clinicId } = await requireClinicPermission("pets.create");
   const body = await req.json().catch(() => null);
   const parsed = PetCreateSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Datos inválidos", details: zodDetails(parsed.error) },
+      { error: "Datos invalidos", details: zodDetails(parsed.error) },
       { status: 422 }
     );
   }
 
   const input = parsed.data;
+
+  const client = await prisma.client.findFirst({
+    where: { id: input.clientId, clinicId },
+    select: { id: true },
+  });
+
+  if (!client) {
+    return NextResponse.json({ error: "Cliente invalido" }, { status: 404 });
+  }
 
   const created = await prisma.pet.create({
     data: {

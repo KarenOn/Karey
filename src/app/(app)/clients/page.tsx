@@ -13,6 +13,7 @@ import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormFi
 import ModalDelete from "@/components/shared/ModalDelete";
 import { AppAlert } from "@/components/shared/AppAlert";
 import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 import { ClientFormSchema, zodFieldErrors } from "@/lib/validators/client";
 import z from "zod";
@@ -79,9 +80,13 @@ async function apiDeleteClient(id: number): Promise<void> {
 }
 
 function ClientsPageContent() {
+  const access = useCurrentUserAccess();
   const router = useRouter();
   const searchParams = useSearchParams();
   const action = searchParams.get("action");
+  const canCreateClients = !!access?.actions.clients.create;
+  const canUpdateClients = !!access?.actions.clients.update;
+  const canDeleteClients = !!access?.actions.clients.delete;
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,14 +133,15 @@ function ClientsPageContent() {
   }, []);
 
   useEffect(() => {
-    if (action === "new") {
+    if (action === "new" && canCreateClients) {
       setEditingClient(null);
       setFormData(emptyForm);
       setModalOpen(true);
     }
-  }, [action]);
+  }, [action, canCreateClients]);
 
   const handleEdit = (client: ClientRow) => {
+    if (!canUpdateClients) return;
     setEditingClient(client);
     setFormData({
       fullName: client.fullName ?? "",
@@ -162,6 +168,11 @@ function ClientsPageContent() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
+
+    if ((editingClient && !canUpdateClients) || (!editingClient && !canCreateClients)) {
+      setError("No tienes permisos para realizar esta accion.");
+      return;
+    }
 
     // const payload: ClientForm = {
     //   fullName: formData.fullName.trim(),
@@ -230,6 +241,10 @@ function ClientsPageContent() {
 
   const confirmDelete = async () => {
     if (!selected) return;
+    if (!canDeleteClients) {
+      setError("No tienes permisos para eliminar clientes.");
+      return;
+    }
     try {
       setLoadingDelete(true);
       await apiDeleteClient(selected.id);
@@ -313,36 +328,40 @@ function ClientsPageContent() {
               </Button>
             </Link>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEdit(row);
-              }}
-              disabled={saving}
-            >
-              <Edit className="w-4 h-4" />
-            </Button>
+            {canUpdateClients ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEdit(row);
+                }}
+                disabled={saving}
+              >
+                <Edit className="w-4 h-4" />
+              </Button>
+            ) : null}
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                askDelete(row);
-              }}
-              disabled={saving}
-            >
-              <Trash2 className="w-4 h-4 text-red-500" />
-            </Button>
+            {canDeleteClients ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  askDelete(row);
+                }}
+                disabled={saving}
+              >
+                <Trash2 className="w-4 h-4 text-red-500" />
+              </Button>
+            ) : null}
           </div>
         ),
       },
     ],
-    [saving]
+    [canDeleteClients, canUpdateClients, saving]
   );
 
   const clientsWithEmail = clients.filter((client) => Boolean(client.email)).length;
@@ -357,17 +376,19 @@ function ClientsPageContent() {
         title="Clientes"
         description="Gestiona tus clientes y sus mascotas de manera eficiente"
         actions={
-          <Button
-            className="gap-2"
-            onClick={() => {
-              setEditingClient(null);
-              setFormData(emptyForm);
-              setModalOpen(true);
-            }}
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo cliente
-          </Button>
+          canCreateClients ? (
+            <Button
+              className="gap-2"
+              onClick={() => {
+                setEditingClient(null);
+                setFormData(emptyForm);
+                setModalOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo cliente
+            </Button>
+          ) : null
         }
         stats={[
           { label: "Clientes", value: clients.length, hint: "Total de clientes" },
@@ -400,9 +421,11 @@ function ClientsPageContent() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => handleSubmit()} disabled={saving}>
-              {editingClient ? "Guardar Cambios" : "Crear Cliente"}
-            </Button>
+            {(editingClient ? canUpdateClients : canCreateClients) ? (
+              <Button onClick={() => handleSubmit()} disabled={saving}>
+                {editingClient ? "Guardar Cambios" : "Crear Cliente"}
+              </Button>
+            ) : null}
           </div>
         }
       >
