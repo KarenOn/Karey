@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -21,25 +22,59 @@ export default function LoginPage() {
     setErr(null);
     setIsLoading(true);
 
-    const { error } = await authClient.signIn.email(
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const { data, error } = await authClient.signIn.email(
       {
-        email,
+        email: normalizedEmail,
         password,
-        callbackURL: "/dashboard",
         rememberMe: true,
       },
       {
-        onSuccess: () => router.push("/dashboard"),
         onError: (ctx) => setErr(ctx.error.message),
       }
     );
 
-    if (!error) {
+    if (error) {
       setIsLoading(false);
       return;
     }
 
+    if (!data?.user.emailVerified) {
+      try {
+        const response = await fetch("/api/auth/send-verification-email", {
+          body: JSON.stringify({
+            callbackURL: "/dashboard",
+            email: normalizedEmail,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string; message?: string }
+            | null;
+
+          throw new Error(
+            payload?.message ??
+              payload?.error ??
+              "No se pudo enviar el correo de verificacion."
+          );
+        }
+
+        toast.success("Te enviamos un correo para verificar tu cuenta.");
+      } catch (verificationError) {
+        const message =
+          verificationError instanceof Error
+            ? verificationError.message
+            : "No se pudo enviar el correo de verificacion.";
+        toast.error(message);
+      }
+    }
+
     setIsLoading(false);
+    router.push("/dashboard");
   };
 
   const onGoogle = async () => {

@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AppointmentStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import {
+  clearAppointmentReminderNotifications,
+  syncAppointmentReminderNotifications,
+} from "@/lib/reminders";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentUpdateSchema } from "@/lib/validators/appointments";
 
 function zodDetails(err: unknown) {
@@ -127,7 +131,7 @@ async function validateAppointmentSchedule(params: {
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.read");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -147,7 +151,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.update");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -287,11 +291,13 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     include: appointmentInclude,
   });
 
+  await syncAppointmentReminderNotifications(updated.id);
+
   return NextResponse.json(updated);
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.delete");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -308,5 +314,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   }
 
   await prisma.appointment.delete({ where: { id } });
+  await clearAppointmentReminderNotifications(id);
   return NextResponse.json({ ok: true });
 }

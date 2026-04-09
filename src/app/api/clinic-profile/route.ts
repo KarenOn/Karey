@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getClinicIdOrFail } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { resolveStoredFileUrl } from "@/lib/storage";
 import { ClinicProfileSchema } from "@/lib/validators/clinic-profile";
 
@@ -92,8 +92,8 @@ async function readProfile(clinicId: number) {
 }
 
 export async function GET() {
-  const clinicId = await getClinicIdOrFail();
   try {
+    const { clinicId } = await requireClinicPermission("clinic.read");
     const profile = await readProfile(clinicId);
     return NextResponse.json(profile);
   } catch (e: any) {
@@ -102,7 +102,6 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const clinicId = await getClinicIdOrFail();
   const body = await req.json().catch(() => null);
 
   const parsed = ClinicProfileSchema.safeParse(body);
@@ -117,6 +116,7 @@ export async function PUT(req: Request) {
   const { schedule, socialMedia, logoStorageRef, ...clinicData } = data as any;
 
   try {
+    const { clinicId } = await requireClinicPermission("clinic.update");
     await prisma.$transaction(async (tx) => {
       await tx.clinic.update({
         where: { id: clinicId },

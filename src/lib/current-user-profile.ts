@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
-import { auth, getClinicIdOrFail } from "@/lib/auth";
+import { auth, getActiveClinicMembershipForUser } from "@/lib/auth";
+import { activatePendingEmployeeInviteForUser } from "@/lib/employee-invites";
 import { prisma } from "@/lib/prisma";
+import { buildClinicAccess, type ClinicAccess } from "@/lib/permissions";
 import {
   deleteStoredFile,
   isS3StorageRef,
@@ -22,6 +24,7 @@ export type CurrentUserProfile = {
   bio: string | null;
   roleKey: string | null;
   roleLabel: string | null;
+  access: ClinicAccess;
 };
 
 function toNullishString(value?: string | null) {
@@ -43,29 +46,19 @@ async function getSessionUserOrThrow() {
 
 async function loadCurrentUserProfileRow() {
   const sessionUser = await getSessionUserOrThrow();
+  let membership = await getActiveClinicMembershipForUser(sessionUser.id);
 
-  let clinicId: number | null = null;
-  try {
-    clinicId = await getClinicIdOrFail();
-  } catch {
-    clinicId = null;
+  if (!membership) {
+    await activatePendingEmployeeInviteForUser(sessionUser.id, sessionUser.email);
+    membership = await getActiveClinicMembershipForUser(sessionUser.id);
   }
+
+  const clinicId = membership?.clinicId ?? null;
 
   const user = await prisma.user.findUnique({
     where: { id: sessionUser.id },
     include: {
       profile: true,
-      memberships: clinicId
-        ? {
-            where: { clinicId, isActive: true },
-            take: 1,
-            include: { role: { select: { key: true, name: true } } },
-          }
-        : {
-            where: { isActive: true },
-            take: 1,
-            include: { role: { select: { key: true, name: true } } },
-          },
     },
   });
 
@@ -75,7 +68,7 @@ async function loadCurrentUserProfileRow() {
 
   return {
     clinicId,
-    membership: user.memberships[0] ?? null,
+    membership,
     user,
   };
 }
@@ -99,6 +92,7 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
   const row = await loadCurrentUserProfileRow();
   const roleKey = await syncStoredUserRole(row);
   const roleLabel = row.membership?.role.name ?? row.user.role ?? "Usuario";
+  const access = buildClinicAccess(roleKey, row.membership?.role.permissions);
 
   return {
     userId: row.user.id,
@@ -114,6 +108,7 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
     bio: row.user.profile?.bio ?? null,
     roleKey,
     roleLabel,
+    access,
   };
 }
 

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { InvoiceCreateSchema } from "@/lib/validators/invoice";
 import { calcInvoiceTotals } from "@/lib/invoices/calc";
-import { getClinicIdOrFail } from "@/lib/auth"; // usa tu helper real
+import { requireClinicPermission } from "@/lib/server-auth";
+import { syncInvoicePaymentReminderNotifications } from "@/lib/reminders";
 import { zodDetails } from "@/lib/zodDetails"; // usa tu helper real
 import { InvoiceItemType, PaymentMethod, InvoiceStatus, Prisma } from "@/generated/prisma/client";
 import { z } from "zod";
@@ -72,7 +73,7 @@ const CreateInvoiceSchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("invoices.read");
   const { searchParams } = new URL(req.url);
 
   const q = searchParams.get("q")?.trim() || "";
@@ -132,7 +133,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("invoices.create");
 
   const body = await req.json().catch(() => null);
   const parsed = CreateInvoiceSchema.safeParse(body);
@@ -261,6 +262,8 @@ export async function POST(req: Request) {
 
     return invoice;
   });
+
+  await syncInvoicePaymentReminderNotifications(result.id);
 
   return NextResponse.json(result, { status: 201 });
 }

@@ -5,17 +5,9 @@ import { hasPermission, isElevatedClinicRole } from "@/lib/permissions";
 
 export async function GET() {
   try {
-    const { clinicId, session, member } = await requireClinicPermission("employees.read");
-    console.log("clinicId", clinicId);
-    console.log("session", session);
-    console.log("member", member?.role.permissions);
-    
-    console.log("employees.invite", hasPermission(member?.role.permissions, "employees.invite"),);
-    console.log("employees.update", hasPermission(member?.role.permissions, "employees.update"),);
-    console.log("roles.manage", hasPermission(member?.role.permissions, "roles.manage"),);
-
+    const { clinicId, member } = await requireClinicPermission("employees.read");
     const members = await prisma.clinicMember.findMany({
-      where: { clinicId },
+      where: { clinicId, isActive: true },
       include: {
         user: { select: { id: true, name: true, email: true } },
         role: { select: { id: true, key: true, name: true } },
@@ -29,7 +21,7 @@ export async function GET() {
       orderBy: [{ createdAt: "desc" }],
     });
 
-    const elevated = session.user.role === "admin" || session.user.role === "owner" || isElevatedClinicRole(member?.role.key);
+    const elevated = isElevatedClinicRole(member?.role.key);
 
     return NextResponse.json({
       members,
@@ -41,7 +33,6 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.log("Error en GET /api/employees", error);
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 }

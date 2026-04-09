@@ -13,7 +13,7 @@ const RoleCreateSchema = z.object({
 
 export async function GET() {
   try {
-    const { clinicId, session, member } = await requireClinicPermission("employees.read");
+    const { clinicId, member } = await requireClinicPermission("employees.read");
 
     const roles = await prisma.role.findMany({
       where: { clinicId },
@@ -30,7 +30,7 @@ export async function GET() {
       },
     });
 
-    const elevated = session.user.role === "admin" || isElevatedClinicRole(member?.role.key);
+    const elevated = isElevatedClinicRole(member?.role.key);
 
     return NextResponse.json({
       roles: roles.map((role) => ({

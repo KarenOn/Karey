@@ -1,13 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { clinicId } = await requireClinicPermission("clients.update");
   const paramsExtracted = await params;
   const id = Number(paramsExtracted.id);
   const body = await req.json();
 
+  const existing = await prisma.client.findFirst({
+    where: { id, clinicId },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
   const updated = await prisma.client.update({
-    where: { id },
+    where: { id: existing.id },
     data: {
       fullName: String(body.fullName ?? "").trim(),
       phone: body.phone ? String(body.phone).trim() : null,
@@ -31,8 +42,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { clinicId } = await requireClinicPermission("clients.delete");
   const paramsExtracted = await params;
   const id = Number(paramsExtracted.id);
-  await prisma.client.delete({ where: { id } });
+
+  const existing = await prisma.client.findFirst({
+    where: { id, clinicId },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
+  await prisma.client.delete({ where: { id: existing.id } });
   return NextResponse.json({ ok: true });
 }

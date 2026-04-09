@@ -39,7 +39,7 @@ export default function VaccineReminders({ vaccinations, patients }: Props) {
       <div className="flex items-center justify-between border-b border-border/70 p-6">
         <div className="flex items-center gap-2">
           <Syringe className="w-5 h-5 text-(--brand-gold)" />
-          <h3 className="font-display text-2xl font-semibold text-foreground">Vacunas Proximas</h3>
+          <h3 className="font-display text-2xl font-semibold text-foreground">Próximas Vacunas</h3>
         </div>
 
         <Link href="/pets?tab=vaccinations" className="text-sm text-primary hover:text-primary/80 font-semibold flex items-center gap-1">
@@ -51,7 +51,7 @@ export default function VaccineReminders({ vaccinations, patients }: Props) {
         {upcomingVaccinations.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <Syringe className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
-            <p>No hay vacunas proximas</p>
+            <p>No hay próximas vacunas</p>
           </div>
         ) : (
           upcomingVaccinations.slice(0, 4).map((vac, index) => {
@@ -73,7 +73,7 @@ export default function VaccineReminders({ vaccinations, patients }: Props) {
                   <div className="text-right">
                     <div className={`flex items-center gap-1 ${isUrgent ? "text-(--brand-gold)" : "text-muted-foreground"}`}>
                       {isUrgent && <AlertTriangle className="w-4 h-4" />}
-                      <span className="text-sm font-semibold">{vac.daysUntil === 0 ? "Hoy" : `${vac.daysUntil} dias`}</span>
+                      <span className="text-sm font-semibold">{vac.daysUntil === 0 ? "Hoy" : `${vac.daysUntil} días`}</span>
                     </div>
 
                     <p className="text-xs text-muted-foreground">

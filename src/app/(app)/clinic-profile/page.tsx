@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {useMaskito} from '@maskito/react';
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
   
 import options from '@/components/shared/PhoneMask';
 
@@ -76,6 +77,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export default function ProfilePage() {
+  const access = useCurrentUserAccess();
   const [profile, setProfile] = useState<ClinicProfile | null>(null);
   const [snapshot, setSnapshot] = useState<ClinicProfile | null>(null);
 
@@ -86,6 +88,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<"general" | "fiscal" | "schedule" | "invoice">("general");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const canUpdateClinic = !!access?.actions.clinic.update;
 
   const maskedInputRef = useMaskito({options});
 
@@ -117,6 +120,7 @@ export default function ProfilePage() {
   }, []);
 
   const startEdit = () => {
+    if (!canUpdateClinic) return;
     if (!profile) return;
     setSnapshot(profile);
     setIsEditing(true);
@@ -129,6 +133,10 @@ export default function ProfilePage() {
   };
 
   const handleSave = async () => {
+    if (!canUpdateClinic) {
+      setErr("No tienes permisos para actualizar la clinica.");
+      return;
+    }
     if (!profile) return;
     try {
       setSaving(true);
@@ -298,10 +306,12 @@ export default function ProfilePage() {
                 </Button>
               </>
             ) : (
-              <Button onClick={startEdit} className="gap-2">
-                <Pencil className="w-4 h-4" />
-                Editar Perfil
-              </Button>
+              canUpdateClinic ? (
+                <Button onClick={startEdit} className="gap-2">
+                  <Pencil className="w-4 h-4" />
+                  Editar Perfil
+                </Button>
+              ) : null
             )}
           </div>
         </div>

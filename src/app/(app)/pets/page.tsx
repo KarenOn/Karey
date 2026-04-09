@@ -21,6 +21,7 @@ import { apiListClients, type ClientRow } from "@/lib/api/clients";
 import { apiListVaccinations, type VaccinationRow } from "@/lib/api/vaccinations";
 import Link from "next/link";
 import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -84,6 +85,7 @@ type PetFormState = {
 };
 
 export default function PatientsPage() {
+  const access = useCurrentUserAccess();
   const [activeTab, setActiveTab] = useState<"patients" | "vaccinations">("patients");
 
   const [pets, setPets] = useState<PetRow[]>([]);
@@ -95,6 +97,9 @@ export default function PatientsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPet, setEditingPet] = useState<PetRow | null>(null);
   const [formData, setFormData] = useState<PetFormState>({ sex: "UNKNOWN" });
+  const canCreatePets = !!access?.actions.pets.create;
+  const canUpdatePets = !!access?.actions.pets.update;
+  const canDeletePets = !!access?.actions.pets.delete;
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PetRow | null>(null);
@@ -143,12 +148,14 @@ export default function PatientsPage() {
   };
 
   const openCreate = () => {
+    if (!canCreatePets) return;
     setEditingPet(null);
     setFormData({ sex: "UNKNOWN" });
     setModalOpen(true);
   };
 
   const openEdit = (pet: PetRow) => {
+    if (!canUpdatePets) return;
     setEditingPet(pet);
     setFormData({
       name: pet.name,
@@ -167,6 +174,9 @@ export default function PatientsPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if ((editingPet && !canUpdatePets) || (!editingPet && !canCreatePets)) {
+      return;
+    }
 
     if (editingPet) {
       console.log("Updating pet with data:", formData);
@@ -194,6 +204,7 @@ export default function PatientsPage() {
   };
 
   const confirmDelete = (pet: PetRow) => {
+    if (!canDeletePets) return;
     setDeleteTarget(pet);
     setDeleteOpen(true);
   };
@@ -255,12 +266,16 @@ export default function PatientsPage() {
             </Button>
           </Link>
           
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => openEdit(row)}>
-            <Edit className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDelete(row)}>
-            <Trash2 className="w-4 h-4 text-red-500" />
-          </Button>
+          {canUpdatePets ? (
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => openEdit(row)}>
+              <Edit className="w-4 h-4" />
+            </Button>
+          ) : null}
+          {canDeletePets ? (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDelete(row)}>
+              <Trash2 className="w-4 h-4 text-red-500" />
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -322,17 +337,19 @@ export default function PatientsPage() {
         title="Pacientes"
         description="Gestiona pacientes, propietarios y su historial"
         actions={
-          <Button
-            className="gap-2"
-            onClick={() => {
-              setEditingPet(null);
-              setFormData(emptyForm);
-              setModalOpen(true);
-            }}
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo paciente
-          </Button>
+          canCreatePets ? (
+            <Button
+              className="gap-2"
+              onClick={() => {
+                setEditingPet(null);
+                setFormData(emptyForm);
+                setModalOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo paciente
+            </Button>
+          ) : null
         }
         stats={[
           { label: "Pacientes", value: pets.length, hint: "Total de pacientes" },
@@ -379,9 +396,11 @@ export default function PatientsPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={submit} className="bg-gradient-to-r from-teal-500 to-teal-600">
-              {editingPet ? "Guardar Cambios" : "Crear Paciente"}
-            </Button>
+            {(editingPet ? canUpdatePets : canCreatePets) ? (
+              <Button onClick={submit} className="bg-gradient-to-r from-teal-500 to-teal-600">
+                {editingPet ? "Guardar Cambios" : "Crear Paciente"}
+              </Button>
+            ) : null}
           </div>
         }
       >

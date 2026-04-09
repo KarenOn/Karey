@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { syncAppointmentReminderNotifications } from "@/lib/reminders";
+import { requireClinicPermission } from "@/lib/server-auth";
 // import { zodDetails } from "@/lib/zodDetails";
 import { AppointmentStatusChangeSchema } from "@/lib/validators/appointments";
 
@@ -9,7 +10,7 @@ function zodDetails(err: any) {
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.update");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -30,6 +31,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     where: { id },
     data: { status: parsed.data.status },
   });
+
+  await syncAppointmentReminderNotifications(updated.id);
 
   return NextResponse.json(updated);
 }

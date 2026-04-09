@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { Weekday } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { APPOINTMENT_STATUSES, APPOINTMENT_TYPES } from "@/lib/validators/appointments";
 
 export async function GET() {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("appointments.read");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
