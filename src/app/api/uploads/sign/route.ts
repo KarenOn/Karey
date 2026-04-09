@@ -13,6 +13,11 @@ const UploadSignSchema = z.discriminatedUnion("scope", [
     fileType: z.string().trim().max(120).optional(),
   }),
   z.object({
+    scope: z.literal("user-avatar"),
+    fileName: z.string().trim().min(1).max(255),
+    fileType: z.string().trim().max(120).optional(),
+  }),
+  z.object({
     scope: z.literal("medical-attachment"),
     fileName: z.string().trim().min(1).max(255),
     fileType: z.string().trim().max(120).optional(),

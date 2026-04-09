@@ -15,6 +15,8 @@ const InviteSchema = z.object({
 export async function POST(req: Request) {
   try {
     const { session, clinicId } = await requireClinicPermission("employees.invite");
+    console.log("POST invite session", session);
+    console.log("POST invite clinicId", clinicId);
     const body = InviteSchema.parse(await req.json());
 
     const email = body.email.toLowerCase();

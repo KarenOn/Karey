@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { syncUserRoleFromMembership } from "@/lib/current-user-profile";
 
 const AcceptSchema = z.object({
   token: z.string().min(10),
@@ -43,6 +44,8 @@ export async function POST(req: Request) {
       where: { id: invite.id },
       data: { acceptedAt: new Date(), userId: session.user.id },
     });
+
+    await syncUserRoleFromMembership(session.user.id, invite.clinicId);
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

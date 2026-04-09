@@ -34,7 +34,6 @@ export default function AppPageHero({
   className,
   back = false
 }: AppPageHeroProps) {
-  console.log(stats.length)
   return (
     <section className={cn("app-page-hero", className)}>
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">

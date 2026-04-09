@@ -12,7 +12,7 @@ const S3_REF_PREFIX = "s3://";
 const DEFAULT_UPLOAD_EXPIRES_IN = 60 * 5;
 const DEFAULT_READ_EXPIRES_IN = 60 * 15;
 
-type StorageScope = "clinic-logo" | "medical-attachment";
+type StorageScope = "clinic-logo" | "medical-attachment" | "user-avatar";
 
 type StorageConfig = {
   bucket: string;
@@ -127,6 +127,8 @@ function buildStorageKey(params: CreateUploadUrlParams) {
   const prefix =
     params.scope === "clinic-logo"
       ? `clinic/${params.clinicId}/branding`
+      : params.scope === "user-avatar"
+        ? `clinic/${params.clinicId}/users/avatars`
       : `clinic/${params.clinicId}/visits/${params.visitId}/attachments`;
 
   return `${prefix}/${randomUUID()}-${safeFileName}`;

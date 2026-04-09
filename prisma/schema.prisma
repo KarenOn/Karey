@@ -148,6 +148,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  profile       UserProfile?
 
   // relaciones del dominio (no agregan columnas nuevas aquí)
   puchSubscription   PushSubscription[]
@@ -164,6 +165,21 @@ model User {
   employeeInvitesReceived EmployeeInvite[] @relation("EmployeeInviteInvitedUser")
 
   @@map("user")
+}
+
+model UserProfile {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  phone     String?
+  jobTitle  String?
+  bio       String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("userprofile")
 }
 
 model Session {

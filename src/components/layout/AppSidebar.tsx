@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -38,6 +38,7 @@ import { useTheme } from "next-themes";
 import { Button } from "../ui/button";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import type { CurrentUserProfile } from "@/lib/current-user-profile";
 
 type NavItem = {
   name: string;
@@ -60,11 +61,17 @@ const pageDescriptions: Record<string, string> = {
   "/clinic-profile": "Configuracion general, identidad y operacion de la clinica.",
 };
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+type AppSidebarProps = {
+  children: React.ReactNode;
+  initialUser?: CurrentUserProfile | null;
+};
+
+export default function AppShell({ children, initialUser = null }: AppSidebarProps) {
   const { setTheme, resolvedTheme } = useTheme();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUserProfile | null>(initialUser);
   const router = useRouter();
 
   const navigation: NavItem[] = useMemo(
@@ -87,6 +94,40 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     []
   );
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as CurrentUserProfile | null;
+
+        if (!mounted || !res.ok || !data) {
+          return;
+        }
+
+        setCurrentUser(data);
+      } catch {
+        // noop
+      }
+    }
+
+    if (!initialUser) {
+      void loadCurrentUser();
+    }
+
+    const handleProfileUpdated = () => {
+      void loadCurrentUser();
+    };
+
+    window.addEventListener("user-profile-updated", handleProfileUpdated);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("user-profile-updated", handleProfileUpdated);
+    };
+  }, [initialUser]);
+
   const handleSignOut = async () => {
     await authClient.signOut({
       fetchOptions: {
@@ -106,12 +147,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const currentDescription = useMemo(() => {
     const current = [...navigation, clinicCta].find((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
+    if (pathname === "/profile") {
+      return "Gestiona tu identidad, tus datos de contacto y la seguridad de tu cuenta.";
+    }
     return current ? pageDescriptions[current.href] : "Sistema de gestion veterinaria con una vista clara y accionable.";
   }, [clinicCta, navigation, pathname]);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const activeClinic = isActive(clinicCta.href);
   const isDark = resolvedTheme === "dark";
+  const userInitials =
+    currentUser?.name
+      ?.split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "U";
 
   return (
     <div className="app-shell-bg min-h-screen">
@@ -249,20 +300,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </Link>
-
-            {!collapsed && (
-              <div className="rounded-[1.5rem] border border-white/20 bg-background/72 p-3 dark:bg-white/4">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                    <ShieldCheck className="size-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-foreground">Operacion estable</p>
-                    <p className="text-xs text-muted-foreground">Tema {isDark ? "oscuro" : "claro"} activo</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </aside>
@@ -303,21 +340,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-3 rounded-[1.2rem] border border-border/70 bg-background/75 px-2.5 py-2 text-left transition hover:bg-background">
-                    <span className="flex size-10 items-center justify-center rounded-3xl bg-[linear-gradient(135deg,rgba(13,148,136,0.18),rgba(45,58,102,0.18))] text-primary">
-                      <User className="h-4 w-4"/>
+                    <span className="flex size-10 items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,rgba(13,148,136,0.18),rgba(45,58,102,0.18))] text-primary">
+                      {currentUser?.avatarUrl ? (
+                        <img alt={currentUser.name} className="h-full w-full object-cover" src={currentUser.avatarUrl} />
+                      ) : (
+                        <span className="text-xs font-black uppercase">{userInitials}</span>
+                      )}
                     </span>
 
                     <div className="hidden leading-4 md:block">
-                      <p className="font-semibold text-foreground">Karen Bautista</p>
-                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Veterinaria</span>
+                      <p className="font-semibold text-foreground">{currentUser?.name ?? "Mi cuenta"}</p>
+                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {currentUser?.roleLabel ?? "Usuario"}
+                      </span>
                     </div>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="start">
                   <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="font-semibold">
-                    Perfil
+                  <DropdownMenuItem asChild className="font-semibold">
+                    <Link href="/profile">Perfil</Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="font-semibold" onClick={() => handleSignOut()} variant="destructive">
