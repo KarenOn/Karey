@@ -12,7 +12,7 @@ import {
   sendPaymentReminderEmail,
 } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { isValidWhatsAppPhone, sendWhatsAppMessage } from "@/lib/whatsapp";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const APPOINTMENT_CONFIRM_IDENTIFIER_PREFIX = "appointment-confirmation:";
@@ -280,20 +280,37 @@ function isPaymentReminderMeta(meta: unknown): meta is PaymentReminderMeta {
 }
 
 function buildAppointmentWhatsAppText(meta: AppointmentReminderMeta) {
-  const dateLabel = new Intl.DateTimeFormat("es-BO", {
+  const appointmentDate = new Date(meta.startAtIso);
+
+  if (meta.audience === "client") {
+    const now = new Date();
+    const timeLabel = new Intl.DateTimeFormat("es-DO", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(appointmentDate);
+    const todayKey = now.toDateString();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = tomorrow.toDateString();
+    const appointmentDayKey = appointmentDate.toDateString();
+
+    const whenLabel =
+      appointmentDayKey === tomorrowKey
+        ? `manana a las ${timeLabel}`
+        : appointmentDayKey === todayKey
+          ? `hoy a las ${timeLabel}`
+          : `el ${new Intl.DateTimeFormat("es-DO", {
+              day: "numeric",
+              month: "long",
+            }).format(appointmentDate)} a las ${timeLabel}`;
+
+    return `Hola ${meta.recipientName?.trim() || meta.clientName}, te recordamos que ${meta.petName} tiene una cita ${whenLabel} para ${meta.appointmentTypeLabel} en ${meta.clinicName}. Te esperamos.`;
+  }
+
+  const dateLabel = new Intl.DateTimeFormat("es-DO", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(meta.startAtIso));
-
-  if (meta.audience === "client" && meta.confirmUrl) {
-    return [
-      `Hola ${meta.recipientName?.trim() || meta.clientName}, te recordamos tu cita en ${meta.clinicName}.`,
-      `Paciente: ${meta.petName}`,
-      `Tipo: ${meta.appointmentTypeLabel}`,
-      `Fecha: ${dateLabel}`,
-      `Confirma aqui: ${meta.confirmUrl}`,
-    ].join("\n");
-  }
+  }).format(appointmentDate);
 
   return [
     `Recordatorio de cita en ${meta.clinicName}.`,
@@ -392,6 +409,30 @@ async function deliverNotification(params: {
   throw new Error(`Canal o metadata no soportados: ${channel}.`);
 }
 
+async function markAppointmentReminderDelivered(params: {
+  channel: NotificationChannel;
+  meta: AppointmentReminderMeta | PaymentReminderMeta | null;
+}) {
+  const { channel, meta } = params;
+
+  if (
+    channel !== NotificationChannel.WHATSAPP ||
+    !meta ||
+    !isAppointmentReminderMeta(meta) ||
+    meta.audience !== "client"
+  ) {
+    return;
+  }
+
+  await prisma.appointment.updateMany({
+    where: { id: meta.appointmentId },
+    data: {
+      reminderSent: true,
+      reminderSentAt: new Date(),
+    },
+  });
+}
+
 export async function syncAppointmentReminderNotifications(appointmentId: number) {
   await cancelQueuedNotificationsByTitles(
     appointmentNotificationTitles(appointmentId)
@@ -484,7 +525,7 @@ export async function syncAppointmentReminderNotifications(appointmentId: number
     );
   }
 
-  if (appointment.client.phone) {
+  if (isValidWhatsAppPhone(appointment.client.phone)) {
     notifications.push(
       createQueuedNotification({
         channel: NotificationChannel.WHATSAPP,
@@ -542,7 +583,7 @@ export async function syncAppointmentReminderNotifications(appointmentId: number
       );
     }
 
-    if (admin.phone) {
+    if (isValidWhatsAppPhone(admin.phone)) {
       notifications.push(
         createQueuedNotification({
           channel: NotificationChannel.WHATSAPP,
@@ -642,7 +683,7 @@ export async function syncInvoicePaymentReminderNotifications(invoiceId: number)
     );
   }
 
-  if (invoice.client.phone) {
+  if (isValidWhatsAppPhone(invoice.client.phone)) {
     notifications.push(
       createQueuedNotification({
         channel: NotificationChannel.WHATSAPP,
@@ -695,7 +736,7 @@ export async function syncInvoicePaymentReminderNotifications(invoiceId: number)
       );
     }
 
-    if (admin.phone) {
+    if (isValidWhatsAppPhone(admin.phone)) {
       notifications.push(
         createQueuedNotification({
           channel: NotificationChannel.WHATSAPP,
@@ -773,6 +814,15 @@ export async function processQueuedNotifications(limit = 50) {
             sentAt: new Date(),
             status: NotificationStatus.SENT,
           },
+        });
+
+        await markAppointmentReminderDelivered({
+          channel: notification.channel,
+          meta:
+            isAppointmentReminderMeta(notification.meta) ||
+            isPaymentReminderMeta(notification.meta)
+              ? notification.meta
+              : null,
         });
       } catch (error) {
         failed += 1;

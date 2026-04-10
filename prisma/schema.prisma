@@ -468,6 +468,9 @@ model Appointment {
   reason String?
   notes  String? @db.Text
 
+  reminderSent   Boolean   @default(false)
+  reminderSentAt DateTime?
+
   // veterinario asignado (User es String)
   vetId String?
   vet   User? @relation("AppointmentVet", fields: [vetId], references: [id], onDelete: SetNull)
@@ -484,6 +487,7 @@ model Appointment {
 
   @@index([clinicId, startAt])
   @@index([clinicId, status])
+  @@index([clinicId, reminderSent, startAt])
   @@index([clinicId, type])
   @@index([petId])
   @@index([clientId])

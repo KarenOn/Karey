@@ -65,17 +65,15 @@
 // }
 
 // src/app/page.tsx
-import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { PawPrint } from "lucide-react";
 import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export default async function Home() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (session?.user) redirect("/dashboard");
+  if (session?.user) redirect("/today");
   redirect("/login");
 
   // return (

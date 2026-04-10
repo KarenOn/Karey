@@ -14,6 +14,7 @@ export type ClinicAccess = {
     dashboard: boolean;
     clients: boolean;
     pets: boolean;
+    today: boolean;
     todayTurns: boolean;
     appointments: boolean;
     inventory: boolean;
@@ -35,6 +36,7 @@ export type ClinicAccess = {
     appointments: { read: boolean; create: boolean; update: boolean; delete: boolean };
     clients: { read: boolean; create: boolean; update: boolean; delete: boolean };
     pets: { read: boolean; create: boolean; update: boolean; delete: boolean };
+    today: { read: boolean; create: boolean; update: boolean; delete: boolean };
     todayTurns: { read: boolean; create: boolean; update: boolean; delete: boolean };
     services: { read: boolean; create: boolean; update: boolean; delete: boolean };
     inventory: { read: boolean; create: boolean; update: boolean; delete: boolean };
@@ -108,6 +110,11 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   const petsUpdate = allow("pets.update", ["clients.update"]);
   const petsDelete = allow("pets.delete", ["clients.delete"]);
 
+  const todayRead = allow("today.read", ["appointments.read"]);
+  const todayCreate = allow("today.create", ["appointments.create"]);
+  const todayUpdate = allow("today.update", ["appointments.update"]);
+  const todayDelete = allow("today.delete", ["appointments.delete"]);
+
   const todayTurnsRead = allow("todayTurn.read", ["appointments.read"]);
   const todayTurnsCreate = allow("todayTurn.create", ["appointments.create"]);
   const todayTurnsUpdate = allow("todayTurn.update", ["appointments.update"]);
@@ -137,6 +144,7 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
     dashboard: true,
     clients: clientsRead || clientsCreate || clientsUpdate || clientsDelete,
     pets: petsRead || petsCreate || petsUpdate || petsDelete,
+    today: todayRead || todayCreate || todayUpdate || todayDelete,
     todayTurns: todayTurnsRead || todayTurnsCreate || todayTurnsUpdate || todayTurnsDelete,
     appointments:
       appointmentsRead || appointmentsCreate || appointmentsUpdate || appointmentsDelete,
@@ -182,6 +190,12 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
         create: petsCreate,
         update: petsUpdate,
         delete: petsDelete,
+      },
+      today: {
+        read: todayRead,
+        create: todayCreate,
+        update: todayUpdate,
+        delete: todayDelete,
       },
       todayTurns: {
         read: todayTurnsRead,

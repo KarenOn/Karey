@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -44,6 +45,7 @@ type ModuleKey =
   | "dashboard"
   | "clients"
   | "pets"
+  | "today"
   | "todayTurns"
   | "appointments"
   | "inventory"
@@ -62,6 +64,7 @@ type NavItem = {
 };
 
 const pageDescriptions: Record<string, string> = {
+  "/today": "Centro operativo del día con citas, walk-ins y facturación rápida.",
   "/dashboard": "Resumen operativo con foco clinico, agenda y finanzas.",
   "/clients": "Propietarios, contacto y contexto util en un solo vistazo.",
   "/today-turns": "Controla el flujo del dia y el estado de cada atencion.",
@@ -80,6 +83,7 @@ type AppSidebarProps = {
 };
 
 const routeModuleMap: Array<{ prefix: string; moduleKey: ModuleKey }> = [
+  { prefix: "/today", moduleKey: "today" },
   { prefix: "/dashboard", moduleKey: "dashboard" },
   { prefix: "/clients", moduleKey: "clients" },
   { prefix: "/pets", moduleKey: "pets" },
@@ -103,6 +107,14 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   const navigation: NavItem[] = useMemo(
     () => [
       {
+        name: "Hoy",
+        icon: ClipboardList,
+        pageKey: "Today",
+        href: "/today",
+        hint: "Centro operativo",
+        moduleKey: "today",
+      },
+      {
         name: "Dashboard",
         icon: LayoutDashboard,
         pageKey: "Dashboard",
@@ -119,20 +131,20 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         moduleKey: "clients",
       },
       {
-        name: "Turno de Hoy",
-        icon: ClipboardList,
-        pageKey: "TodayTurns",
-        href: "/today-turns",
-        hint: "Fila clinica",
-        moduleKey: "todayTurns",
-      },
-      {
         name: "Pacientes",
         icon: PawPrint,
         pageKey: "Patients",
         href: "/pets",
         hint: "Mascotas",
         moduleKey: "pets",
+      },
+      {
+        name: "Walk-ins",
+        icon: Calendar,
+        pageKey: "Appointments",
+        href: "/today-turns",
+        hint: "Turnos sin cita",
+        moduleKey: "todayTurns",
       },
       {
         name: "Agenda",
@@ -464,9 +476,15 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-3 rounded-[1.2rem] border border-border/70 bg-background/75 px-2.5 py-2 text-left transition hover:bg-background">
-                      <span className="flex size-10 items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,rgba(13,148,136,0.18),rgba(45,58,102,0.18))] text-primary">
+                      <span className="relative flex size-10 items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,rgba(13,148,136,0.18),rgba(45,58,102,0.18))] text-primary">
                         {currentUser?.avatarUrl ? (
-                          <img alt={currentUser.name} className="h-full w-full object-cover" src={currentUser.avatarUrl} />
+                          <Image
+                            alt={currentUser.name}
+                            className="object-cover"
+                            fill
+                            sizes="40px"
+                            src={currentUser.avatarUrl}
+                          />
                         ) : (
                           <span className="text-xs font-black uppercase">{userInitials}</span>
                         )}
