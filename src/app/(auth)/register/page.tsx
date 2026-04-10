@@ -36,10 +36,10 @@ export default function RegisterPage() {
         name: fullName,
         email,
         password,
-        callbackURL: "/dashboard",
+        callbackURL: "/today",
       },
       {
-        onSuccess: () => router.push("/dashboard"),
+        onSuccess: () => router.push("/today"),
         onError: (ctx) => setError(ctx.error.message),
       }
     );

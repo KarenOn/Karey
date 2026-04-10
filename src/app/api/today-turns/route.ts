@@ -64,17 +64,26 @@
 // }
 
 import { NextResponse } from "next/server";
+import { endOfDay, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getClinicIdOrFail } from "@/lib/auth";
 import { TodayTurnCreateSchema } from "@/lib/validators/today-turns";
 import { zodDetails } from "@/lib/zodDetails"; // si no tienes, te la dejo abajo
 
-export async function GET() {
+export async function GET(req: Request) {
   const clinicId = await getClinicIdOrFail();
+  const { searchParams } = new URL(req.url);
+  const dateParam = searchParams.get("date");
+  const day = dateParam ? new Date(`${dateParam}T00:00:00`) : new Date();
+  const from = startOfDay(day);
+  const to = endOfDay(day);
 
   const turns = await prisma.todayTurn.findMany({
-    where: { clinicId },
-    orderBy: { arrivalAt: "desc" },
+    where: {
+      clinicId,
+      arrivalAt: { gte: from, lte: to },
+    },
+    orderBy: { arrivalAt: "asc" },
     include: {
       pet: { select: { id: true, name: true, species: true } },
       client: { select: { id: true, fullName: true, phone: true } },

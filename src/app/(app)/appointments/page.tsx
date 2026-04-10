@@ -43,6 +43,8 @@ type AppointmentDTO = {
   reason: string | null;
   notes: string | null;
   vetId: string | null;
+  reminderSent: boolean;
+  reminderSentAt: string | null;
   pet: PetDTO;
   client: ClientDTO;
   vet: VetDTO | null;
@@ -184,6 +186,35 @@ function diffMinutes(start: Date, end: Date) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Ocurrió un error inesperado";
+}
+
+function canStillSendReminder(status: string) {
+  return status === "SCHEDULED" || status === "CONFIRMED";
+}
+
+function getReminderBadge(appointment: Pick<AppointmentDTO, "client" | "reminderSent" | "status">) {
+  if (appointment.reminderSent) {
+    return {
+      className: "border-emerald-500/20 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+      label: "Recordatorio enviado",
+    };
+  }
+
+  if (!canStillSendReminder(appointment.status)) {
+    return null;
+  }
+
+  if (!appointment.client?.phone) {
+    return {
+      className: "border-border bg-muted/70 text-muted-foreground",
+      label: "Sin WhatsApp",
+    };
+  }
+
+  return {
+    className: "border-amber-500/20 bg-amber-500/12 text-amber-700 dark:text-amber-300",
+    label: "WhatsApp pendiente",
+  };
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -715,11 +746,22 @@ export default function AppointmentsPage() {
     { header: "Tipo", cell: (row: AppointmentTableRow) => formatAppointmentType(row.type) },
     {
       header: "Estado",
-      cell: (row: AppointmentTableRow) => (
-        <Badge className={`${STATUS_COLORS[row.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
-          {formatAppointmentStatus(row.status)}
-        </Badge>
-      ),
+      cell: (row: AppointmentTableRow) => {
+        const reminderBadge = getReminderBadge(row);
+
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={`${STATUS_COLORS[row.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
+              {formatAppointmentStatus(row.status)}
+            </Badge>
+            {reminderBadge ? (
+              <Badge className={`${reminderBadge.className} border`}>
+                {reminderBadge.label}
+              </Badge>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       header: "Acciones",
@@ -900,6 +942,7 @@ export default function AppointmentsPage() {
                       <div className="pointer-events-none absolute inset-0 px-3 py-3">
                         {appointmentLayouts.map(({ appointment, top }) => {
                           const styles = TYPE_STYLES[appointment.type] ?? TYPE_STYLES.OTHER;
+                          const reminderBadge = getReminderBadge(appointment);
 
                           return (
                             <div
@@ -923,6 +966,11 @@ export default function AppointmentsPage() {
                                     <Badge className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
                                       {formatAppointmentStatus(appointment.status)}
                                     </Badge>
+                                    {reminderBadge ? (
+                                      <Badge className={`${reminderBadge.className} border`}>
+                                        {reminderBadge.label}
+                                      </Badge>
+                                    ) : null}
                                   </div>
 
                                   <p className="mt-1 truncate text-sm text-muted-foreground">{appointment.client?.fullName ?? "Propietario"}</p>
@@ -1006,7 +1054,7 @@ export default function AppointmentsPage() {
       >
         <form onSubmit={(event) => { event.preventDefault(); void submitAppointment(); }} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
+            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={() => handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
 
             <div className="space-y-2">
               <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Propietario</label>
@@ -1016,14 +1064,14 @@ export default function AppointmentsPage() {
               </div>
             </div>
 
-            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
-            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
-            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={handleChange} required />
-            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={handleChange} required />
-            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={handleChange} />
-            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={handleChange} options={vetOptions} />
-            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={handleChange} className="sm:col-span-2" />
-            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={handleChange} className="sm:col-span-2" />
+            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={() => handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
+            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={() => handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
+            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={() => handleChange} required />
+            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={() => handleChange} required />
+            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={() => handleChange} />
+            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={() => handleChange} options={vetOptions} />
+            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={() => handleChange} className="sm:col-span-2" />
+            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={() => handleChange} className="sm:col-span-2" />
           </div>
         </form>
       </Modal>

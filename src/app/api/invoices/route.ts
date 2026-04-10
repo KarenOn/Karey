@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { InvoiceCreateSchema } from "@/lib/validators/invoice";
-import { calcInvoiceTotals } from "@/lib/invoices/calc";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { syncInvoicePaymentReminderNotifications } from "@/lib/reminders";
-import { zodDetails } from "@/lib/zodDetails"; // usa tu helper real
-import { InvoiceItemType, PaymentMethod, InvoiceStatus, Prisma } from "@/generated/prisma/client";
+import {
+  AppointmentStatus,
+  InvoiceItemType,
+  InvoiceStatus,
+  PaymentMethod,
+  Prisma,
+  TodayTurnStatus,
+} from "@/generated/prisma/client";
 import { z } from "zod";
 import { getWalkInClientId } from "@/lib/pos/getWalkInClient";
 
@@ -52,6 +56,7 @@ const CreateInvoiceSchema = z.object({
   clientId: z.number().int().positive().optional(),
   petId: z.number().int().positive().nullable().optional(),
   appointmentId: z.number().int().positive().nullable().optional(),
+  todayTurnId: z.number().int().positive().nullable().optional(),
 
   dueDate: z.string().datetime().nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
@@ -79,10 +84,11 @@ export async function GET(req: Request) {
   const q = searchParams.get("q")?.trim() || "";
   const status = searchParams.get("status")?.trim() || "";
   const take = Math.min(Number(searchParams.get("take") || 200), 500);
+  const statusFilter = Object.values(InvoiceStatus).find((value) => value === status);
 
   const where: Prisma.InvoiceWhereInput = {
     clinicId,
-    ...(status ? { status: status as any } : {}),
+    ...(statusFilter ? { status: statusFilter } : {}),
     ...(q
       ? {
           OR: [
@@ -167,6 +173,28 @@ export async function POST(req: Request) {
   const dueDate = data.dueDate ? new Date(data.dueDate) : null;
 
   const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
+
+  if (data.appointmentId) {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: data.appointmentId, clinicId },
+      select: { id: true },
+    });
+
+    if (!appointment) {
+      return NextResponse.json({ error: "La cita no existe en esta clínica." }, { status: 404 });
+    }
+  }
+
+  if (data.todayTurnId) {
+    const todayTurn = await prisma.todayTurn.findFirst({
+      where: { id: data.todayTurnId, clinicId },
+      select: { id: true },
+    });
+
+    if (!todayTurn) {
+      return NextResponse.json({ error: "El turno no existe en esta clínica." }, { status: 404 });
+    }
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     // Crea invoice + items
@@ -258,6 +286,20 @@ export async function POST(req: Request) {
           },
         });
       }
+    }
+
+    if (data.appointmentId) {
+      await tx.appointment.update({
+        where: { id: data.appointmentId },
+        data: { status: AppointmentStatus.COMPLETED },
+      });
+    }
+
+    if (data.todayTurnId) {
+      await tx.todayTurn.update({
+        where: { id: data.todayTurnId },
+        data: { status: TodayTurnStatus.DELIVERED },
+      });
     }
 
     return invoice;

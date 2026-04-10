@@ -283,6 +283,16 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.reason !== undefined ? { reason: input.reason } : {}),
       ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      ...(input.startAt !== undefined ||
+      input.endAt !== undefined ||
+      input.type !== undefined ||
+      input.petId !== undefined ||
+      input.clientId !== undefined
+        ? {
+            reminderSent: false,
+            reminderSentAt: null,
+          }
+        : {}),
       ...(input.vetId !== undefined ? { vetId: input.vetId } : {}),
       ...(input.petId !== undefined || input.clientId !== undefined
         ? { petId: pet.id, clientId: nextClientId }

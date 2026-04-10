@@ -24,6 +24,19 @@ function normalizePhone(value: string) {
   return digits.startsWith("+") ? digits : `+${digits}`;
 }
 
+export function isValidWhatsAppPhone(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    normalizePhone(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function toWhatsAppAddress(phone: string) {
   return phone.startsWith("whatsapp:") ? phone : `whatsapp:${phone}`;
 }

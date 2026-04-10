@@ -464,7 +464,7 @@ export async function sendPaymentReminderEmail({
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
       ${escapeHtml(introName)}, te recordamos que la factura ${escapeHtml(
     invoiceNumber
-  )} tiene vencimiento proximo en ${escapeHtml(clinicName)}.
+  )} tiene vencimiento próximo en ${escapeHtml(clinicName)}.
     </p>
     ${buildInfoList([
       { label: "Cliente", value: clientName },

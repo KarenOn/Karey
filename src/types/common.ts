@@ -181,6 +181,8 @@ export interface Appointment {
   status: AppointmentStatus;
   reason?: string | null;
   notes?: string | null;
+  reminderSent: boolean;
+  reminderSentAt?: DateTime | null;
 
   vetId?: ID | null;
 
