@@ -1,5 +1,6 @@
 // src/app/clients/[id]/page.tsx
 import { notFound } from "next/navigation";
+import { getClinicIdOrFail } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ClientDetailView from "./ClientDetailView";
 
@@ -19,7 +20,11 @@ export default async function ClientDetailPage({
   if (!clientId) notFound();
 
   // ✅ single clinic por ahora (si luego haces multi-clinic, lo sacas de la sesión)
-  const clinic = await prisma.clinic.findFirst({ select: { id: true, name: true } });
+  const clinicId = await getClinicIdOrFail();
+  const clinic = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: { id: true, name: true },
+  });
   if (!clinic) notFound();
 
   const client = await prisma.client.findFirst({

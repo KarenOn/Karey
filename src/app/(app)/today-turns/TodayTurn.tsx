@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useCurrentUserProfile } from "@/components/layout/current-user-context";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -241,6 +242,8 @@ export default function TodayTurnsClient({
   pets: PetOption[];
   date: string; // YYYY-MM-DD
 }) {
+  const currentUser = useCurrentUserProfile();
+  const clinicName = currentUser?.clinicName ?? "tu clÃ­nica";
   const [turns, setTurns] = useState<TodayTurnDTO[]>(initialTurns);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notifyDialog, setNotifyDialog] = useState<TodayTurnDTO | null>(null);
@@ -520,7 +523,7 @@ export default function TodayTurnsClient({
                     const digits = notifyDialog.ownerPhone.replace(/\D/g, "");
                     window.open(
                       `https://wa.me/${digits}?text=${encodeURIComponent(
-                        `Â¡Hola ${notifyDialog.ownerName}! Le informamos que ${notifyDialog.petName} ya estÃ¡ listo/a para ser recogido/a. El servicio de ${notifyDialog.serviceName} ha sido completado. Â¡Lo esperamos! - VetCare`
+                        `¡Hola ${notifyDialog.ownerName}! Le informamos que ${notifyDialog.petName} ya está listo/a para ser recogido/a. El servicio de ${notifyDialog.serviceName} ha sido completado. ¡Lo esperamos! - ${clinicName}`
                       )}`
                     );
                     notifyOwner(notifyDialog);
@@ -1209,3 +1212,5 @@ function AddTurnForm({
     </form>
   );
 }
+
+

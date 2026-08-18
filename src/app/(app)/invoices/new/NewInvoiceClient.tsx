@@ -118,7 +118,9 @@ export default function NewInvoicePOSPage() {
   const prefilledTodayTurnId = searchParams.get("todayTurnId");
   const prefilledPetName = searchParams.get("petName");
   const prefilledOwnerName = searchParams.get("ownerName");
+  const prefilledServiceName = searchParams.get("serviceName");
   const returnTo = searchParams.get("returnTo");
+  const servicePrefillAppliedRef = useRef(false);
 
   // Load base catalog
   useEffect(() => {
@@ -216,6 +218,51 @@ export default function NewInvoicePOSPage() {
   const total = useMemo(() => taxableBase + tax, [taxableBase, tax]);
 
   const selectedClient = useMemo(() => clients.find((c) => c.id === Number(clientId)) ?? null, [clients, clientId]);
+
+  useEffect(() => {
+    if (servicePrefillAppliedRef.current) return;
+    if (!prefilledServiceName || services.length === 0) return;
+
+    const normalizedServiceName = prefilledServiceName.trim().toLocaleLowerCase("es");
+    const matchedService =
+      services.find(
+        (service) => service.name.trim().toLocaleLowerCase("es") === normalizedServiceName
+      ) ??
+      services.find((service) =>
+        service.name.trim().toLocaleLowerCase("es").includes(normalizedServiceName)
+      );
+
+    servicePrefillAppliedRef.current = true;
+
+    if (!matchedService) return;
+
+    setSelectedType("SERVICE");
+    setSelectedItemId(String(matchedService.id));
+    setItems((current) => {
+      if (
+        current.some(
+          (item) => item.type === "SERVICE" && item.serviceId === matchedService.id
+        )
+      ) {
+        return current;
+      }
+
+      return [
+        ...current,
+        {
+          key: `SERVICE-${matchedService.id}-prefill`,
+          type: "SERVICE",
+          serviceId: matchedService.id,
+          name: matchedService.name,
+          description: matchedService.name,
+          quantity: 1,
+          unitPrice: num(matchedService.price),
+          taxRate: 0,
+          lineTotal: num(matchedService.price),
+        },
+      ];
+    });
+  }, [prefilledServiceName, services]);
 
   const addOrMergeItem = (incoming: Omit<PosItem, "key" | "lineTotal">) => {
     setItems((prev) => {
@@ -462,6 +509,11 @@ export default function NewInvoicePOSPage() {
             <p className="mt-1 text-sky-800">
               {prefilledPetName ?? "Paciente"}{prefilledOwnerName ? ` · ${prefilledOwnerName}` : ""}
             </p>
+            {prefilledServiceName ? (
+              <p className="mt-1 text-sky-800">
+                Servicio preseleccionado: {prefilledServiceName}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -637,7 +689,7 @@ export default function NewInvoicePOSPage() {
                     {selectedType === "SERVICE" ? "Servicios" : "Productos"}
                   </Label>
                   <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                    <SelectTrigger className="mt-1.5 w-3xl">
+                    <SelectTrigger className="mt-1.5 w-full">
                       <SelectValue
                         placeholder={`Seleccionar ${selectedType === "SERVICE" ? "servicio" : "producto"}`}
                       />

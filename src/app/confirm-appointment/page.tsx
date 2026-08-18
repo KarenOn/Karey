@@ -120,7 +120,7 @@ export default function ConfirmAppointmentPage() {
 
         <div className="mt-8 flex justify-center">
           <Button asChild>
-            <Link href="/login">Abrir KiskeyaVet</Link>
+            <Link href="/login">Abrir Karey Vet</Link>
           </Button>
         </div>
       </div>

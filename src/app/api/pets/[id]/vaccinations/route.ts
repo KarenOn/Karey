@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
+import { getClinicIdOrFail } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const clinicId = await getClinicIdOrFail();
   const petId = Number((await params).id);
   if (!Number.isFinite(petId)) return NextResponse.json({ message: "ID inválido" }, { status: 400 });
 
   const records = await prisma.vaccinationRecord.findMany({
-    where: { petId },
+    where: { petId, clinicId },
     orderBy: { appliedAt: "desc" },
     include: { vaccine: true, visit: true },
   });
@@ -16,6 +18,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const clinicId = await getClinicIdOrFail();
   const petId = Number((await params).id);
   if (!Number.isFinite(petId)) return NextResponse.json({ message: "ID inválido" }, { status: 400 });
 
@@ -29,14 +32,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  const pet = await prisma.pet.findUnique({ where: { id: petId } });
+  const pet = await prisma.pet.findFirst({ where: { id: petId, clinicId } });
   if (!pet) return NextResponse.json({ message: "Mascota no encontrada" }, { status: 404 });
 
   const data = parsed.data;
 
   const created = await prisma.vaccinationRecord.create({
     data: {
-      clinicId: pet.clinicId,
+      clinicId,
       petId,
       vaccineId: data.vaccineId,
       appliedAt: data.appliedAt,

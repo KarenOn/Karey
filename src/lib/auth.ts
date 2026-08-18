@@ -8,8 +8,40 @@ import { prisma } from "@/lib/prisma";
 export const auth = betterAuth({
   baseURL: getAppBaseUrl(),
   database: prismaAdapter(prisma, {
-    provider: "mysql",
+    provider: "postgresql",
   }),
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      banned: {
+        type: "boolean",
+        required: false,
+        input: false,
+      },
+      banReason: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      banExpires: {
+        type: "date",
+        required: false,
+        input: false,
+      },
+    },
+  },
+  session: {
+    additionalFields: {
+      impersonatedBy: {
+        type: "string",
+        required: false,
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
   },
@@ -46,6 +78,15 @@ export async function getActiveClinicMembershipForUser(userId: string) {
         select: {
           id: true,
           name: true,
+          email: true,
+          phone: true,
+          mobile: true,
+          owner: true,
+          logoUrl: true,
+          isActive: true,
+          subscriptionStatus: true,
+          subscriptionEndDate: true,
+          plan: true,
         },
       },
       role: {
@@ -79,6 +120,9 @@ export const getClinicIdOrFail = async () => {
 
   const membership = await getActiveClinicMembershipForUser(user.id);
   if (membership?.clinicId) {
+    if (!membership.clinic.isActive) {
+      throw new Error("CLINIC_INACTIVE");
+    }
     return membership.clinicId;
   }
 

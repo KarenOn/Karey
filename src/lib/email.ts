@@ -24,6 +24,25 @@ type VerificationEmailInput = {
   verifyUrl: string;
 };
 
+type AppWelcomeEmailInput = {
+  clinicName?: string | null;
+  loginUrl: string;
+  to: string;
+  userName?: string | null;
+  variant: "signup" | "clinic_ready";
+};
+
+type ClinicWelcomeEmailInput = {
+  clinicName: string;
+  loginUrl: string;
+  ownerEmail: string;
+  ownerName?: string | null;
+  plan?: string | null;
+  subscriptionEndDate?: Date | null;
+  tempPassword: string;
+  to: string;
+};
+
 type AppointmentReminderEmailInput = {
   appointmentTypeLabel: string;
   audience: "admin" | "client";
@@ -126,7 +145,7 @@ function getMailFromAddress() {
 }
 
 function getMailFromName() {
-  return process.env.MAIL_FROM_NAME ?? "KiskeyaVet";
+  return process.env.MAIL_FROM_NAME ?? "Karey Vet";
 }
 
 function getTransporter() {
@@ -210,7 +229,7 @@ function buildEmailShell(input: {
     <div style="background:#f4f7fb;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#14213d;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dde5f0;">
         <div style="padding:28px 32px;background:linear-gradient(135deg,#0f766e 0%,#1d3557 100%);color:#ffffff;">
-          <p style="margin:0 0 8px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;opacity:.9;">KiskeyaVet</p>
+          <p style="margin:0 0 8px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;opacity:.9;">Karey Vet</p>
           <h1 style="margin:0;font-size:28px;line-height:1.2;">${escapeHtml(input.title)}</h1>
         </div>
         <div style="padding:32px;">
@@ -282,28 +301,28 @@ export async function sendEmployeeInviteEmail({
 }: EmployeeInviteEmailInput) {
   const introName = employeeName?.trim() || "Hola";
   const inviterText = invitedByName?.trim()
-    ? `La invitacion fue creada por ${invitedByName.trim()}.`
-    : "Ya tienes una invitacion lista para entrar al sistema.";
+    ? `La invitación fue creada por ${invitedByName.trim()}.`
+    : "Ya tienes una invitación lista para entrar al sistema.";
   const passwordText = tempPassword
-    ? "Incluimos una contrasena temporal para tu primer acceso."
-    : "Si ya tenias una cuenta, puedes ingresar con tu contrasena actual.";
+    ? "Incluimos una contraseña temporal para tu primer acceso."
+    : "Si ya tenías una cuenta, puedes ingresar con tu contraseña actual.";
 
   const details: Array<{ label: string; value: string }> = [
-    { label: "Clinica", value: clinicName },
+    { label: "Clínica", value: clinicName },
     { label: "Correo", value: to },
     { label: "Rol asignado", value: roleName },
     { label: "Expira", value: formatDate(expiresAt) },
   ];
 
   if (tempPassword) {
-    details.push({ label: "Contrasena temporal", value: tempPassword });
+    details.push({ label: "Contraseña temporal", value: tempPassword });
   }
 
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
-      ${escapeHtml(introName)}, has sido invitado a unirte a la clinica ${escapeHtml(
+      ${escapeHtml(introName)}, has sido invitado a unirte a la clínica ${escapeHtml(
     clinicName
-  )} en KiskeyaVet.
+  )} en Karey Vet.
     </p>
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
       ${escapeHtml(inviterText)} ${escapeHtml(passwordText)}
@@ -312,26 +331,146 @@ export async function sendEmployeeInviteEmail({
   `;
 
   const textLines = [
-    `${introName}, has sido invitado a ${clinicName} en KiskeyaVet.`,
+    `${introName}, has sido invitado a ${clinicName} en Karey Vet.`,
     inviterText,
     `Rol asignado: ${roleName}`,
     `Correo: ${to}`,
     `Expira: ${formatDate(expiresAt)}`,
     tempPassword
-      ? `Contrasena temporal: ${tempPassword}`
-      : "Usa tu contrasena actual si ya habias ingresado antes.",
-    `Acepta la invitacion aqui: ${inviteUrl}`,
+      ? `Contraseña temporal: ${tempPassword}`
+      : "Usa tu contraseña actual si ya habías ingresado antes.",
+    `Acepta la invitación aquí: ${inviteUrl}`,
   ];
 
   await sendEmail({
     html: buildEmailShell({
       bodyHtml,
       ctaHref: inviteUrl,
-      ctaLabel: "Aceptar invitacion",
-      intro: "Tu acceso ya esta listo.",
-      title: "Invitacion de empleado",
+      ctaLabel: "Aceptar invitación",
+      intro: "Tu acceso ya está listo.",
+      title: "Invitación de empleado",
     }),
-    subject: `Invitacion para ${clinicName}`,
+    subject: `Invitación para ${clinicName}`,
+    text: textLines.join("\n"),
+    to,
+  });
+}
+
+export async function sendClinicWelcomeEmail({
+  clinicName,
+  loginUrl,
+  ownerEmail,
+  ownerName,
+  plan,
+  subscriptionEndDate,
+  tempPassword,
+  to,
+}: ClinicWelcomeEmailInput) {
+  const introName = ownerName?.trim() || "Hola";
+  const details: Array<{ label: string; value: string }> = [
+    { label: "Clínica", value: clinicName },
+    { label: "Correo de acceso", value: ownerEmail },
+    { label: "Contraseña inicial", value: tempPassword },
+  ];
+
+  if (plan?.trim()) {
+    details.push({ label: "Plan", value: plan.trim() });
+  }
+
+  if (subscriptionEndDate) {
+    details.push({
+      label: "Próximo vencimiento",
+      value: new Intl.DateTimeFormat("es-BO", { dateStyle: "medium" }).format(subscriptionEndDate),
+    });
+  }
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
+      ${escapeHtml(introName)}, ya habilitamos el acceso inicial para ${escapeHtml(clinicName)}.
+    </p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
+      Puedes ingresar desde el login normal de la aplicación con las credenciales incluidas abajo. Te recomendamos cambiar la contraseña después del primer acceso.
+    </p>
+    ${buildInfoList(details)}
+  `;
+
+  const textLines = [
+    `${introName}, ya habilitamos el acceso inicial para ${clinicName}.`,
+    `Correo de acceso: ${ownerEmail}`,
+    `Contraseña inicial: ${tempPassword}`,
+    plan?.trim() ? `Plan: ${plan.trim()}` : null,
+    subscriptionEndDate
+      ? `Próximo vencimiento: ${new Intl.DateTimeFormat("es-BO", { dateStyle: "medium" }).format(subscriptionEndDate)}`
+      : null,
+    `Ingresa aquí: ${loginUrl}`,
+  ].filter(Boolean);
+
+  await sendEmail({
+    html: buildEmailShell({
+      bodyHtml,
+      ctaHref: loginUrl,
+      ctaLabel: "Ir al inicio de sesión",
+      intro: "Tu clínica ya está lista para empezar.",
+      title: "Acceso inicial de la clínica",
+    }),
+    subject: `Tus credenciales de acceso para ${clinicName}`,
+    text: textLines.join("\n"),
+    to,
+  });
+}
+
+export async function sendAppWelcomeEmail({
+  clinicName,
+  loginUrl,
+  to,
+  userName,
+  variant,
+}: AppWelcomeEmailInput) {
+  const introName = userName?.trim() || "Hola";
+  const resolvedClinicName = clinicName?.trim() || "tu clínica";
+  const isClinicReady = variant === "clinic_ready";
+  const title = isClinicReady ? "Clínica configurada" : "Bienvenido a Karey Vet";
+  const subject = isClinicReady
+    ? `Tu clínica ${resolvedClinicName} ya está lista`
+    : "Te damos la bienvenida a Karey Vet";
+  const intro = isClinicReady
+    ? "La configuración inicial quedó completada y ya puedes trabajar con la app."
+    : "Tu cuenta ya fue creada y puedes empezar a explorar la aplicación.";
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
+      ${escapeHtml(introName)}, ${
+        isClinicReady
+          ? `la clínica ${escapeHtml(resolvedClinicName)} quedó configurada correctamente.`
+          : "tu acceso a Karey Vet ya está activo."
+      }
+    </p>
+    ${buildInfoList([
+      { label: "Correo", value: to },
+      { label: "Clínica", value: resolvedClinicName },
+      { label: "Acceso", value: loginUrl },
+    ])}
+  `;
+
+  const textLines = [
+    `${introName}, ${
+      isClinicReady
+        ? `la clínica ${resolvedClinicName} quedó configurada correctamente.`
+        : "tu acceso a Karey Vet ya está activo."
+    }`,
+    `Correo: ${to}`,
+    `Clínica: ${resolvedClinicName}`,
+    `Accede aquí: ${loginUrl}`,
+  ];
+
+  await sendEmail({
+    html: buildEmailShell({
+      bodyHtml,
+      ctaHref: loginUrl,
+      ctaLabel: isClinicReady ? "Abrir la aplicación" : "Entrar a Karey Vet",
+      intro,
+      title,
+    }),
+    subject,
     text: textLines.join("\n"),
     to,
   });
@@ -347,18 +486,18 @@ export async function sendVerificationEmail({
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
       ${escapeHtml(
         introName
-      )}, confirma tu correo para completar la configuracion de tu cuenta y mantener tu acceso protegido.
+      )}, confirma tu correo para completar la configuración de tu cuenta y mantener tu acceso protegido.
     </p>
     ${buildInfoList([
       { label: "Correo", value: to },
-      { label: "Aplicacion", value: "KiskeyaVet" },
+      { label: "Aplicación", value: "Karey Vet" },
     ])}
   `;
 
   const textLines = [
-    `${introName}, confirma tu correo para completar la configuracion de tu cuenta.`,
+    `${introName}, confirma tu correo para completar la configuración de tu cuenta.`,
     `Correo: ${to}`,
-    `Verifica aqui: ${verifyUrl}`,
+    `Verifica aquí: ${verifyUrl}`,
   ];
 
   await sendEmail({
@@ -369,7 +508,7 @@ export async function sendVerificationEmail({
       intro: "Necesitamos confirmar que este correo te pertenece.",
       title: "Verifica tu correo",
     }),
-    subject: "Verifica tu correo en KiskeyaVet",
+    subject: "Verifica tu correo en Karey Vet",
     text: textLines.join("\n"),
     to,
   });
@@ -390,8 +529,8 @@ export async function sendAppointmentReminderEmail({
   const hasConfirmation = isClient && !!confirmUrl;
   const title = hasConfirmation ? "Confirma tu cita" : "Recordatorio de cita";
   const intro = hasConfirmation
-    ? "Queremos dejar tu agenda confirmada con anticipacion."
-    : "Tienes una cita programada en KiskeyaVet.";
+    ? "Queremos dejar tu agenda confirmada con anticipación."
+    : "Tienes una cita programada en Karey Vet.";
   const ctaHref = hasConfirmation
     ? confirmUrl
     : audience === "admin"
@@ -401,7 +540,7 @@ export async function sendAppointmentReminderEmail({
     ? "Confirmar cita"
     : audience === "admin"
       ? "Ver agenda"
-      : "Abrir KiskeyaVet";
+      : "Abrir Karey Vet";
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
       ${escapeHtml(introName)}, ${
@@ -411,7 +550,7 @@ export async function sendAppointmentReminderEmail({
       }
     </p>
     ${buildInfoList([
-      { label: "Clinica", value: clinicName },
+      { label: "Clínica", value: clinicName },
       { label: "Paciente", value: petName },
       { label: "Tipo", value: appointmentTypeLabel },
       { label: "Fecha", value: formatDate(startAt) },
@@ -489,7 +628,7 @@ export async function sendPaymentReminderEmail({
     html: buildEmailShell({
       bodyHtml,
       ctaHref: getAppBaseUrl(),
-      ctaLabel: "Abrir KiskeyaVet",
+      ctaLabel: "Abrir Karey Vet",
       intro: "Este es un recordatorio automatico de pago.",
       title: "Recordatorio de pago",
     }),

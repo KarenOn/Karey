@@ -141,15 +141,16 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { startOfDay, endOfDay } from "@/lib/utility";
 
-export async function getDashboardData() {
+export async function getDashboardData(clinicId: number) {
   // ✅ Single clinic (por ahora)
-  const clinic = await prisma.clinic.findFirst({
+  const clinic = await prisma.clinic.findUnique({
+    where: { id: clinicId },
     select: { id: true, name: true },
   });
 
   if (!clinic) {
     return {
-      clinicName: "VetCare",
+      clinicName: "Tu clínica",
       clients: [],
       patients: [],
       appointments: [],
@@ -371,7 +372,7 @@ export async function getDashboardData() {
   const monthlyRevenue = Number(monthlyRevenueAgg._sum.amount ?? 0);
 
   return {
-    clinicName: clinic.name ?? "VetCare",
+    clinicName: clinic.name ?? "Tu clínica",
 
     clients: clientsDb.map((c) => ({
       id: c.id,

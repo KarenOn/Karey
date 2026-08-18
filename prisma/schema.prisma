@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
 
 /**
@@ -126,6 +126,12 @@ enum Weekday {
   sunday
 }
 
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  PAST_DUE
+}
+
 /**
  * =========================
  * BETTER AUTH
@@ -226,7 +232,7 @@ model Verification {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@index([identifier(length: 191)])
+  @@index([identifier])
   @@map("verification")
 }
 
@@ -315,6 +321,11 @@ model Clinic {
 
   socialMedia Json? // { facebook, instagram, whatsapp }
 
+  isActive            Boolean            @default(true)
+  subscriptionStatus  SubscriptionStatus @default(ACTIVE)
+  subscriptionEndDate DateTime?          @db.Date
+  plan                String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -338,6 +349,7 @@ model Clinic {
   medicalAttachments MedicalAttachment[]
 
   @@index([createdAt])
+  @@index([isActive, subscriptionStatus])
   @@map("clinic")
 }
 

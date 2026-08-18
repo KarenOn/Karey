@@ -16,7 +16,7 @@ export async function GET(req: Request) {
         : {}),
     },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, price: true, durationMins: true },
+    select: { id: true, name: true, price: true, durationMins: true, category: true },
     take: 200,
   });
 

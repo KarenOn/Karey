@@ -68,12 +68,19 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isSessionUserGlobalAdmin } from "@/lib/server-auth";
 
 export const runtime = "nodejs";
 
 export default async function Home() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (session?.user) redirect("/today");
+  if (session?.user) {
+    const isGlobalAdmin = await isSessionUserGlobalAdmin(
+      session.user.id,
+      session.user.role
+    );
+    redirect(isGlobalAdmin ? "/admin/clinics" : "/today");
+  }
   redirect("/login");
 
   // return (

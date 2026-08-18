@@ -187,6 +187,7 @@ export default function ProfilePage() {
       setSnapshot(updated);
       setIsEditing(false);
       setSaved(true);
+      window.dispatchEvent(new Event("user-profile-updated"));
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
       setErr(e?.message ?? "Error guardando");

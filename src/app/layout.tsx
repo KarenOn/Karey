@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Manrope, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider";
 import RegisterSW from "@/components/pwa/RegisterSW";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -21,10 +21,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Karey Vet",
+  },
+  applicationName: "Karey Vet",
+  description: "Aplicacion de gestion para clinicas veterinarias",
+  manifest: "/manifest.webmanifest",
   title: "Karey Vet",
-  description: "Aplicación de gestión para clínicas veterinarias",
-  manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
+  initialScale: 1,
   themeColor: "#0D9488",
+  viewportFit: "cover",
+  width: "device-width",
 };
 
 export default function RootLayout({
@@ -37,7 +49,12 @@ export default function RootLayout({
       <body
         className={`${manrope.variable} ${fraunces.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           <RegisterSW />
           {children}
           <Toaster position="top-center" />
