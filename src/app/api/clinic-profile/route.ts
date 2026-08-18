@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
+import { getAppUrl, sendAppWelcomeEmail } from "@/lib/email";
 import { resolveStoredFileUrl } from "@/lib/storage";
 import { ClinicProfileSchema } from "@/lib/validators/clinic-profile";
 
@@ -24,6 +25,20 @@ function defaultSchedule() {
     saturday: { open: "09:00", close: "13:00", closed: false },
     sunday: { open: "09:00", close: "13:00", closed: true },
   } as Record<(typeof DAYS)[number], { open: string; close: string; closed: boolean }>;
+}
+
+function isClinicSetupRequired(profile: {
+  name?: string | null;
+  owner?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+}) {
+  const hasName = !!profile.name?.trim();
+  const hasOwner = !!profile.owner?.trim();
+  const hasContact = !!profile.email?.trim() || !!profile.phone?.trim() || !!profile.mobile?.trim();
+
+  return !hasName || !hasOwner || !hasContact;
 }
 
 async function readProfile(clinicId: number) {
@@ -116,7 +131,9 @@ export async function PUT(req: Request) {
   const { schedule, socialMedia, logoStorageRef, ...clinicData } = data as any;
 
   try {
-    const { clinicId } = await requireClinicPermission("clinic.update");
+    const { clinicId, session } = await requireClinicPermission("clinic.update");
+    const previousProfile = await readProfile(clinicId);
+
     await prisma.$transaction(async (tx) => {
       await tx.clinic.update({
         where: { id: clinicId },
@@ -153,7 +170,30 @@ export async function PUT(req: Request) {
     });
 
     const profile = await readProfile(clinicId);
-    return NextResponse.json(profile);
+    let emailWarning: string | null = null;
+
+    if (
+      session.user.email &&
+      isClinicSetupRequired(previousProfile) &&
+      !isClinicSetupRequired(profile)
+    ) {
+      try {
+        await sendAppWelcomeEmail({
+          clinicName: profile.name,
+          loginUrl: getAppUrl("/today"),
+          to: session.user.email,
+          userName: session.user.name,
+          variant: "clinic_ready",
+        });
+      } catch (emailError) {
+        emailWarning =
+          emailError instanceof Error
+            ? `La clínica se guardó, pero no se pudo enviar el correo de bienvenida: ${emailError.message}`
+            : "La clínica se guardó, pero no se pudo enviar el correo de bienvenida.";
+      }
+    }
+
+    return NextResponse.json(emailWarning ? { ...profile, emailWarning } : profile);
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 });
   }

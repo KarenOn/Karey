@@ -269,7 +269,7 @@ export default function InvoiceDetailPage() {
                   <PawPrint className="w-6 h-6" />
                 </div>
                 <div className="leading-tight">
-                  <p className="text-xl font-bold">VetCare</p>
+                  <p className="text-xl font-bold">{invoice?.clinic.name ?? "Karey Vet"}</p>
                   <p className="text-teal-100 text-sm">Factura veterinaria</p>
                 </div>
               </div>

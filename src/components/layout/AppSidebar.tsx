@@ -16,7 +16,6 @@ import {
   Bell,
   Menu,
   ClipboardList,
-  Building2,
   Sun,
   Moon,
   IdCardLanyard,
@@ -35,11 +34,14 @@ import {
 import { useTheme } from "next-themes";
 import { Button } from "../ui/button";
 import { authClient } from "@/lib/auth-client";
+import ClinicAvatar from "@/components/shared/ClinicAvatar";
 import { cn } from "@/lib/utils";
 import type { CurrentUserProfile } from "@/lib/current-user-profile";
+import ClinicOnboardingModal from "@/components/layout/ClinicOnboardingModal";
 import {
   CurrentUserProvider,
 } from "@/components/layout/current-user-context";
+import EmailVerificationBanner from "@/components/layout/EmailVerificationBanner";
 
 type ModuleKey =
   | "dashboard"
@@ -138,14 +140,14 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         hint: "Mascotas",
         moduleKey: "pets",
       },
-      {
-        name: "Walk-ins",
-        icon: Calendar,
-        pageKey: "Appointments",
-        href: "/today-turns",
-        hint: "Turnos sin cita",
-        moduleKey: "todayTurns",
-      },
+      // {
+      //   name: "Walk-ins",
+      //   icon: Calendar,
+      //   pageKey: "Appointments",
+      //   href: "/today-turns",
+      //   hint: "Turnos sin cita",
+      //   moduleKey: "todayTurns",
+      // },
       {
         name: "Agenda",
         icon: Calendar,
@@ -193,7 +195,6 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   const clinicCta = useMemo(
     () => ({
       name: "Mi Clinica",
-      icon: Building2,
       pageKey: "ClinicProfile",
       href: "/clinic-profile",
       moduleKey: "clinicProfile" as const,
@@ -255,10 +256,10 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
   const currentTitle = useMemo(() => {
     const item = availableNavigation.find((navItem) => pathname === navItem.href || pathname.startsWith(navItem.href + "/"));
-    if (!item) return "VetCare";
+    if (!item) return currentUser?.clinicName ?? "Karey Vet";
     if (item.pageKey === "Dashboard") return "Bienvenido/a";
     return item.name;
-  }, [availableNavigation, pathname]);
+  }, [availableNavigation, currentUser?.clinicName, pathname]);
 
   const currentDescription = useMemo(() => {
     const current = [...availableNavigation, clinicCta].find(
@@ -420,18 +421,19 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                         : "border-border/70 bg-background/65 text-foreground hover:border-primary/25 hover:bg-background"
                   )}
                 >
-                  <div
+                  <ClinicAvatar
+                    name={currentUser?.clinicName ?? clinicCta.name}
+                    logoUrl={currentUser?.clinicLogoUrl ?? null}
                     className={cn(
-                      "flex size-11 shrink-0 items-center justify-center rounded-3xl border",
+                      "size-11 shrink-0 rounded-3xl border",
                       activeClinic
                         ? "border-white/15 bg-white/12"
                         : isDark
                           ? "border-white/16 bg-white/7"
                           : "border-border/60 bg-background/70"
                     )}
-                  >
-                    <clinicCta.icon className={cn("size-5", collapsed && "mx-auto")} />
-                  </div>
+                    iconClassName={cn("size-5", collapsed && "mx-auto")}
+                  />
                   {!collapsed && (
                     <div>
                       <p className="text-sm font-extrabold">{clinicCta.name}</p>
@@ -501,6 +503,11 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                   <DropdownMenuContent className="w-56" align="start">
                     <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    {currentUser?.isGlobalAdmin ? (
+                      <DropdownMenuItem asChild className="font-semibold">
+                        <Link href="/admin/clinics">Panel admin</Link>
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuItem asChild className="font-semibold">
                       <Link href="/profile">Perfil</Link>
                     </DropdownMenuItem>
@@ -532,6 +539,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
           <div className="px-4 pb-8 lg:px-6 lg:pb-10">
             <div className="min-h-[calc(100vh-8rem)]">
+              <EmailVerificationBanner />
               {currentModuleAllowed ? (
                 children
               ) : (
@@ -551,6 +559,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
             </div>
           </div>
         </main>
+        <ClinicOnboardingModal />
       </div>
     </CurrentUserProvider>
   );

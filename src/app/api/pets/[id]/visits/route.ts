@@ -43,6 +43,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const clinicId = await getClinicIdOrFail();
   const petId = Number((await params).id);
   if (!Number.isFinite(petId)) {
     return NextResponse.json({ message: "ID inválido" }, { status: 400 });
@@ -58,7 +59,7 @@ export async function POST(
     );
   }
 
-  const pet = await prisma.pet.findUnique({ where: { id: petId } });
+  const pet = await prisma.pet.findFirst({ where: { id: petId, clinicId } });
   if (!pet) {
     return NextResponse.json(
       { message: "Mascota no encontrada" },
@@ -70,7 +71,7 @@ export async function POST(
 
   const visit = await prisma.clinicalVisit.create({
     data: {
-      clinicId: pet.clinicId,
+      clinicId,
       clientId: pet.clientId,
       petId,
       visitAt: data.visitAt,

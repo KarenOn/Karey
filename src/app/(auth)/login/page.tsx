@@ -44,7 +44,7 @@ export default function LoginPage() {
       try {
         const response = await fetch("/api/auth/send-verification-email", {
           body: JSON.stringify({
-            callbackURL: "/today",
+            callbackURL: "/",
             email: normalizedEmail,
           }),
           headers: { "Content-Type": "application/json" },
@@ -74,13 +74,13 @@ export default function LoginPage() {
     }
 
     setIsLoading(false);
-    router.push("/today");
+    router.push("/");
   };
 
   const onGoogle = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/today",
+      callbackURL: "/",
     });
   };
 

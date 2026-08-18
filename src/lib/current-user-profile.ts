@@ -2,7 +2,12 @@ import { headers } from "next/headers";
 import { auth, getActiveClinicMembershipForUser } from "@/lib/auth";
 import { activatePendingEmployeeInviteForUser } from "@/lib/employee-invites";
 import { prisma } from "@/lib/prisma";
-import { buildClinicAccess, type ClinicAccess } from "@/lib/permissions";
+import {
+  buildClinicAccess,
+  isGlobalAdminRole,
+  type ClinicAccess,
+} from "@/lib/permissions";
+import type { SubscriptionStatus } from "@/generated/prisma/client";
 import {
   deleteStoredFile,
   isS3StorageRef,
@@ -14,7 +19,16 @@ type UserProfileRow = Awaited<ReturnType<typeof loadCurrentUserProfileRow>>;
 
 export type CurrentUserProfile = {
   userId: string;
+  emailVerified: boolean;
   clinicId: number | null;
+  clinicName: string | null;
+  clinicLogoUrl: string | null;
+  clinicIsActive: boolean | null;
+  clinicSetupRequired: boolean;
+  subscriptionStatus: "active" | "inactive" | "past_due" | null;
+  subscriptionEndDate: string | null;
+  plan: string | null;
+  isGlobalAdmin: boolean;
   name: string;
   email: string;
   avatarUrl: string | null;
@@ -30,6 +44,37 @@ export type CurrentUserProfile = {
 function toNullishString(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function toClientSubscriptionStatus(status?: SubscriptionStatus | null) {
+  if (!status) return null;
+
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "INACTIVE":
+      return "inactive";
+    case "PAST_DUE":
+      return "past_due";
+  }
+}
+
+function isClinicSetupRequired(clinic?: {
+  name?: string | null;
+  owner?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+} | null) {
+  if (!clinic) {
+    return false;
+  }
+
+  const hasName = !!clinic.name?.trim();
+  const hasOwner = !!clinic.owner?.trim();
+  const hasContact = !!clinic.email?.trim() || !!clinic.phone?.trim() || !!clinic.mobile?.trim();
+
+  return !hasName || !hasOwner || !hasContact;
 }
 
 async function getSessionUserOrThrow() {
@@ -74,6 +119,10 @@ async function loadCurrentUserProfileRow() {
 }
 
 async function syncStoredUserRole(row: UserProfileRow) {
+  if (isGlobalAdminRole(row.user.role)) {
+    return row.user.role;
+  }
+
   const membershipRoleKey = row.membership?.role.key ?? null;
 
   if (row.user.role === membershipRoleKey) {
@@ -96,7 +145,20 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
 
   return {
     userId: row.user.id,
+    emailVerified: row.user.emailVerified,
     clinicId: row.clinicId,
+    clinicName: row.membership?.clinic.name ?? null,
+    clinicLogoUrl: await resolveStoredFileUrl(row.membership?.clinic.logoUrl, {
+      fileName: row.membership?.clinicId
+        ? `logo-clinica-${row.membership.clinicId}.png`
+        : "logo-clinica.png",
+    }),
+    clinicIsActive: row.membership?.clinic.isActive ?? null,
+    clinicSetupRequired: isClinicSetupRequired(row.membership?.clinic),
+    subscriptionStatus: toClientSubscriptionStatus(row.membership?.clinic.subscriptionStatus),
+    subscriptionEndDate: row.membership?.clinic.subscriptionEndDate?.toISOString().slice(0, 10) ?? null,
+    plan: row.membership?.clinic.plan ?? null,
+    isGlobalAdmin: isGlobalAdminRole(roleKey),
     name: row.user.name,
     email: row.user.email,
     avatarStorageRef: row.user.image ?? null,

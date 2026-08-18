@@ -21,6 +21,7 @@ export type InvoiceListRow = {
 
 export type InvoiceDetail = {
   id: number;
+  clinic: { name: string };
   number: string;
   status: string;
   issueDate: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -12,34 +12,38 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export default function PushManager() {
-  const [supported, setSupported] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission>("default");
+  const supported =
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window;
+  const [permission, setPermission] = useState<NotificationPermission>(() =>
+    supported ? Notification.permission : "default"
+  );
   const [subscribed, setSubscribed] = useState(false);
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
   useEffect(() => {
-    const ok =
-      typeof window !== "undefined" &&
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      "Notification" in window;
-
-    setSupported(ok);
-    setPermission(Notification.permission);
-  }, []);
-
-  async function refreshSubscriptionState() {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    setSubscribed(!!sub);
-  }
-
-  useEffect(() => {
     if (!supported) return;
-    refreshSubscriptionState().catch(() => {});
+
+    let active = true;
+
+    void navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => {
+        if (active) {
+          setSubscribed(!!subscription);
+          setPermission(Notification.permission);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
   }, [supported]);
 
-  const canAsk = supported && vapidPublicKey;
+  const canAsk = supported && !!vapidPublicKey;
 
   const subscribe = async () => {
     if (!canAsk) return;
@@ -52,7 +56,7 @@ export default function PushManager() {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey!),
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     });
 
     await fetch("/api/push/subscribe", {

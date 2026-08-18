@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -17,11 +17,10 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import FormField from "@/components/shared/FormField";
-import Modal from "@/components/shared/Modal";
 import { AppAlert } from "@/components/shared/AppAlert";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { cn } from "@/lib/utils";
+import NewTurnModal from "./NewTurnModal";
 
 type AppointmentStatus =
   | "SCHEDULED"
@@ -73,17 +72,6 @@ type AlertState = {
   variant: "success" | "info" | "warning" | "destructive";
   title: string;
   description?: string;
-};
-
-type NewTurnFormState = {
-  estimatedDuration: string;
-  notes: string;
-  ownerName: string;
-  ownerPhone: string;
-  petName: string;
-  service: TodayTurnService;
-  serviceName: string;
-  species: "DOG" | "CAT" | "BIRD" | "RABBIT" | "OTHER";
 };
 
 type PatientCardItem = {
@@ -152,31 +140,6 @@ const STATE_STYLES: Record<
   },
 };
 
-const TURN_SERVICE_OPTIONS: Array<{
-  defaultName: string;
-  label: string;
-  value: TodayTurnService;
-}> = [
-  { value: "GROOMING", label: "Peluquería", defaultName: "Baño y corte" },
-  { value: "BATH", label: "Baño", defaultName: "Baño completo" },
-  { value: "SURGERY", label: "Cirugía", defaultName: "Procedimiento quirúrgico" },
-  {
-    value: "HOSPITALIZATION",
-    label: "Hospitalización",
-    defaultName: "Hospitalización",
-  },
-  { value: "OTHER", label: "Otro", defaultName: "Servicio general" },
-];
-
-const SPECIES_OPTIONS: Array<{ label: string; value: NewTurnFormState["species"] }> =
-  [
-    { value: "DOG", label: "Perro" },
-    { value: "CAT", label: "Gato" },
-    { value: "BIRD", label: "Ave" },
-    { value: "RABBIT", label: "Conejo" },
-    { value: "OTHER", label: "Otro" },
-  ];
-
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -232,6 +195,7 @@ function buildInvoiceUrl(input: {
   petId?: number | null;
   petName?: string | null;
   returnTo?: string;
+  serviceName?: string | null;
   todayTurnId?: number | null;
 }) {
   const params = new URLSearchParams();
@@ -242,6 +206,7 @@ function buildInvoiceUrl(input: {
   if (input.todayTurnId) params.set("todayTurnId", String(input.todayTurnId));
   if (input.petName) params.set("petName", input.petName);
   if (input.ownerName) params.set("ownerName", input.ownerName);
+  if (input.serviceName) params.set("serviceName", input.serviceName);
   if (input.returnTo) params.set("returnTo", input.returnTo);
 
   return `/invoices/new?${params.toString()}`;
@@ -442,18 +407,7 @@ export default function TodayWorkspace({
     useState<TodayAppointmentItem[]>(initialAppointments);
   const [turns, setTurns] = useState<TodayTurnItem[]>(initialTurns);
   const [turnModalOpen, setTurnModalOpen] = useState(false);
-  const [savingTurn, setSavingTurn] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [turnForm, setTurnForm] = useState<NewTurnFormState>({
-    estimatedDuration: "60",
-    notes: "",
-    ownerName: "",
-    ownerPhone: "",
-    petName: "",
-    service: "GROOMING",
-    serviceName: "Baño y corte",
-    species: "DOG",
-  });
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<AlertState>({
     variant: "info",
@@ -465,14 +419,21 @@ export default function TodayWorkspace({
   const canUpdateAppointments = !!access?.actions.appointments.update;
   const canCreateInvoices = !!access?.actions.invoices.create;
 
-  function showAlert(
+  const showAlert = useCallback((
     variant: AlertState["variant"],
     title: string,
     description?: string
-  ) {
+  ) => {
     setAlert({ variant, title, description });
     setAlertOpen(true);
-  }
+  }, []);
+
+  const showTurnModalError = useCallback(
+    (title: string, description?: string) => {
+      showAlert("destructive", title, description);
+    },
+    [showAlert]
+  );
 
   useEffect(() => {
     const createdInvoiceId = searchParams.get("createdInvoiceId");
@@ -484,7 +445,7 @@ export default function TodayWorkspace({
       `La factura ${createdInvoiceId} se registró y el paciente se movió a Atendidos.`
     );
     router.replace(pathname);
-  }, [pathname, router, searchParams]);
+  }, [pathname, router, searchParams, showAlert]);
 
   const upcomingAppointments = useMemo(
     () =>
@@ -694,6 +655,7 @@ export default function TodayWorkspace({
     ownerName?: string | null;
     petId?: number | null;
     petName?: string | null;
+    serviceName?: string | null;
     todayTurnId?: number | null;
   }) {
     if (input.invoiceId) {
@@ -714,69 +676,10 @@ export default function TodayWorkspace({
         petId: input.petId,
         petName: input.petName,
         returnTo: "/today",
+        serviceName: input.serviceName,
         todayTurnId: input.todayTurnId,
       })
     );
-  }
-
-  async function submitNewTurn() {
-    if (!canCreateTurns) {
-      showAlert("warning", "Sin permisos", "No puedes crear turnos.");
-      return;
-    }
-
-    if (!turnForm.petName.trim() || !turnForm.ownerName.trim()) {
-      showAlert(
-        "warning",
-        "Datos requeridos",
-        "Completa la mascota y el nombre del dueño para registrar el turno."
-      );
-      return;
-    }
-
-    setSavingTurn(true);
-
-    try {
-      const created = await requestJson<TodayTurnItem>("/api/today-turns", {
-        method: "POST",
-        body: JSON.stringify({
-          estimatedDuration: Number(turnForm.estimatedDuration || 60),
-          notes: turnForm.notes.trim() || null,
-          ownerName: turnForm.ownerName.trim(),
-          ownerPhone: turnForm.ownerPhone.trim() || null,
-          petName: turnForm.petName.trim(),
-          service: turnForm.service,
-          serviceName: turnForm.serviceName.trim(),
-          species: turnForm.species,
-        }),
-      });
-
-      setTurns((current) =>
-        [...current, created].sort((left, right) =>
-          left.arrivalAt.localeCompare(right.arrivalAt)
-        )
-      );
-      setTurnModalOpen(false);
-      setTurnForm({
-        estimatedDuration: "60",
-        notes: "",
-        ownerName: "",
-        ownerPhone: "",
-        petName: "",
-        service: "GROOMING",
-        serviceName: "Baño y corte",
-        species: "DOG",
-      });
-      showAlert("success", "Turno creado", "El paciente quedó agregado en En espera.");
-    } catch (error) {
-      showAlert(
-        "destructive",
-        "No se pudo crear el turno",
-        getErrorMessage(error)
-      );
-    } finally {
-      setSavingTurn(false);
-    }
   }
 
   return (
@@ -877,6 +780,7 @@ export default function TodayWorkspace({
                 ownerName: turn.ownerName,
                 petId: turn.petId,
                 petName: turn.petName,
+                serviceName: turn.serviceName,
                 todayTurnId: turn.id,
               });
             }}
@@ -901,6 +805,7 @@ export default function TodayWorkspace({
                 ownerName: turn.ownerName,
                 petId: turn.petId,
                 petName: turn.petName,
+                serviceName: turn.serviceName,
                 todayTurnId: turn.id,
               });
             }}
@@ -928,138 +833,23 @@ export default function TodayWorkspace({
         ))}
       </TodaySection>
 
-      <Modal
-        footer={
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setTurnModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void submitNewTurn()} disabled={savingTurn}>
-              {savingTurn ? "Guardando..." : "Crear turno"}
-            </Button>
-          </div>
-        }
-        onClose={setTurnModalOpen}
+      <NewTurnModal
+        onCreated={(created) => {
+          setTurns((current) =>
+            [...current, created].sort((left, right) =>
+              left.arrivalAt.localeCompare(right.arrivalAt)
+            )
+          );
+          showAlert(
+            "success",
+            "Turno creado",
+            "El paciente quedó agregado en En espera."
+          );
+        }}
+        onOpenChange={setTurnModalOpen}
+        onShowError={showTurnModalError}
         open={turnModalOpen}
-        size="lg"
-        title="Nuevo turno"
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            label="Mascota"
-            name="petName"
-            onChange={(event) =>
-              setTurnForm((current) => ({ ...current, petName: String(event.target.value) }))
-            }
-            placeholder="Ej: Max"
-            required
-            value={turnForm.petName}
-          />
-          <FormField
-            label="Especie"
-            name="species"
-            onChange={(event) =>
-              setTurnForm((current) => ({
-                ...current,
-                species: event.target.value as NewTurnFormState["species"],
-              }))
-            }
-            options={SPECIES_OPTIONS}
-            type="select"
-            value={turnForm.species}
-          />
-          <FormField
-            label="Dueño"
-            name="ownerName"
-            onChange={(event) =>
-              setTurnForm((current) => ({
-                ...current,
-                ownerName: String(event.target.value),
-              }))
-            }
-            placeholder="Ej: María García"
-            required
-            value={turnForm.ownerName}
-          />
-          <FormField
-            label="Teléfono"
-            name="ownerPhone"
-            onChange={(event) =>
-              setTurnForm((current) => ({
-                ...current,
-                ownerPhone: String(event.target.value),
-              }))
-            }
-            placeholder="Opcional"
-            value={turnForm.ownerPhone}
-          />
-          <FormField
-            label="Tipo de servicio"
-            name="service"
-            onChange={(event) => {
-              const value = event.target.value as TodayTurnService;
-              const currentDefault =
-                TURN_SERVICE_OPTIONS.find((option) => option.value === turnForm.service)
-                  ?.defaultName ?? turnForm.serviceName;
-              const nextDefault =
-                TURN_SERVICE_OPTIONS.find((option) => option.value === value)?.defaultName ??
-                turnForm.serviceName;
-
-              setTurnForm((current) => ({
-                ...current,
-                service: value,
-                serviceName:
-                  current.serviceName === currentDefault ? nextDefault : current.serviceName,
-              }));
-            }}
-            options={TURN_SERVICE_OPTIONS.map((option) => ({
-              label: option.label,
-              value: option.value,
-            }))}
-            type="select"
-            value={turnForm.service}
-          />
-          <FormField
-            label="Duración estimada"
-            name="estimatedDuration"
-            onChange={(event) =>
-              setTurnForm((current) => ({
-                ...current,
-                estimatedDuration: String(event.target.value),
-              }))
-            }
-            type="number"
-            value={turnForm.estimatedDuration}
-          />
-          <FormField
-            className="sm:col-span-2"
-            label="Servicio"
-            name="serviceName"
-            onChange={(event) =>
-              setTurnForm((current) => ({
-                ...current,
-                serviceName: String(event.target.value),
-              }))
-            }
-            placeholder="Ej: Consulta rápida"
-            value={turnForm.serviceName}
-          />
-          <FormField
-            className="sm:col-span-2"
-            label="Notas"
-            name="notes"
-            onChange={(event) =>
-              setTurnForm((current) => ({
-                ...current,
-                notes: String(event.target.value),
-              }))
-            }
-            placeholder="Detalles útiles para recepción o doctor"
-            type="textarea"
-            value={turnForm.notes}
-          />
-        </div>
-      </Modal>
+      />
 
       <AppAlert
         description={alert.description}

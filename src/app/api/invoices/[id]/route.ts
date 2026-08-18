@@ -14,6 +14,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     where: { id, clinicId },
     select: {
       id: true,
+      clinic: { select: { name: true } },
       number: true,
       status: true,
       issueDate: true,

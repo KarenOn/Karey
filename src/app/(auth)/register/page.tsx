@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User, Mail, Lock, Eye, PawPrint, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import { Input } from "@/components/ui/input";
@@ -31,25 +32,81 @@ export default function RegisterPage() {
 
     setIsLoading(true);
 
-    const { error: signUpError } = await authClient.signUp.email(
-      {
-        name: fullName,
-        email,
-        password,
-        callbackURL: "/today",
-      },
-      {
-        onSuccess: () => router.push("/today"),
-        onError: (ctx) => setError(ctx.error.message),
+    const normalizedEmail = email.trim().toLowerCase();
+
+    try {
+      const registerResponse = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: normalizedEmail,
+          password,
+        }),
+      });
+
+      const registerPayload = (await registerResponse.json().catch(() => null)) as
+        | { error?: string; emailWarning?: string | null }
+        | null;
+
+      if (!registerResponse.ok) {
+        throw new Error(registerPayload?.error ?? "No se pudo crear la cuenta.");
       }
-    );
 
-    if (!signUpError) {
+      if (registerPayload?.emailWarning) {
+        toast.warning(registerPayload.emailWarning);
+      }
+
+      const { error: signInError } = await authClient.signIn.email(
+        {
+          email: normalizedEmail,
+          password,
+          rememberMe: true,
+        },
+        {
+          onError: (ctx) => setError(ctx.error.message),
+        }
+      );
+
+      if (signInError) {
+        setError("La cuenta se creó, pero no pudimos iniciar sesión automáticamente.");
+        setIsLoading(false);
+        return;
+      }
+
+      const verificationResponse = await fetch("/api/auth/send-verification-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          callbackURL: "/today",
+        }),
+      });
+
+      if (verificationResponse.ok) {
+        toast.success("Te enviamos un correo para verificar tu cuenta.");
+      } else {
+        const verificationPayload = (await verificationResponse.json().catch(() => null)) as
+          | { error?: string; message?: string }
+          | null;
+
+        toast.warning(
+          verificationPayload?.message ??
+            verificationPayload?.error ??
+            "No se pudo enviar el correo de verificación."
+        );
+      }
+
+      router.push("/today");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "No se pudo completar el registro."
+      );
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    setIsLoading(false);
   };
 
   return (
