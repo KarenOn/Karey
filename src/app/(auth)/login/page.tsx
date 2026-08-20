@@ -171,7 +171,7 @@ export default function LoginPage() {
           <div className="mt-6 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <Link className="text-left transition hover:text-foreground" href="/forgot-password">Recuperar contrasena</Link>
             <span>
-              Â¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
+              ¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
             </span>
           </div>
         </div>

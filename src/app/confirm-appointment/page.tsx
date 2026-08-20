@@ -21,7 +21,7 @@ export default function ConfirmAppointmentPage() {
 
   const [state, setState] = useState<ConfirmState>({
     kind: "loading",
-    message: "Estamos confirmando tu cita...",
+    message: "Estamos confirmando tu cita. Esto tomará unos segundos.",
   });
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function ConfirmAppointmentPage() {
             kind: "error",
             message:
               payload?.error ??
-              "No pudimos confirmar la cita con este enlace.",
+              "No pudimos confirmar la cita con este enlace. Comunícate con la clínica si necesitas ayuda.",
           });
           return;
         }
@@ -62,8 +62,8 @@ export default function ConfirmAppointmentPage() {
         setState({
           kind: "success",
           message: payload?.petName
-            ? `La cita de ${payload.petName} ya quedo confirmada.`
-            : "La cita ya quedo confirmada.",
+            ? `La cita de ${payload.petName} quedó confirmada correctamente.`
+            : "La cita quedó confirmada correctamente.",
         });
       } catch {
         if (cancelled) {
@@ -72,7 +72,7 @@ export default function ConfirmAppointmentPage() {
 
         setState({
           kind: "error",
-          message: "Ocurrio un problema confirmando la cita.",
+          message: "Ocurrió un problema al confirmar la cita. Inténtalo nuevamente en unos momentos.",
         });
       }
     }
@@ -86,9 +86,9 @@ export default function ConfirmAppointmentPage() {
 
   const resolvedState = token
     ? state
-    : {
+      : {
         kind: "error",
-        message: "El enlace de confirmacion no es valido.",
+        message: "Este enlace de confirmación no es válido.",
       } satisfies ConfirmState;
 
   return (
@@ -105,14 +105,14 @@ export default function ConfirmAppointmentPage() {
         </div>
 
         <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">
-          Confirmacion de cita
+          Confirmación de cita
         </p>
         <h1 className="mt-3 font-display text-3xl font-semibold text-foreground">
           {resolvedState.kind === "success"
-            ? "Cita confirmada"
+            ? "¡Cita confirmada!"
             : resolvedState.kind === "error"
               ? "No se pudo confirmar"
-              : "Procesando confirmacion"}
+              : "Confirmando cita"}
         </h1>
         <p className="mt-4 text-sm leading-7 text-muted-foreground">
           {resolvedState.message}

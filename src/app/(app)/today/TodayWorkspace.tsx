@@ -162,7 +162,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     const payload = (await response.json().catch(() => null)) as
       | { error?: string }
       | null;
-    throw new Error(payload?.error ?? `Error en ${url}`);
+    throw new Error(payload?.error ?? "No pudimos completar esta acción.");
   }
 
   return response.json();
@@ -236,14 +236,14 @@ function TodayHeader({
           {weekday} {dayNumber}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {month}. Todo lo importante del día en una sola vista.
+          {month}. Consulta las citas, pacientes en espera y atenciones activas de la jornada.
         </p>
       </div>
 
       {canCreateTurns ? (
         <Button onClick={onNewTurn} className="h-11 rounded-2xl px-5">
           <Plus className="mr-2 h-4 w-4" />
-          Nuevo turno
+          Agregar paciente sin cita
         </Button>
       ) : null}
     </div>
@@ -336,7 +336,7 @@ function PatientCard({
               {STATE_LABELS[item.state]}
             </Badge>
             <Badge variant="outline" className="rounded-full">
-              {item.source === "appointment" ? "Cita" : "Walk-in"}
+              {item.source === "appointment" ? "Cita" : "Sin cita"}
             </Badge>
           </div>
 
@@ -439,11 +439,11 @@ export default function TodayWorkspace({
     const createdInvoiceId = searchParams.get("createdInvoiceId");
     if (!createdInvoiceId) return;
 
-    showAlert(
-      "success",
-      "Factura creada",
-      `La factura ${createdInvoiceId} se registró y el paciente se movió a Atendidos.`
-    );
+      showAlert(
+        "success",
+        "Factura creada",
+        `La factura ${createdInvoiceId} se registró y el paciente pasó a Atendidos.`
+      );
     router.replace(pathname);
   }, [pathname, router, searchParams, showAlert]);
 
@@ -588,7 +588,7 @@ export default function TodayWorkspace({
 
   async function markAppointmentInProgress(appointment: TodayAppointmentItem) {
     if (!canUpdateAppointments) {
-      showAlert("warning", "Sin permisos", "No puedes actualizar citas.");
+      showAlert("warning", "Sin permisos", "No tienes permiso para actualizar citas.");
       return;
     }
 
@@ -619,7 +619,7 @@ export default function TodayWorkspace({
 
   async function markTurnInProgress(turn: TodayTurnItem) {
     if (!canUpdateTurns) {
-      showAlert("warning", "Sin permisos", "No puedes actualizar turnos.");
+      showAlert("warning", "Sin permisos", "No tienes permiso para actualizar atenciones sin cita.");
       return;
     }
 
@@ -640,7 +640,7 @@ export default function TodayWorkspace({
     } catch (error) {
       showAlert(
         "destructive",
-        "No se pudo iniciar el turno",
+        "No se pudo iniciar la atención",
         getErrorMessage(error)
       );
     } finally {
@@ -664,7 +664,7 @@ export default function TodayWorkspace({
     }
 
     if (!canCreateInvoices) {
-      showAlert("warning", "Sin permisos", "No puedes crear facturas.");
+      showAlert("warning", "Sin permisos", "No tienes permiso para crear facturas.");
       return;
     }
 
@@ -721,9 +721,9 @@ export default function TodayWorkspace({
 
       <TodaySection
         count={waitingTurnCards.length}
-        emptyMessage="No hay walk-ins esperando en este momento."
+        emptyMessage="No hay pacientes sin cita en espera en este momento."
         icon={ClipboardList}
-        title="En espera"
+        title="Sin cita en espera"
       >
         {waitingTurnCards.map((item) => (
           <PatientCard
@@ -842,8 +842,8 @@ export default function TodayWorkspace({
           );
           showAlert(
             "success",
-            "Turno creado",
-            "El paciente quedó agregado en En espera."
+            "Paciente agregado",
+            "El paciente quedó agregado en la columna En espera."
           );
         }}
         onOpenChange={setTurnModalOpen}

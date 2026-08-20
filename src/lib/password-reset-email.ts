@@ -20,15 +20,15 @@ export async function sendPasswordResetEmail(input: {
   const transporter = nodemailer.default.createTransport(transport);
   const name = input.userName?.trim() || "Hola";
   const text = [
-    `${name}, recibimos una solicitud para restablecer tu contrasena en Karey Vet.`,
+    `${name}, recibimos una solicitud para restablecer tu contraseña en Karey Vet.`,
     `Usa este enlace temporal y de un solo uso: ${input.resetUrl}`,
     "Si no solicitaste este cambio, ignora este correo.",
   ].join("\\n");
   await transporter.sendMail({
     from: `"${process.env.MAIL_FROM_NAME ?? "Karey Vet"}" <${from}>`,
     to: input.to,
-    subject: "Restablece tu contrasena en Karey Vet",
+    subject: "Restablece tu contraseña en Karey Vet",
     text,
-    html: `<p>${name}, recibimos una solicitud para restablecer tu contrasena en Karey Vet.</p><p><a href="${input.resetUrl}">Restablecer contrasena</a></p><p>Si no solicitaste este cambio, ignora este correo.</p>`,
+    html: `<p>${name}, recibimos una solicitud para restablecer tu contraseña en Karey Vet.</p><p><a href="${input.resetUrl}">Restablecer contraseña</a></p><p>Si no solicitaste este cambio, ignora este correo.</p>`,
   });
 }

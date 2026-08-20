@@ -184,8 +184,14 @@ export async function POST(req: Request) {
   // EXISTING: requiere ambos (tu zod ya lo exige, pero lo mantenemos seguro)
   if (isExisting) {
     if (!input.petId || !input.clientId) {
-      return NextResponse.json(
-        { error: "Datos inválidos", details: { petId: "Requerido", clientId: "Requerido" } },
+        return NextResponse.json(
+        {
+          error: "Faltan datos para registrar el turno.",
+          details: {
+            petId: "Selecciona un paciente registrado.",
+            clientId: "Selecciona el cliente responsable.",
+          },
+        },
         { status: 422 }
       );
     }
@@ -201,22 +207,34 @@ export async function POST(req: Request) {
     });
 
     if (!pet) {
-      return NextResponse.json({ error: "Mascota no encontrada en esta clínica" }, { status: 404 });
+      return NextResponse.json(
+        { error: "No encontramos el paciente seleccionado en esta clínica." },
+        { status: 404 }
+      );
     }
     if (!client) {
-      return NextResponse.json({ error: "Cliente no encontrado en esta clínica" }, { status: 404 });
+      return NextResponse.json(
+        { error: "No encontramos el cliente seleccionado en esta clínica." },
+        { status: 404 }
+      );
     }
     if (pet.clientId !== client.id) {
       return NextResponse.json(
-        { error: "Datos inválidos", details: { clientId: "Esta mascota no pertenece a ese cliente" } },
+        {
+          error: "Los datos del paciente no coinciden con el cliente seleccionado.",
+          details: { clientId: "Este paciente no pertenece a ese cliente." },
+        },
         { status: 422 }
       );
     }
 
     // Si tu DB requiere phone obligatorio, mejor falla claro aquí:
     if (!client.phone || client.phone.trim().length < 5) {
-      return NextResponse.json(
-        { error: "El cliente no tiene teléfono válido. Agrégalo al cliente o usa walk-in." },
+        return NextResponse.json(
+        {
+          error:
+            "El cliente no tiene un teléfono válido. Actualiza ese dato o registra este caso como paciente sin cita.",
+        },
         { status: 422 }
       );
     }
