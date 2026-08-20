@@ -118,8 +118,17 @@ import { Switch } from "@/components/ui/switch";
 type Option = { value: string | number; label: string };
 type FieldType = "text" | "email" | "password" | "number" | "textarea" | "date" | "time" | "select" | "switch";
 type FieldValue = string | number | boolean | null | undefined;
+type FormFieldPrimitiveValue = string | number | boolean;
+
 export type FormFieldChangeEvent = {
-  target: { name: string; value: string | number | boolean };
+  name: string;
+  value: FormFieldPrimitiveValue;
+  target: {
+    name: string;
+    value: FormFieldPrimitiveValue;
+    type?: string;
+    checked?: boolean;
+  };
 };
 
 type FormFieldProps = {
@@ -151,8 +160,17 @@ export default function FormField({
   error = "",
   inputMask,
 }: FormFieldProps) {
-  const emitChange = (newValue: string | number | boolean) => {
-    onChange?.({ target: { name, value: newValue } });
+  const emitChange = (newValue: FormFieldPrimitiveValue, metadata?: { checked?: boolean; type?: string }) => {
+    onChange?.({
+      name,
+      value: newValue,
+      target: {
+        name,
+        value: newValue,
+        checked: metadata?.checked,
+        type: metadata?.type,
+      },
+    });
   };
 
   const safeValue = value === undefined || value === null ? "" : String(value);
@@ -172,7 +190,17 @@ export default function FormField({
             id={name}
             name={name}
             value={typeof value === "boolean" ? "" : (value ?? "")}
-            onChange={(event) => onChange?.({ target: { name, value: event.target.value } })}
+            onChange={(event) =>
+              onChange?.({
+                name,
+                value: event.target.value,
+                target: {
+                  name,
+                  value: event.target.value,
+                  type: event.target.type,
+                },
+              })
+            }
             placeholder={placeholder}
             disabled={disabled}
             className="bg-input"
@@ -205,7 +233,7 @@ export default function FormField({
             <Switch
               id={name}
               checked={Boolean(value)}
-              onCheckedChange={(checked) => emitChange(checked)}
+              onCheckedChange={(checked) => emitChange(checked, { checked, type: "checkbox" })}
               disabled={disabled}
             />
             <Label htmlFor={name} className="text-sm text-muted-foreground">
@@ -221,7 +249,18 @@ export default function FormField({
             name={name}
             type={type}
             value={typeof value === "boolean" ? "" : (value ?? "")}
-            onChange={(event) => onChange?.({ target: { name, value: event.target.value } })}
+            onChange={(event) =>
+              onChange?.({
+                name,
+                value: event.target.type === "checkbox" ? event.target.checked : event.target.value,
+                target: {
+                  name,
+                  value: event.target.type === "checkbox" ? event.target.checked : event.target.value,
+                  checked: event.target.checked,
+                  type: event.target.type,
+                },
+              })
+            }
             placeholder={placeholder}
             disabled={disabled}
             className="bg-input"
