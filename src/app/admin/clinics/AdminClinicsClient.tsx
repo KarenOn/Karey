@@ -593,7 +593,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-owner-password">Contrasena inicial</Label>
+                <Label htmlFor="create-owner-password">Contraseña inicial</Label>
                 <Input
                   id="create-owner-password"
                   type="text"

@@ -53,7 +53,7 @@
 </g>
 
             <text x="0" y="88" fill="#13283F" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="44" font-weight="800">Mi perfil</text>
-            <text x="0" y="122" fill="#13283FB8" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="21"><tspan x="0" dy="0">Datos personales, avatar, cargo, bio y cambio de</tspan><tspan x="0" dy="30">contrasena.</tspan></text>
+            <text x="0" y="122" fill="#13283FB8" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="21"><tspan x="0" dy="0">Datos personales, avatar, cargo, bio y cambio de</tspan><tspan x="0" dy="30">contraseña.</tspan></text>
 
             <g transform="translate(0 186)" filter="url(#shadow)">
               <rect width="1284" height="168" rx="32" fill="white" fill-opacity="0.92" stroke="#16324F" stroke-opacity="0.08"/>
@@ -137,7 +137,7 @@
 <g transform="translate(0 48)">
   <rect width="470" height="42" rx="18" fill="#F4F8FB"/>
   <rect x="12" y="8" width="74" height="26" rx="13" fill="#F59E0B2A"/>
-  <text x="24" y="25" fill="#A16207" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="11" font-weight="800" letter-spacing="0.8">Contrasena actual</text>
+  <text x="24" y="25" fill="#A16207" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="11" font-weight="800" letter-spacing="0.8">Contraseña actual</text>
   <text x="102" y="25" fill="#13283F" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="13" font-weight="700">Campo seguro</text>
   <text x="382" y="25" fill="#13283FA8" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="12" font-weight="500">Required</text>
 </g>
@@ -145,7 +145,7 @@
 <g transform="translate(0 102)">
   <rect width="470" height="42" rx="18" fill="#F4F8FB"/>
   <rect x="12" y="8" width="74" height="26" rx="13" fill="#F59E0B2A"/>
-  <text x="24" y="25" fill="#A16207" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="11" font-weight="800" letter-spacing="0.8">Nueva contrasena</text>
+  <text x="24" y="25" fill="#A16207" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="11" font-weight="800" letter-spacing="0.8">Nueva contraseña</text>
   <text x="102" y="25" fill="#13283F" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="13" font-weight="700">Minimo 8 caracteres</text>
   <text x="382" y="25" fill="#13283FA8" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="12" font-weight="500">Input</text>
 </g>

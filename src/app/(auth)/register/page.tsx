@@ -7,6 +7,10 @@ import { User, Mail, Lock, Eye, PawPrint, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import {
+  getFriendlyAuthMessage,
+  getFriendlyVerificationMessage,
+} from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -26,7 +30,7 @@ export default function RegisterPage() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Las contrasenas no coinciden");
+      setError("Las contraseñas no coinciden.");
       return;
     }
 
@@ -64,7 +68,7 @@ export default function RegisterPage() {
           rememberMe: true,
         },
         {
-          onError: (ctx) => setError(ctx.error.message),
+          onError: () => setError("La cuenta fue creada, pero no pudimos iniciar sesión automáticamente."),
         }
       );
 
@@ -91,18 +95,19 @@ export default function RegisterPage() {
           | null;
 
         toast.warning(
-          verificationPayload?.message ??
-            verificationPayload?.error ??
-            "No se pudo enviar el correo de verificación."
+          getFriendlyVerificationMessage(
+            verificationPayload?.message ?? verificationPayload?.error
+          )
         );
       }
 
       router.push("/today");
     } catch (submitError) {
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "No se pudo completar el registro."
+        getFriendlyAuthMessage(
+          submitError instanceof Error ? submitError.message : null,
+          "register"
+        )
       );
     } finally {
       setIsLoading(false);
@@ -129,8 +134,8 @@ export default function RegisterPage() {
                 <ShieldCheck className="size-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-extrabold text-foreground">Acceso seguro con Better Auth</p>
-                <p className="text-sm text-muted-foreground">Flujo moderno con sesiones protegidas para clinicas y staff.</p>
+                <p className="text-sm font-extrabold text-foreground">Acceso seguro</p>
+                <p className="text-sm text-muted-foreground">Tu cuenta y tus sesiones quedan protegidas para trabajar con tranquilidad.</p>
               </div>
             </div>
           </div>
@@ -154,43 +159,44 @@ export default function RegisterPage() {
               <label className="mb-2 block text-sm font-semibold text-foreground/88">Nombre completo</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} type="text" placeholder="Dra. Karen Roldan" className="h-12 pl-11 pr-4 font-semibold" required />
+                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} type="text" placeholder="Dra. Karen Roldan" autoComplete="name" className="h-12 pl-11 pr-4 font-semibold" required />
               </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Correo electronico</label>
+              <label className="mb-2 block text-sm font-semibold text-foreground/88">Correo electrónico</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" className="h-12 pl-11 pr-4 font-semibold" required />
+                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="nombre@ejemplo.com" autoComplete="email" className="h-12 pl-11 pr-4 font-semibold" required />
               </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Contrasena</label>
+              <label className="mb-2 block text-sm font-semibold text-foreground/88">Contraseña</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Minimo 8 caracteres" className="h-12 pl-11 pr-12 font-semibold" required minLength={8} />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword((v) => !v)} aria-label="Mostrar contrasena">
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Crea una contraseña de al menos 8 caracteres" autoComplete="new-password" className="h-12 pl-11 pr-12 font-semibold" required minLength={8} />
+                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword((v) => !v)} aria-label="Mostrar contraseña">
                   <Eye className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Confirmar contrasena</label>
+              <label className="mb-2 block text-sm font-semibold text-foreground/88">Confirmar contraseña</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Repite la contrasena"
+                  placeholder="Vuelve a escribir la contraseña"
+                  autoComplete="new-password"
                   className="h-12 pl-11 pr-12 font-semibold"
                   required
                   minLength={8}
                 />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowConfirmPassword((v) => !v)} aria-label="Mostrar confirmacion">
+                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowConfirmPassword((v) => !v)} aria-label="Mostrar confirmación de contraseña">
                   <Eye className="w-4 h-4" />
                 </button>
               </div>
@@ -202,7 +208,7 @@ export default function RegisterPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            ¿Ya tienes cuenta? <Link href="/login" className="font-semibold text-foreground">Inicia sesion</Link>
+            ¿Ya tienes cuenta? <Link href="/login" className="font-semibold text-foreground">Inicia sesión</Link>
           </p>
         </div>
       </div>

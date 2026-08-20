@@ -45,7 +45,7 @@ SCREENS: list[ScreenSpec] = [
         right_title="Formulario",
         right_rows=[
             ("Correo electronico", "you@example.com", "MUTED"),
-            ("Contrasena", "********", "MUTED"),
+            ("Contraseña", "********", "MUTED"),
             ("Accion", "Entrar al sistema", "TEAL"),
         ],
     ),
@@ -251,7 +251,7 @@ SCREENS: list[ScreenSpec] = [
         slug="profile",
         nav="Profile",
         page_title="Perfil de usuario",
-        subtitle="Datos personales, avatar, cargo, bio y cambio de contrasena.",
+        subtitle="Datos personales, avatar, cargo, bio y cambio de contraseña.",
         hero_badge="Cuenta personal",
         hero_title="Mi perfil",
         hero_description="Vista personal del usuario con datos de identidad, rol, avatar y seguridad.",
@@ -264,8 +264,8 @@ SCREENS: list[ScreenSpec] = [
         ],
         right_title="Seguridad",
         right_rows=[
-            ("Contrasena actual", "Campo seguro", "Required"),
-            ("Nueva contrasena", "Minimo 8 caracteres", "Input"),
+            ("Contraseña actual", "Campo seguro", "Required"),
+            ("Nueva contraseña", "Minimo 8 caracteres", "Input"),
             ("Revocar sesiones", "Switch", "Opcional"),
         ],
     ),

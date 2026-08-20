@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   buildInitialClinicName,
   createClinicWithOwner,
 } from "@/lib/admin-clinics";
+import { getFriendlyAuthMessage, getFriendlyWelcomeEmailWarning } from "@/lib/auth-feedback";
 import { getAppUrl, sendAppWelcomeEmail } from "@/lib/email";
 
 const registerSchema = z.object({
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Datos inválidos", details: parsed.error.flatten() },
+        { error: "Revisa los datos del formulario e inténtalo nuevamente.", details: parsed.error.flatten() },
         { status: 422 }
       );
     }
@@ -47,11 +48,8 @@ export async function POST(req: Request) {
         userName: fullName,
         variant: "signup",
       });
-    } catch (emailError) {
-      emailWarning =
-        emailError instanceof Error
-          ? `La cuenta se creó, pero no se pudo enviar el correo de bienvenida: ${emailError.message}`
-          : "La cuenta se creó, pero no se pudo enviar el correo de bienvenida.";
+    } catch {
+      emailWarning = getFriendlyWelcomeEmailWarning();
     }
 
     return NextResponse.json(
@@ -61,13 +59,9 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "No se pudo completar el registro";
+    const message = error instanceof Error ? error.message : null;
     const status = message === "OWNER_EMAIL_ALREADY_EXISTS" ? 409 : 500;
-    const errorMessage =
-      message === "OWNER_EMAIL_ALREADY_EXISTS"
-        ? "Ya existe una cuenta con ese correo."
-        : message;
+    const errorMessage = getFriendlyAuthMessage(message, "register");
 
     return NextResponse.json({ error: errorMessage }, { status });
   }

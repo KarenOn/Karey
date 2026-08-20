@@ -507,6 +507,8 @@ export default function UserProfilePage() {
                     setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
                   }
                   type="password"
+                  placeholder="Escribe tu contraseña actual"
+                  autoComplete="current-password"
                   value={passwordForm.currentPassword}
                 />
               </div>
@@ -519,6 +521,8 @@ export default function UserProfilePage() {
                     setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))
                   }
                   type="password"
+                  placeholder="Escribe una nueva contraseña"
+                  autoComplete="new-password"
                   value={passwordForm.newPassword}
                 />
               </div>
@@ -531,6 +535,8 @@ export default function UserProfilePage() {
                     setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))
                   }
                   type="password"
+                  placeholder="Vuelve a escribir la nueva contraseña"
+                  autoComplete="new-password"
                   value={passwordForm.confirmPassword}
                 />
               </div>
