@@ -35,7 +35,7 @@
 //       {label && (
 //         <Label htmlFor={name} className="text-sm font-medium text-slate-700">
 //           {label}
-//           {required && <span className="text-red-500 ml-1">*</span>}
+//           {required ? <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">(Obligatorio)</span> : <span className="ml-2 text-xs text-muted-foreground">(Opcional)</span>}
 //         </Label>
 //       )}
       
@@ -162,7 +162,7 @@ export default function FormField({
       {label && (
         <Label htmlFor={name} className="text-sm font-semibold text-foreground/90">
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required ? <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">(Obligatorio)</span> : <span className="ml-2 text-xs text-muted-foreground">(Opcional)</span>}
         </Label>
       )}
 

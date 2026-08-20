@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { PetCreateSchema } from "@/lib/validators/pet";
@@ -10,6 +10,20 @@ function zodDetails(err: { issues?: Array<{ path?: PropertyKey[]; message: strin
       message: issue.message,
     })) ?? []
   );
+}
+
+function isDuplicateMicrochipError(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const knownError = error as { code?: string; meta?: { target?: unknown } };
+  if (knownError.code !== "P2002") {
+    return false;
+  }
+
+  const target = Array.isArray(knownError.meta?.target) ? knownError.meta.target : [];
+  return target.some((value) => String(value) === "microchip");
 }
 
 export async function GET() {
@@ -61,36 +75,47 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Cliente invalido" }, { status: 404 });
   }
 
-  const created = await prisma.pet.create({
-    data: {
-      clinicId,
-      clientId: input.clientId,
-      name: input.name,
-      species: input.species,
-      sex: input.sex,
-      breed: input.breed ?? null,
-      color: input.color ?? null,
-      birthDate: input.birthDate ?? null,
-      microchip: input.microchip ?? null,
-      weightKg: input.weightKg ?? null,
-      notes: input.notes ?? null,
-    },
-    select: {
-      id: true,
-      name: true,
-      species: true,
-      sex: true,
-      breed: true,
-      color: true,
-      birthDate: true,
-      microchip: true,
-      weightKg: true,
-      notes: true,
-      clientId: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  try {
+    const created = await prisma.pet.create({
+      data: {
+        clinicId,
+        clientId: input.clientId,
+        name: input.name,
+        species: input.species,
+        sex: input.sex,
+        breed: input.breed ?? null,
+        color: input.color ?? null,
+        birthDate: input.birthDate ?? null,
+        microchip: input.microchip ?? null,
+        weightKg: input.weightKg ?? null,
+        notes: input.notes ?? null,
+      },
+      select: {
+        id: true,
+        name: true,
+        species: true,
+        sex: true,
+        breed: true,
+        color: true,
+        birthDate: true,
+        microchip: true,
+        weightKg: true,
+        notes: true,
+        clientId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-  return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    if (isDuplicateMicrochipError(error)) {
+      return NextResponse.json(
+        { error: "Ya existe otro paciente con ese microchip en esta clinica." },
+        { status: 409 }
+      );
+    }
+
+    throw error;
+  }
 }

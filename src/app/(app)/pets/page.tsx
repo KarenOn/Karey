@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Eye, User as UserIcon, PawPrint } from "lucide-react";
 import { format, differenceInYears, differenceInMonths, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { toast } from "sonner";
 
 import DataTable from "@/components/shared/Datatable";
 import Modal from "@/components/shared/Modal";
-import FormField from "@/components/shared/FormField";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 
-// (opcional) si ya creaste tu ModalDelete shared, úsalo:
+// (opcional) si ya creaste tu ModalDelete shared, Ãºsalo:
 import ModalDelete from "@/components/shared/ModalDelete";
 
 import { PetCreateSchema, PetUpdateSchema } from "@/lib/validators/pet";
@@ -24,19 +25,19 @@ import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 const speciesEmoji: Record<string, string> = {
-  DOG: "🐕",
-  CAT: "🐱",
-  BIRD: "🦜",
-  RABBIT: "🐰",
-  OTHER: "🐾",
+  DOG: "ðŸ•",
+  CAT: "ðŸ±",
+  BIRD: "ðŸ¦œ",
+  RABBIT: "ðŸ°",
+  OTHER: "ðŸ¾",
 };
 
 const speciesOptions = [
-  { value: "DOG", label: "🐕 Perro" },
-  { value: "CAT", label: "🐱 Gato" },
-  { value: "BIRD", label: "🦜 Ave" },
-  { value: "RABBIT", label: "🐰 Conejo" },
-  { value: "OTHER", label: "🐾 Otro" },
+  { value: "DOG", label: "ðŸ• Perro" },
+  { value: "CAT", label: "ðŸ± Gato" },
+  { value: "BIRD", label: "ðŸ¦œ Ave" },
+  { value: "RABBIT", label: "ðŸ° Conejo" },
+  { value: "OTHER", label: "ðŸ¾ Otro" },
 ];
 
 const sexOptions = [
@@ -136,12 +137,12 @@ export default function PatientsPage() {
     if (!birthDateISO) return null;
     const d = parseISO(birthDateISO);
     const years = differenceInYears(new Date(), d);
-    if (years > 0) return `${years} año${years > 1 ? "s" : ""}`;
+    if (years > 0) return `${years} aÃ±o${years > 1 ? "s" : ""}`;
     const months = differenceInMonths(new Date(), d);
     return `${months} mes${months > 1 ? "es" : ""}`;
   };
 
-  const handleChange = (e: any) => {
+  const handleChange = (e: FormFieldChangeEvent) => {
     const value =
       e?.target?.type === "checkbox" ? e.target.checked : e?.target?.value ?? e;
     setFormData((prev) => ({ ...prev, [e.target.name]: value }));
@@ -150,7 +151,7 @@ export default function PatientsPage() {
   const openCreate = () => {
     if (!canCreatePets) return;
     setEditingPet(null);
-    setFormData({ sex: "UNKNOWN" });
+    setFormData({ ...emptyForm, sex: "UNKNOWN" });
     setModalOpen(true);
   };
 
@@ -178,29 +179,32 @@ export default function PatientsPage() {
       return;
     }
 
-    if (editingPet) {
-      console.log("Updating pet with data:", formData);
-      const parsed = PetUpdateSchema.safeParse(formData);
-      if (!parsed.success) {
-        console.error(parsed.error.flatten());
-        alert("Revisa los campos del formulario (update).");
-        return;
+    try {
+      if (editingPet) {
+        const parsed = PetUpdateSchema.safeParse(formData);
+        if (!parsed.success) {
+          console.error(parsed.error.flatten());
+          alert("Revisa los campos del formulario (update).");
+          return;
+        }
+        await apiUpdatePet(editingPet.id, parsed.data);
+      } else {
+        const parsed = PetCreateSchema.safeParse(formData);
+        if (!parsed.success) {
+          console.error(parsed.error.flatten());
+          alert("Revisa los campos del formulario (create).");
+          return;
+        }
+        await apiCreatePet(parsed.data);
       }
-      await apiUpdatePet(editingPet.id, parsed.data);
-    } else {
-      const parsed = PetCreateSchema.safeParse(formData);
-      if (!parsed.success) {
-        console.error(parsed.error.flatten());
-        alert("Revisa los campos del formulario (create).");
-        return;
-      }
-      await apiCreatePet(parsed.data);
-    }
 
-    setModalOpen(false);
-    setEditingPet(null);
-    setFormData({ sex: "UNKNOWN" });
-    await refreshAll();
+      setModalOpen(false);
+      setEditingPet(null);
+      setFormData({ sex: "UNKNOWN" });
+      await refreshAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo guardar el paciente.");
+    }
   };
 
   const confirmDelete = (pet: PetRow) => {
@@ -209,12 +213,18 @@ export default function PatientsPage() {
     setDeleteOpen(true);
   };
 
+
   const doDelete = async () => {
     if (!deleteTarget) return;
-    await apiDeletePet(deleteTarget.id);
-    setDeleteOpen(false);
-    setDeleteTarget(null);
-    await refreshAll();
+
+    try {
+      await apiDeletePet(deleteTarget.id);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      await refreshAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo eliminar el paciente.");
+    }
   };
 
   const petColumns = [
@@ -223,12 +233,12 @@ export default function PatientsPage() {
       cell: (row: PetRow) => (
         <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] border border-border/70 bg-secondary text-2xl">
-            {speciesEmoji[row.species] || "🐾"}
+            {speciesEmoji[row.species] || "ðŸ¾"}
           </div>
           <div>
               <p className="font-semibold text-foreground">{row.name}</p>
               <p className="text-sm text-muted-foreground">
-              {row.species} • {row.breed || "Sin raza"}
+              {row.species} â€¢ {row.breed || "Sin raza"}
             </p>
           </div>
         </div>
@@ -287,7 +297,7 @@ export default function PatientsPage() {
       cell: (row: VaccinationRow) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-pink-50 flex items-center justify-center text-xl">
-            {row.pet ? speciesEmoji[row.pet.species] : "🐾"}
+            {row.pet ? speciesEmoji[row.pet.species] : "ðŸ¾"}
           </div>
           <span className="font-medium text-foreground">{row.pet?.name || "-"}</span>
         </div>
@@ -295,12 +305,12 @@ export default function PatientsPage() {
     },
     { header: "Vacuna", cell: (row: VaccinationRow) => row.vaccine?.name ?? "-" },
     {
-      header: "Fecha Aplicación",
+      header: "Fecha AplicaciÃ³n",
       cell: (row: VaccinationRow) =>
         format(parseISO(row.appliedAt), "d MMM yyyy", { locale: es }),
     },
     {
-      header: "Próxima Dosis",
+      header: "PrÃ³xima Dosis",
       cell: (row: VaccinationRow) =>
         row.nextDueAt
           ? format(parseISO(row.nextDueAt), "d MMM yyyy", { locale: es })
@@ -321,8 +331,8 @@ export default function PatientsPage() {
       {/* <div className="app-page-hero flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="app-kicker mb-3 border-0">Pacientes y vacunas</div>
-          <h2 className="app-heading text-3xl sm:text-4xl">Mascotas con mejor contexto y una lectura mÃ¡s cÃ³moda.</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Gestiona pacientes, propietarios y su historial con una interfaz mÃ¡s densa, amable y consistente con el resto de la app.</p>
+          <h2 className="app-heading text-3xl sm:text-4xl">Mascotas con mejor contexto y una lectura mÃƒÂ¡s cÃƒÂ³moda.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Gestiona pacientes, propietarios y su historial con una interfaz mÃƒÂ¡s densa, amable y consistente con el resto de la app.</p>
         </div>
         <Button
           onClick={openCreate}
@@ -340,11 +350,7 @@ export default function PatientsPage() {
           canCreatePets ? (
             <Button
               className="gap-2"
-              onClick={() => {
-                setEditingPet(null);
-                setFormData(emptyForm);
-                setModalOpen(true);
-              }}
+              onClick={openCreate}
             >
               <Plus className="w-4 h-4" />
               Nuevo paciente
@@ -359,7 +365,7 @@ export default function PatientsPage() {
         ]}
       />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v === "vaccinations" ? "vaccinations" : "patients")}>
         <TabsList>
           <TabsTrigger value="patients">Pacientes</TabsTrigger>
           <TabsTrigger value="vaccinations">Vacunas</TabsTrigger>
@@ -450,7 +456,7 @@ export default function PatientsPage() {
         onOpenChange={setDeleteOpen}
         title="Eliminar paciente"
         itemName={deleteTarget?.name}
-        // description={`¿Seguro que deseas eliminar a "${deleteTarget?.name}"? Esta acción no se puede deshacer.`}
+        // description={`Â¿Seguro que deseas eliminar a "${deleteTarget?.name}"? Esta acciÃ³n no se puede deshacer.`}
         // dangerText="Eliminar"
         // onClose={() => { setDeleteOpen(false); setDeleteTarget(null); }}
         onConfirm={doDelete}
