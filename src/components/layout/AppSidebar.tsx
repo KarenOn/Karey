@@ -66,17 +66,17 @@ type NavItem = {
 };
 
 const pageDescriptions: Record<string, string> = {
-  "/today": "Centro operativo del día con citas, walk-ins y facturación rápida.",
-  "/dashboard": "Resumen operativo con foco clinico, agenda y finanzas.",
-  "/clients": "Propietarios, contacto y contexto util en un solo vistazo.",
-  "/today-turns": "Controla el flujo del dia y el estado de cada atencion.",
-  "/pets": "Pacientes, especies, vacunas y seguimiento clinico.",
-  "/appointments": "Agenda visual con prioridad a tiempos y asistencia.",
-  "/inventory": "Stock, alertas y reposicion con informacion accionable.",
-  "/invoices": "Cobros, estados y documentos con lectura rapida.",
-  "/services": "Catalogo clinico uniforme y facil de mantener.",
-  "/employees": "Equipo, roles y operacion interna de la clinica.",
-  "/clinic-profile": "Configuracion general, identidad y operacion de la clinica.",
+  "/today": "Consulta las citas, pacientes en espera y cobros pendientes del día.",
+  "/dashboard": "Resumen de la clínica con indicadores, agenda y facturación.",
+  "/clients": "Consulta los datos de contacto y el historial básico de cada cliente.",
+  "/today-turns": "Controla las atenciones sin cita y el estado de cada paciente.",
+  "/pets": "Consulta pacientes, especies, vacunas y seguimiento clínico.",
+  "/appointments": "Organiza la agenda y confirma la asistencia de cada cita.",
+  "/inventory": "Controla existencias, alertas y movimientos del inventario.",
+  "/invoices": "Consulta cobros, estados y documentos de facturación.",
+  "/services": "Mantén actualizado el catálogo de servicios de la clínica.",
+  "/employees": "Gestiona el equipo, los roles y los permisos de la clínica.",
+  "/clinic-profile": "Actualiza los datos, la identidad y la operación general de la clínica.",
 };
 
 type AppSidebarProps = {
@@ -117,11 +117,11 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         moduleKey: "today",
       },
       {
-        name: "Dashboard",
+        name: "Resumen",
         icon: LayoutDashboard,
         pageKey: "Dashboard",
         href: "/dashboard",
-        hint: "Panel de control",
+        hint: "Indicadores",
         moduleKey: "dashboard",
       },
       {
@@ -161,11 +161,11 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         icon: Package,
         pageKey: "Inventory",
         href: "/inventory",
-        hint: "Stock",
+        hint: "Existencias",
         moduleKey: "inventory",
       },
       {
-        name: "Facturacion",
+        name: "Facturación",
         icon: FileText,
         pageKey: "Invoices",
         href: "/invoices",
@@ -181,11 +181,11 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         moduleKey: "services",
       },
       {
-        name: "Empleados",
+        name: "Equipo",
         icon: IdCardLanyard,
         pageKey: "Employees",
         href: "/employees",
-        hint: "Equipo",
+        hint: "Roles y permisos",
         moduleKey: "employees",
       },
     ],
@@ -194,7 +194,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
   const clinicCta = useMemo(
     () => ({
-      name: "Mi Clinica",
+      name: "Clínica",
       pageKey: "ClinicProfile",
       href: "/clinic-profile",
       moduleKey: "clinicProfile" as const,
@@ -257,7 +257,6 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   const currentTitle = useMemo(() => {
     const item = availableNavigation.find((navItem) => pathname === navItem.href || pathname.startsWith(navItem.href + "/"));
     if (!item) return currentUser?.clinicName ?? "Karey Vet";
-    if (item.pageKey === "Dashboard") return "Bienvenido/a";
     return item.name;
   }, [availableNavigation, currentUser?.clinicName, pathname]);
 
@@ -266,9 +265,9 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
       (item) => pathname === item.href || pathname.startsWith(item.href + "/")
     );
     if (pathname === "/profile") {
-      return "Gestiona tu identidad, tus datos de contacto y la seguridad de tu cuenta.";
+      return "Actualiza tu perfil, tus datos de contacto y la seguridad de tu cuenta.";
     }
-    return current ? pageDescriptions[current.href] : "Sistema de gestion veterinaria con una vista clara y accionable.";
+    return current ? pageDescriptions[current.href] : "Sistema de gestión veterinaria con una vista clara y fácil de usar.";
   }, [availableNavigation, clinicCta, pathname]);
 
   const currentModuleAllowed = useMemo(() => {
@@ -342,7 +341,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0">
                     <p className="font-display truncate text-xl font-semibold text-foreground">Karey Vet</p>
                     <p className="mt-0.5 truncate text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Gestion veterinaria
+                      Gestión veterinaria
                     </p>
                   </motion.div>
                 )}
@@ -354,7 +353,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                   "hidden size-9 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition hover:text-foreground lg:flex",
                   isDark ? "border-white/20 bg-white/6" : "border-border/70 bg-background/70"
                 )}
-                aria-label="Collapse sidebar"
+                aria-label="Contraer menú lateral"
               >
                 <ChevronRight className={`size-4 transition-transform ${collapsed ? "" : "rotate-180"}`} />
               </button>
@@ -455,7 +454,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                 <button
                   onClick={() => setSidebarOpen(true)}
                   className="rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background lg:hidden"
-                  aria-label="Open sidebar"
+                  aria-label="Abrir menú lateral"
                 >
                   <Menu className="size-5 text-foreground" />
                 </button>
@@ -469,7 +468,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
               <div className="flex items-center gap-2 lg:gap-3">
                 <button
                   className="relative rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background"
-                  aria-label="Notifications"
+                  aria-label="Notificaciones"
                 >
                   <Bell className="size-4 text-muted-foreground" />
                   <span className="absolute right-2 top-2 size-2 rounded-full bg-(--brand-gold)" />
@@ -505,7 +504,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     <DropdownMenuSeparator />
                     {currentUser?.isGlobalAdmin ? (
                       <DropdownMenuItem asChild className="font-semibold">
-                        <Link href="/admin/clinics">Panel admin</Link>
+                        <Link href="/admin/clinics">Administración</Link>
                       </DropdownMenuItem>
                     ) : null}
                     <DropdownMenuItem asChild className="font-semibold">
@@ -514,7 +513,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="font-semibold" onClick={() => handleSignOut()} variant="destructive">
                       <LogOut className="size-4" />
-                      Cerrar sesion
+                      Cerrar sesión
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -524,13 +523,13 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     <Button variant="outline" size="icon" className="relative">
                       <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
                       <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-                      <span className="sr-only">Toggle theme</span>
+                      <span className="sr-only">Cambiar tema</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("light")}>Claro</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("dark")}>Oscuro</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("system")}>Usar sistema</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -548,10 +547,10 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-foreground">No tienes acceso a este modulo</h2>
+                    <h2 className="text-xl font-semibold text-foreground">No tienes acceso a esta sección</h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Tu rol actual no incluye permisos para ver esta seccion. Si deberias tener acceso,
-                      revisa tu rol en empleados o vuelve a iniciar sesion.
+                      Tu rol actual no incluye permisos para entrar aquí. Si necesitas acceso,
+                      comunícate con el administrador de la clínica.
                     </p>
                   </div>
                 </div>

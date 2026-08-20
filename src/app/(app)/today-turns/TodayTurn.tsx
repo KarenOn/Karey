@@ -120,9 +120,21 @@ export type TodayTurnCreateDTO = {
   // opcional: arrivalAt si quisieras setearlo desde el cliente
 };
 
+function getErrorText(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 /** =========================
  * API helpers (fetch)
  * ========================= */
+
+async function getApiErrorMessage(response: Response, fallback: string) {
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: string }
+    | null;
+
+  return payload?.error ?? fallback;
+}
 
 async function apiListTodayTurns(date: string): Promise<TodayTurnDTO[]> {
   const res = await fetch(`/api/today-turns?date=${encodeURIComponent(date)}`, {
@@ -130,7 +142,9 @@ async function apiListTodayTurns(date: string): Promise<TodayTurnDTO[]> {
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
   });
-  if (!res.ok) throw new Error("Error listando turnos de hoy");
+  if (!res.ok) {
+    throw new Error(await getApiErrorMessage(res, "No pudimos cargar los turnos del día."));
+  }
   return res.json();
 }
 
@@ -140,7 +154,9 @@ async function apiCreateTodayTurn(data: TodayTurnCreateDTO): Promise<TodayTurnDT
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Error creando turno");
+  if (!res.ok) {
+    throw new Error(await getApiErrorMessage(res, "No pudimos registrar el turno."));
+  }
   return res.json();
 }
 
@@ -150,7 +166,9 @@ async function apiUpdateTodayTurnStatus(id: number, status: TodayTurnStatus): Pr
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  if (!res.ok) throw new Error("Error cambiando estado del turno");
+  if (!res.ok) {
+    throw new Error(await getApiErrorMessage(res, "No pudimos actualizar el estado del turno."));
+  }
   return res.json();
 }
 
@@ -159,13 +177,17 @@ async function apiNotifyTodayTurn(id: number): Promise<TodayTurnDTO> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
-  if (!res.ok) throw new Error("Error notificando al dueño");
+  if (!res.ok) {
+    throw new Error(await getApiErrorMessage(res, "No pudimos registrar la notificación."));
+  }
   return res.json();
 }
 
 async function apiDeleteTodayTurn(id: number): Promise<void> {
   const res = await fetch(`/api/today-turns/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Error eliminando turno");
+  if (!res.ok) {
+    throw new Error(await getApiErrorMessage(res, "No pudimos eliminar el turno."));
+  }
 }
 
 /** =========================
@@ -179,9 +201,9 @@ const serviceTypes: Array<{
   color: string;
   defaultName: string;
 }> = [
-  { value: "GROOMING", label: "Peluquería", icon: Scissors, color: "bg-pink-500", defaultName: "Baño y Corte" },
-  { value: "BATH", label: "Baño", icon: Droplets, color: "bg-blue-500", defaultName: "Baño Completo" },
-  { value: "SURGERY", label: "Cirugía", icon: Syringe, color: "bg-red-500", defaultName: "Procedimiento Quirúrgico" },
+  { value: "GROOMING", label: "Peluquería", icon: Scissors, color: "bg-pink-500", defaultName: "Baño y corte" },
+  { value: "BATH", label: "Baño", icon: Droplets, color: "bg-blue-500", defaultName: "Baño completo" },
+  { value: "SURGERY", label: "Cirugía", icon: Syringe, color: "bg-red-500", defaultName: "Procedimiento quirúrgico" },
   { value: "HOSPITALIZATION", label: "Hospitalización", icon: Heart, color: "bg-amber-500", defaultName: "Hospitalización" },
   { value: "OTHER", label: "Otro", icon: Sparkles, color: "bg-primary", defaultName: "Otro Servicio" },
 ];
@@ -202,7 +224,7 @@ const statusConfig: Record<
     accentRgb: "rgb(148 163 184)", // slate-400
   },
   IN_PROGRESS: {
-    label: "En proceso",
+    label: "En atención",
     color: "border-amber-500/20 bg-amber-500/12 text-amber-700 dark:text-amber-300",
     columnBg: "bg-amber-500/8",
     accentRgb: "rgb(251 191 36)", // amber-400
@@ -262,21 +284,12 @@ export default function TodayTurnsClient({
 
   const columns: { status: TodayTurnStatus; title: string }[] = useMemo(
     () => [
-      { status: "WAITING", title: "En Espera" },
-      { status: "IN_PROGRESS", title: "En Proceso" },
-      { status: "READY", title: "Listo para Recoger" },
+      { status: "WAITING", title: "En espera" },
+      { status: "IN_PROGRESS", title: "En atención" },
+      { status: "READY", title: "Listo para entregar" },
       { status: "DELIVERED", title: "Entregado" },
     ],
     []
-  );
-
-  const petOptions = useMemo(
-    () =>
-      pets.map((p) => ({
-        value: String(p.id), // 👈 importante: Select en shadcn usa strings
-        label: `${p.name} • ${p.client.fullName}`,
-      })),
-    [pets]
   );
 
   const refresh = async () => {
@@ -285,9 +298,17 @@ export default function TodayTurnsClient({
     try {
       const fresh = await apiListTodayTurns(date);
       setTurns(fresh);
-      setAlertMsg({ type: "success", title: "Actualizado", desc: "Turnos cargados correctamente." });
-    } catch (e: any) {
-      setAlertMsg({ type: "error", title: "Error", desc: e?.message ?? "No se pudieron cargar los turnos." });
+        setAlertMsg({
+          type: "success",
+          title: "Información actualizada",
+          desc: "Los turnos del día se cargaron correctamente.",
+        });
+    } catch (error) {
+      setAlertMsg({
+        type: "error",
+        title: "No se pudo actualizar",
+        desc: getErrorText(error, "No pudimos cargar los turnos del día."),
+      });
     } finally {
       setLoading(false);
     }
@@ -308,9 +329,17 @@ export default function TodayTurnsClient({
 
       if (newStatus === "READY") setNotifyDialog(updated);
 
-      setAlertMsg({ type: "success", title: "Estado actualizado", desc: `Ahora está: ${statusConfig[newStatus].label}` });
-    } catch (e: any) {
-      setAlertMsg({ type: "error", title: "Error", desc: e?.message ?? "No se pudo cambiar el estado." });
+      setAlertMsg({
+        type: "success",
+        title: "Estado actualizado",
+        desc: `El paciente ahora está ${statusConfig[newStatus].label.toLowerCase()}.`,
+      });
+    } catch (error) {
+      setAlertMsg({
+        type: "error",
+        title: "No se pudo actualizar",
+        desc: getErrorText(error, "No pudimos cambiar el estado del turno."),
+      });
     } finally {
       setBusyId(null);
     }
@@ -323,24 +352,40 @@ export default function TodayTurnsClient({
       const updated = await apiNotifyTodayTurn(turn.id);
       setTurns((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       setNotifyDialog(null);
-      setAlertMsg({ type: "success", title: "Notificado", desc: "Marcado como notificado." });
-    } catch (e: any) {
-      setAlertMsg({ type: "error", title: "Error", desc: e?.message ?? "No se pudo notificar." });
+      setAlertMsg({
+        type: "success",
+        title: "Aviso registrado",
+        desc: "Se registró que el cliente ya fue avisado.",
+      });
+    } catch (error) {
+      setAlertMsg({
+        type: "error",
+        title: "No se pudo avisar",
+        desc: getErrorText(error, "No pudimos registrar el aviso al cliente."),
+      });
     } finally {
       setBusyId(null);
     }
   };
 
   const removeTurn = async (turn: TodayTurnDTO) => {
-    if (!confirm(`¿Eliminar el turno de "${turn.petName}"?`)) return;
+    if (!confirm(`¿Eliminar el turno de ${turn.petName}?`)) return;
     setBusyId(turn.id);
     setAlertMsg(null);
     try {
       await apiDeleteTodayTurn(turn.id);
       setTurns((prev) => prev.filter((t) => t.id !== turn.id));
-      setAlertMsg({ type: "success", title: "Eliminado", desc: "Turno eliminado correctamente." });
-    } catch (e: any) {
-      setAlertMsg({ type: "error", title: "Error", desc: e?.message ?? "No se pudo eliminar." });
+      setAlertMsg({
+        type: "success",
+        title: "Turno eliminado",
+        desc: "El turno se eliminó correctamente.",
+      });
+    } catch (error) {
+      setAlertMsg({
+        type: "error",
+        title: "No se pudo eliminar",
+        desc: getErrorText(error, "No pudimos eliminar el turno."),
+      });
     } finally {
       setBusyId(null);
     }
@@ -353,9 +398,17 @@ export default function TodayTurnsClient({
       const created = await apiCreateTodayTurn(data);
       setTurns((prev) => [created, ...prev].sort((a, b) => a.arrivalAt.localeCompare(b.arrivalAt)));
       setDialogOpen(false);
-      setAlertMsg({ type: "success", title: "Creado", desc: "Turno agregado." });
-    } catch (e: any) {
-      setAlertMsg({ type: "error", title: "Error", desc: e?.message ?? "No se pudo crear el turno." });
+      setAlertMsg({
+        type: "success",
+        title: "Turno registrado",
+        desc: "El paciente se agregó correctamente.",
+      });
+    } catch (error) {
+      setAlertMsg({
+        type: "error",
+        title: "No se pudo registrar",
+        desc: getErrorText(error, "No pudimos registrar el turno."),
+      });
     } finally {
       setLoading(false);
     }
@@ -380,8 +433,8 @@ export default function TodayTurnsClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Turno de Hoy</h1>
-          <p className="text-muted-foreground">Gestiona las mascotas que llegan sin cita previa</p>
+          <h1 className="text-2xl font-bold text-foreground">Turnos sin cita</h1>
+          <p className="text-muted-foreground">Registra y organiza los pacientes que llegan sin cita previa.</p>
         </div>
 
         <div className="flex gap-2">
@@ -394,12 +447,12 @@ export default function TodayTurnsClient({
             <DialogTrigger asChild>
               <Button size="lg" className="gap-2">
                 <Plus className="w-5 h-5" />
-                <span>Agregar Turno</span>
+                <span>Agregar paciente sin cita</span>
               </Button>
             </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Agregar Nuevo Turno</DialogTitle>
+                  <DialogTitle>Agregar paciente sin cita</DialogTitle>
                 </DialogHeader>
               <AddTurnForm pets={pets} onSubmit={addNewTurn} onCancel={() => setDialogOpen(false)} />
               </DialogContent>
@@ -453,7 +506,7 @@ export default function TodayTurnsClient({
                 {columnTurns.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 text-muted-foreground opacity-50">
                     <PawPrint className="w-8 h-8 mb-2" />
-                    <span className="text-sm">Sin mascotas</span>
+                    <span className="text-sm">No hay pacientes en esta etapa.</span>
                   </div>
                 ) : (
                   columnTurns.map((turn) => (
@@ -480,7 +533,7 @@ export default function TodayTurnsClient({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bell className="w-5 h-5 text-emerald-500" />
-              Notificar al Dueño
+              Avisar al cliente
             </DialogTitle>
           </DialogHeader>
 
@@ -488,7 +541,7 @@ export default function TodayTurnsClient({
             <div className="space-y-4">
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-center">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
-                <p className="font-semibold text-foreground">{notifyDialog.petName} está listo</p>
+                <p className="font-semibold text-foreground">{notifyDialog.petName} está listo para salir</p>
                 <p className="text-sm text-muted-foreground">Servicio: {notifyDialog.serviceName}</p>
               </div>
 
@@ -523,7 +576,7 @@ export default function TodayTurnsClient({
                     const digits = notifyDialog.ownerPhone.replace(/\D/g, "");
                     window.open(
                       `https://wa.me/${digits}?text=${encodeURIComponent(
-                        `�Hola ${notifyDialog.ownerName}! Le informamos que ${notifyDialog.petName} ya est� listo/a para ser recogido/a. El servicio de ${notifyDialog.serviceName} ha sido completado. �Lo esperamos! - ${clinicName}`
+                        `¡Hola ${notifyDialog.ownerName}! Le informamos que ${notifyDialog.petName} ya está listo/a para ser recogido/a. El servicio de ${notifyDialog.serviceName} ha sido completado. ¡Lo esperamos! - ${clinicName}`
                       )}`
                     );
                     notifyOwner(notifyDialog);
@@ -593,7 +646,7 @@ function TurnCard({
             className="h-8 w-8"
             onClick={onDelete}
             disabled={busy}
-            title="Eliminar"
+            title="Eliminar turno"
           >
             <Trash2 className="w-4 h-4 text-red-500" />
           </Button>
@@ -639,14 +692,14 @@ function TurnCard({
             disabled={busy}
           >
             <Bell className="w-3.5 h-3.5" />
-            Avisar
+            Avisar al cliente
           </Button>
         )}
 
         {turn.status === "READY" && turn.notified && (
           <Badge className="flex-1 justify-center gap-1.5 border-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            Notificado
+            Cliente avisado
           </Badge>
         )}
 
@@ -657,8 +710,8 @@ function TurnCard({
             onClick={onMoveNext}
             disabled={busy}
           >
-            {turn.status === "WAITING" && "Iniciar"}
-            {turn.status === "IN_PROGRESS" && "Completar"}
+            {turn.status === "WAITING" && "Iniciar atención"}
+            {turn.status === "IN_PROGRESS" && "Marcar como listo"}
             {turn.status === "READY" && "Entregar"}
             <ArrowRight className="w-3.5 h-3.5" />
           </Button>
@@ -795,7 +848,7 @@ function TurnCard({
 //         <Label htmlFor="serviceName">Nombre del Servicio</Label>
 //         <Input
 //           id="serviceName"
-//           placeholder="Ej: Baño y Corte"
+//           placeholder="Ej: BaÃ±o y Corte"
 //           value={serviceName}
 //           onChange={(e) => setServiceName(e.target.value)}
 //           required
@@ -804,7 +857,7 @@ function TurnCard({
 
 //       <div className="grid grid-cols-2 gap-4">
 //         <div className="space-y-2">
-//           <Label htmlFor="estimatedDuration">Duración Estimada (min)</Label>
+//           <Label htmlFor="estimatedDuration">DuraciÃ³n Estimada (min)</Label>
 //           <Input
 //             id="estimatedDuration"
 //             type="number"
@@ -889,8 +942,8 @@ function AddTurnForm({
 
   const selectedPetLabel = useMemo(() => {
     if (!selectedPet) return "";
-    const phone = selectedPet.client.phone ? ` • ${selectedPet.client.phone}` : "";
-    return `${selectedPet.name} • ${selectedPet.client.fullName}${phone}`;
+    const phone = selectedPet.client.phone ? ` â€¢ ${selectedPet.client.phone}` : "";
+    return `${selectedPet.name} â€¢ ${selectedPet.client.fullName}${phone}`;
   }, [selectedPet]);
 
   const canSubmit =
@@ -943,7 +996,7 @@ function AddTurnForm({
           className={mode === "EXISTING" ? "" : "bg-transparent"}
           onClick={() => setMode("EXISTING")}
         >
-          Buscar existente
+          Buscar paciente registrado
         </Button>
         <Button
           type="button"
@@ -954,14 +1007,14 @@ function AddTurnForm({
             setSelectedPetId("");
           }}
         >
-          Walk-in
+          Registrar paciente sin cita
         </Button>
       </div>
 
       {/* EXISTING SEARCH */}
       {mode === "EXISTING" && (
         <div className="space-y-2">
-          <Label>Buscar cliente / mascota</Label>
+          <Label>Buscar cliente o paciente</Label>
 
           <Popover open={open} onOpenChange={setOpen}>
             <div className="flex gap-2">
@@ -975,7 +1028,7 @@ function AddTurnForm({
                 >
                   <span className="truncate flex items-center gap-2">
                     <UserRound className="w-4 h-4 text-muted-foreground" />
-                    {selectedPet ? selectedPetLabel : "Escribe para buscar..."}
+                    {selectedPet ? selectedPetLabel : "Escribe para buscar un cliente o paciente..."}
                   </span>
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -995,11 +1048,11 @@ function AddTurnForm({
 
             <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
               <Command>
-                <CommandInput placeholder="Buscar por mascota o dueño..." />
+                <CommandInput placeholder="Buscar por mascota o cliente..." />
                 <CommandList>
                   <CommandEmpty>
                     <div className="p-3 text-sm text-muted-foreground space-y-2">
-                      <p>No encontrado.</p>
+                      <p>No encontramos coincidencias.</p>
                       <Button
                         type="button"
                         variant="outline"
@@ -1010,7 +1063,7 @@ function AddTurnForm({
                           setSelectedPetId("");
                         }}
                       >
-                        Registrar como Walk-in
+                        Registrar paciente sin cita
                       </Button>
                     </div>
                   </CommandEmpty>
@@ -1018,7 +1071,7 @@ function AddTurnForm({
                   <CommandGroup>
                     {pets.map((p) => {
                       const value = String(p.id);
-                      const label = `${p.name} • ${p.client.fullName}${p.client.phone ? ` • ${p.client.phone}` : ""}`;
+                      const label = `${p.name} â€¢ ${p.client.fullName}${p.client.phone ? ` â€¢ ${p.client.phone}` : ""}`;
                       const isSelected = selectedPetId === value;
 
                       return (
@@ -1057,7 +1110,7 @@ function AddTurnForm({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="petName">Nombre Mascota</Label>
+              <Label htmlFor="petName">Nombre de la mascota</Label>
               <Input
                 id="petName"
                 placeholder="Ej: Max"
@@ -1088,10 +1141,10 @@ function AddTurnForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ownerName">Nombre del Dueño</Label>
+              <Label htmlFor="ownerName">Nombre del cliente o responsable</Label>
             <Input
               id="ownerName"
-              placeholder="Ej: María García"
+                placeholder="Ej: María García"
               value={walkin.ownerName}
               onChange={(e) => setWalkin((p) => ({ ...p, ownerName: e.target.value }))}
               required
@@ -1099,7 +1152,7 @@ function AddTurnForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ownerPhone">Teléfono de Contacto</Label>
+              <Label htmlFor="ownerPhone">Teléfono de contacto</Label>
             <Input
               id="ownerPhone"
               placeholder="Ej: 809-123-4567"
@@ -1109,14 +1162,14 @@ function AddTurnForm({
           </div>
 
           <div className="text-xs text-muted-foreground bg-muted rounded-lg p-2">
-            Se registrará como <span className="font-medium text-foreground">Walk-in</span> (sin cliente/mascota vinculados).
+            Se registrará como <span className="font-medium text-foreground">paciente sin cita</span>, sin vincular un cliente ni un paciente existentes.
           </div>
         </div>
       )}
 
       {/* SERVICE TYPE */}
       <div className="space-y-2">
-        <Label>Tipo de Servicio</Label>
+        <Label>Tipo de servicio</Label>
 
         <div className="grid grid-cols-3 gap-2">
           {serviceTypes.slice(0, 3).map((s) => {
@@ -1162,10 +1215,10 @@ function AddTurnForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="serviceName">Nombre del Servicio</Label>
+        <Label htmlFor="serviceName">Nombre del servicio</Label>
         <Input
           id="serviceName"
-          placeholder="Ej: Baño y Corte"
+          placeholder="Ej: Baño y corte"
           value={serviceName}
           onChange={(e) => setServiceName(e.target.value)}
           required
@@ -1174,7 +1227,7 @@ function AddTurnForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="estimatedDuration">Duración Estimada (min)</Label>
+            <Label htmlFor="estimatedDuration">Duración estimada (min)</Label>
           <Input
             id="estimatedDuration"
             type="number"
@@ -1206,7 +1259,7 @@ function AddTurnForm({
           Cancelar
         </Button>
         <Button type="submit" className="flex-1" disabled={!canSubmit}>
-          Agregar
+          Registrar turno
         </Button>
       </div>
     </form>

@@ -76,7 +76,7 @@ export const TodayTurnCreateSchema = z
     service: TodayTurnServiceSchema,
     serviceName: z.preprocess(
       (v) => (typeof v === "string" ? v.trim() : v),
-      z.string().min(1, "serviceName es requerido")
+      z.string().min(1, "Debes indicar el servicio.")
     ),
     notes: optionalNullableTrimmedString,
     estimatedDuration: z.coerce.number().int().min(5).max(24 * 60),
@@ -87,23 +87,23 @@ export const TodayTurnCreateSchema = z
     // Si viene petId/clientId => EXISTING (requiere ambos)
     if (isExisting) {
       if (!d.petId) {
-        ctx.addIssue({ code: "custom", path: ["petId"], message: "petId es requerido para turno existente" });
+        ctx.addIssue({ code: "custom", path: ["petId"], message: "Selecciona un paciente registrado." });
       }
       if (!d.clientId) {
-        ctx.addIssue({ code: "custom", path: ["clientId"], message: "clientId es requerido para turno existente" });
+        ctx.addIssue({ code: "custom", path: ["clientId"], message: "Selecciona el cliente responsable." });
       }
       return;
     }
 
     // Si NO viene petId/clientId => WALK-IN (requiere petName/ownerName/species)
     if (!d.petName) {
-      ctx.addIssue({ code: "custom", path: ["petName"], message: "petName es requerido para walk-in" });
+      ctx.addIssue({ code: "custom", path: ["petName"], message: "Escribe el nombre de la mascota." });
     }
     if (!d.ownerName) {
-      ctx.addIssue({ code: "custom", path: ["ownerName"], message: "ownerName es requerido para walk-in" });
+      ctx.addIssue({ code: "custom", path: ["ownerName"], message: "Escribe el nombre del cliente o responsable." });
     }
     if (!d.species) {
-      ctx.addIssue({ code: "custom", path: ["species"], message: "species es requerido para walk-in" });
+      ctx.addIssue({ code: "custom", path: ["species"], message: "Selecciona la especie del paciente." });
     }
   });
 

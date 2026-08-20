@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Token invalido." },
+      { error: "Este enlace de confirmación no es válido." },
       { status: 422 }
     );
   }
@@ -38,12 +38,12 @@ export async function POST(req: Request) {
       {
         error:
           message === "TOKEN_INVALIDO"
-            ? "El enlace de confirmacion ya no es valido o expiro."
+            ? "Este enlace ya no está disponible o venció."
             : message === "TOKEN_REQUERIDO"
-              ? "Falta el token de confirmacion."
+              ? "Necesitamos un enlace válido para confirmar la cita."
               : message === "CITA_NO_ENCONTRADA"
                 ? "No encontramos la cita que intentas confirmar."
-                : "Esta cita ya no se puede confirmar desde este enlace.",
+                : "Esta cita ya no puede confirmarse desde este enlace. Comunícate con la clínica si necesitas ayuda.",
       },
       { status }
     );
