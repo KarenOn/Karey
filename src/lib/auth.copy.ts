@@ -1,13 +1,8 @@
-﻿import { betterAuth } from "better-auth";
+import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { headers } from "next/headers";
-import {
-  getAppBaseUrl,
-  getAppUrl,
-  sendVerificationEmail as sendVerificationEmailMessage,
-} from "@/lib/email";
-import { sendPasswordResetEmail as sendPasswordResetEmailMessage } from "@/lib/password-reset-email";
+import { getAppBaseUrl, sendVerificationEmail as sendVerificationEmailMessage } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
 export const auth = betterAuth({
@@ -49,15 +44,6 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    resetPasswordTokenExpiresIn: 60 * 60,
-    revokeSessionsOnPasswordReset: true,
-    async sendResetPassword({ token, user }) {
-      await sendPasswordResetEmailMessage({
-        to: user.email,
-        userName: user.name,
-        resetUrl: getAppUrl(`/reset-password?token=${encodeURIComponent(token)}`),
-      });
-    },
   },
   emailVerification: {
     expiresIn: 60 * 60 * 24,

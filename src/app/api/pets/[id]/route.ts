@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { PetUpdateSchema } from "@/lib/validators/pet";
@@ -6,6 +6,20 @@ import { PetUpdateSchema } from "@/lib/validators/pet";
 function parseId(id: string) {
   const parsed = Number(id);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isDuplicateMicrochipError(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const knownError = error as { code?: string; meta?: { target?: unknown } };
+  if (knownError.code !== "P2002") {
+    return false;
+  }
+
+  const target = Array.isArray(knownError.meta?.target) ? knownError.meta.target : [];
+  return target.some((value) => String(value) === "microchip");
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -51,13 +65,24 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
   }
 
-  const updated = await prisma.pet.update({
-    where: { id: exists.id },
-    data: parsed.data,
-    include: { client: true },
-  });
+  try {
+    const updated = await prisma.pet.update({
+      where: { id: exists.id },
+      data: parsed.data,
+      include: { client: true },
+    });
 
-  return NextResponse.json(updated);
+    return NextResponse.json(updated);
+  } catch (error) {
+    if (isDuplicateMicrochipError(error)) {
+      return NextResponse.json(
+        { error: "Ya existe otro paciente con ese microchip en esta clinica." },
+        { status: 409 }
+      );
+    }
+
+    throw error;
+  }
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {

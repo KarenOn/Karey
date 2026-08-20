@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -156,7 +156,7 @@ export default function LoginPage() {
               <label className="mb-2 block text-sm font-semibold text-foreground/88">Contrasena</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={isViewActive ? "text" : "password"} placeholder="••••••••" className="h-12 pl-11 pr-12 font-semibold" required />
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={isViewActive ? "text" : "password"} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="h-12 pl-11 pr-12 font-semibold" required />
                 <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setIsViewActive(!isViewActive)} aria-label="Mostrar contrasena">
                   <Eye className="w-4 h-4" />
                 </button>
@@ -169,9 +169,9 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <button className="text-left transition hover:text-foreground" type="button">¿Olvidaste tu contrasena?</button>
+            <Link className="text-left transition hover:text-foreground" href="/forgot-password">Recuperar contrasena</Link>
             <span>
-              ¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
+              Â¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
             </span>
           </div>
         </div>
