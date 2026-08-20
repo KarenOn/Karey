@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, PawPrint, Sparkles, MoonStar } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
+import { getFriendlyVerificationMessage } from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -31,7 +32,7 @@ export default function LoginPage() {
         rememberMe: true,
       },
       {
-        onError: (ctx) => setErr(ctx.error.message),
+        onError: () => setErr("El correo o la contraseña no coinciden. Revísalos e inténtalo nuevamente."),
       }
     );
 
@@ -56,19 +57,15 @@ export default function LoginPage() {
             | { error?: string; message?: string }
             | null;
 
-          throw new Error(
-            payload?.message ??
-              payload?.error ??
-              "No se pudo enviar el correo de verificacion."
-          );
+          throw new Error(getFriendlyVerificationMessage(payload?.message ?? payload?.error));
         }
 
         toast.success("Te enviamos un correo para verificar tu cuenta.");
       } catch (verificationError) {
         const message =
           verificationError instanceof Error
-            ? verificationError.message
-            : "No se pudo enviar el correo de verificacion.";
+            ? getFriendlyVerificationMessage(verificationError.message)
+            : getFriendlyVerificationMessage(null);
         toast.error(message);
       }
     }
@@ -126,7 +123,7 @@ export default function LoginPage() {
             </div>
 
             <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">Bienvenida de regreso</p>
-            <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">Inicia sesion en Karey Vet</h1>
+            <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">Inicia sesión en Karey Vet</h1>
             <p className="mt-3 text-muted-foreground">Accede a clientes, pacientes, agenda y facturacion con una interfaz mas clara y expresiva.</p>
           </div>
 
@@ -145,19 +142,19 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Correo electronico</label>
+              <label className="mb-2 block text-sm font-semibold text-foreground/88">Correo electrónico</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="you@example.com" className="h-12 pl-11 pr-4 font-semibold" required />
+                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="nombre@ejemplo.com" autoComplete="email" className="h-12 pl-11 pr-4 font-semibold" required />
               </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Contrasena</label>
+              <label className="mb-2 block text-sm font-semibold text-foreground/88">Contraseña</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={isViewActive ? "text" : "password"} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="h-12 pl-11 pr-12 font-semibold" required />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setIsViewActive(!isViewActive)} aria-label="Mostrar contrasena">
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={isViewActive ? "text" : "password"} placeholder="Escribe tu contraseña" autoComplete="current-password" className="h-12 pl-11 pr-12 font-semibold" required />
+                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setIsViewActive(!isViewActive)} aria-label="Mostrar contraseña">
                   <Eye className="w-4 h-4" />
                 </button>
               </div>
@@ -169,7 +166,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <Link className="text-left transition hover:text-foreground" href="/forgot-password">Recuperar contrasena</Link>
+            <Link className="text-left transition hover:text-foreground" href="/forgot-password">Olvidé mi contraseña</Link>
             <span>
               ¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
             </span>

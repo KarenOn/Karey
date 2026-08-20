@@ -121,6 +121,8 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
               className="h-12 pl-11 pr-12 font-semibold"
               minLength={8}
               type={show ? "text" : "password"}
+              placeholder="Escribe tu nueva contraseña"
+              autoComplete="new-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -146,6 +148,8 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
               className="h-12 pl-11 pr-12 font-semibold"
               minLength={8}
               type={showConfirm ? "text" : "password"}
+              placeholder="Vuelve a escribir la nueva contraseña"
+              autoComplete="new-password"
               required
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
