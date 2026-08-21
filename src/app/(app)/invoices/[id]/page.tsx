@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Printer,
+  Download,
   CheckCircle,
   Clock,
   XCircle,
@@ -35,6 +36,15 @@ import { apiCreatePayment, apiGetInvoice, apiUpdateInvoiceStatus, InvoiceDetail 
 import type { PaymentCreateInput } from "@/lib/validators/payment";
 import AppPageHero from "@/components/shared/AppPageHero";
 import Link from "next/link";
+import {
+  closePreparedPrintWindow,
+  openInvoiceA4Print,
+  openInvoiceReceiptPrint,
+  openPreferredInvoicePrint,
+  preparePrintWindow,
+} from "@/lib/printing/browser-printer";
+import { getManualReceiptPaper } from "@/lib/printing/settings";
+import { usePrintSettings } from "@/lib/printing/usePrintSettings";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -76,12 +86,15 @@ function safeDate(iso: string | null | undefined) {
 
 export default function InvoiceDetailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const invoiceId = Number(params.id);
+  const { settings: printSettings } = usePrintSettings();
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [showPaymentActions, setShowPaymentActions] = useState(false);
 
   // pago rápido
   const [payAmount, setPayAmount] = useState<string>("");
@@ -121,6 +134,10 @@ export default function InvoiceDetailPage() {
     };
   }, [invoiceId]);
 
+  useEffect(() => {
+    setShowPaymentActions(searchParams.get("payment") === "registered");
+  }, [searchParams]);
+
   const ui = invoice ? (statusUI[invoice.status] ?? { label: invoice.status, icon: Clock, badge: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20", hint: "" }) : null;
   const StatusIcon = ui?.icon ?? Clock;
 
@@ -132,7 +149,24 @@ export default function InvoiceDetailPage() {
     setInvoice(data);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrintReceipt = () => {
+    openInvoiceReceiptPrint({
+      invoiceId,
+      paper: getManualReceiptPaper(printSettings),
+      autoPrint: true,
+    });
+  };
+
+  const handlePrintInvoice = () => {
+    openInvoiceA4Print({
+      invoiceId,
+      autoPrint: true,
+    });
+  };
+
+  const handleDownloadPdf = () => {
+    window.open(`/api/invoices/${invoiceId}/pdf`, "_blank", "noopener,noreferrer");
+  };
 
   const markVoid = async () => {
     if (!invoice) return;
@@ -145,13 +179,35 @@ export default function InvoiceDetailPage() {
     const amount = Number(payAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
-    await apiCreatePayment(invoice.id, {
-      amount,
-      method: payMethod,
-      reference: payRef || undefined,
-    });
+    const shouldAutoPrint = printSettings.autoOpenReceiptAfterPayment;
+    const preparedWindow = shouldAutoPrint ? preparePrintWindow() : null;
 
-    await refresh();
+    try {
+      await apiCreatePayment(invoice.id, {
+        amount,
+        method: payMethod,
+        reference: payRef || undefined,
+      });
+
+      await refresh();
+      setShowPaymentActions(true);
+
+      if (shouldAutoPrint) {
+        openPreferredInvoicePrint({
+          invoiceId: invoice.id,
+          settings: printSettings,
+          autoPrint: true,
+          preparedWindow,
+        });
+      }
+    } catch (paymentError) {
+      closePreparedPrintWindow(preparedWindow);
+      setErr(
+        paymentError instanceof Error
+          ? paymentError.message
+          : "No pudimos registrar el pago."
+      );
+    }
   };
 
   if (loading) {
@@ -245,8 +301,16 @@ export default function InvoiceDetailPage() {
               {ui?.label}
             </Badge>
 
-            <Button variant="outline" onClick={handlePrint}>
-              <Printer className="w-4 h-4 mr-2" /> Imprimir
+            <Button variant="outline" onClick={handlePrintReceipt}>
+              <Printer className="w-4 h-4 mr-2" /> Imprimir recibo
+            </Button>
+
+            <Button variant="outline" onClick={handlePrintInvoice}>
+              <ReceiptText className="w-4 h-4 mr-2" /> Imprimir factura
+            </Button>
+
+            <Button variant="outline" onClick={handleDownloadPdf}>
+              <Download className="w-4 h-4 mr-2" /> Descargar PDF
             </Button>
 
             {canVoid && (
@@ -257,6 +321,40 @@ export default function InvoiceDetailPage() {
           </>
         }
       />
+
+      {showPaymentActions ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-emerald-800">
+                Pago registrado
+              </p>
+              <p className="mt-1 text-sm text-emerald-700">
+                La factura ya quedó actualizada. Puedes imprimir el recibo,
+                revisar la factura o cerrar este flujo.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handlePrintReceipt} type="button">
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir recibo
+              </Button>
+              <Button onClick={handlePrintInvoice} type="button" variant="outline">
+                <ReceiptText className="mr-2 h-4 w-4" />
+                Imprimir factura
+              </Button>
+              <Button
+                onClick={() => setShowPaymentActions(false)}
+                type="button"
+                variant="outline"
+              >
+                Finalizar
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT: Invoice sheet */}

@@ -33,6 +33,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import AppPageHero from "@/components/shared/AppPageHero";
+import {
+  closePreparedPrintWindow,
+  openPreferredInvoicePrint,
+  preparePrintWindow,
+} from "@/lib/printing/browser-printer";
+import { usePrintSettings } from "@/lib/printing/usePrintSettings";
 
 type Client = { id: number; fullName: string; phone: string | null; email: string | null };
 type Pet = { id: number; name: string; species: string; breed: string | null };
@@ -79,6 +85,7 @@ function num(v: unknown) {
 export default function NewInvoicePOSPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { settings: printSettings } = usePrintSettings();
 
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
@@ -419,6 +426,10 @@ export default function NewInvoicePOSPage() {
           : null,
     };
 
+    const shouldAutoPrint =
+      mode === "SAVE_AND_PAY" && printSettings.autoOpenReceiptAfterPayment;
+    const preparedWindow = shouldAutoPrint ? preparePrintWindow() : null;
+
     const res = await fetch("/api/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -426,19 +437,34 @@ export default function NewInvoicePOSPage() {
     });
 
     if (!res.ok) {
+      closePreparedPrintWindow(preparedWindow);
       const data = await res.json().catch(() => null);
       setErr(data?.error ?? "Error creando factura");
       return;
     }
 
     const created = await res.json();
+
+    if (shouldAutoPrint) {
+      openPreferredInvoicePrint({
+        invoiceId: created.id,
+        settings: printSettings,
+        autoPrint: true,
+        preparedWindow,
+      });
+    }
+
     if (returnTo && returnTo.startsWith("/")) {
       const separator = returnTo.includes("?") ? "&" : "?";
       router.push(`${returnTo}${separator}createdInvoiceId=${created.id}`);
       return;
     }
 
-    router.push(`/invoices/${created.id}`);
+    router.push(
+      mode === "SAVE_AND_PAY"
+        ? `/invoices/${created.id}?payment=registered`
+        : `/invoices/${created.id}`
+    );
   };
 
   if (loading) {

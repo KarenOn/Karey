@@ -2,8 +2,29 @@ import { prisma } from "@/lib/prisma";
 import { resolveStoredFileUrl } from "@/lib/storage";
 
 export type InvoicePrintData = {
-  clinic: { name: string; phone?: string | null; email?: string | null; address?: string | null; rnc?: string | null; logoUrl?: string | null; timezone?: string | null };
-  invoice: { number: string; status: "ISSUED" | "PAID" | "VOID" | "CANCELLED"; issueDate: string; dueDate?: string | null; paidAt?: string | null; notes?: string | null; subtotal: string; tax: string; discount: string; total: string };
+  clinic: {
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
+    rnc?: string | null;
+    logoUrl?: string | null;
+    timezone?: string | null;
+    invoiceNotes?: string | null;
+    invoiceTerms?: string | null;
+  };
+  invoice: {
+    number: string;
+    status: string;
+    issueDate: string;
+    dueDate?: string | null;
+    paidAt?: string | null;
+    notes?: string | null;
+    subtotal: string;
+    tax: string;
+    discount: string;
+    total: string;
+  };
   client: { fullName: string; phone?: string | null; email?: string | null; address?: string | null };
   pet?: { name: string; species?: string | null; breed?: string | null } | null;
   items: Array<{ description: string; quantity: string; unitPrice: string; lineTotal: string; type?: string | null }>;
@@ -22,6 +43,9 @@ export async function getInvoicePrintData(opts: { clinicId: number; invoiceId: n
           address: true,
           timezone: true,
           logoUrl: true,
+          taxId: true,
+          invoiceNotes: true,
+          invoiceTerms: true,
         },
       },
       client: { select: { fullName: true, phone: true, email: true, address: true } },
@@ -39,10 +63,13 @@ export async function getInvoicePrintData(opts: { clinicId: number; invoiceId: n
       phone: inv.clinic.phone,
       email: inv.clinic.email,
       address: inv.clinic.address,
+      rnc: inv.clinic.taxId ?? null,
       timezone: inv.clinic.timezone ?? "America/Santo_Domingo",
       logoUrl: await resolveStoredFileUrl(inv.clinic.logoUrl, {
         fileName: `logo-clinica-${opts.clinicId}.png`,
       }),
+      invoiceNotes: inv.clinic.invoiceNotes ?? null,
+      invoiceTerms: inv.clinic.invoiceTerms ?? null,
     },
     invoice: {
       number: inv.number,

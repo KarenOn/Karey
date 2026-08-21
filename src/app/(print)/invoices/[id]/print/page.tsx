@@ -1,19 +1,24 @@
-import InvoicePrintA4 from "@/app/(app)/invoices/[id]/printer/InvoicePrintA4"; // ajusta el import a donde lo tengas
+import { notFound } from "next/navigation";
+import InvoicePrintA4Document from "@/components/printing/InvoicePrintA4Document";
 import { getInvoicePrintData } from "@/lib/print/getInvoicePrintData";
-import { getClinicIdOrFail } from "@/lib/auth"; // tu helper
+import { getClinicIdOrFail } from "@/lib/auth";
 
 export default async function InvoicePrintPage({
   params,
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: { autoprint?: string };
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const clinicId = await getClinicIdOrFail();
-  const invoiceId = Number(params.id);
+  const invoiceId = Number((await params).id);
+
+  if (!Number.isFinite(invoiceId)) {
+    notFound();
+  }
 
   const data = await getInvoicePrintData({ clinicId, invoiceId });
-  const autoPrint = searchParams?.autoprint === "1";
+  const autoPrint = ((await searchParams) ?? {}).autoprint === "1";
 
-  return <InvoicePrintA4 data={data} autoPrint={autoPrint} />;
+  return <InvoicePrintA4Document data={data} autoPrint={autoPrint} />;
 }
