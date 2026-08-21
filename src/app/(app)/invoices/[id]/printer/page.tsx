@@ -1,12 +1,4 @@
-// import InvoicePrintA4 from "@/components/invoices/print/InvoicePrintA4";
-import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
-import { resolveStoredFileUrl } from "@/lib/storage";
-import { notFound } from "next/navigation";
-import InvoicePrintA4 from "./InvoiceClientPrintA4";
-
-type Money = number | string;
-const dec = (v: any): Money => (v?.toString ? v.toString() : v ?? "0.00");
+import { redirect } from "next/navigation";
 
 export default async function InvoicePrintPage({
   params,
@@ -15,75 +7,17 @@ export default async function InvoicePrintPage({
   params: Promise<{ id: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const clinicId = await getClinicIdOrFail();
-  const invoiceId = Number((await params).id);
-  if (!Number.isFinite(invoiceId)) notFound();
+  const { id } = await params;
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const query = new URLSearchParams();
+  const autoPrint = Array.isArray(resolvedSearchParams.autoprint)
+    ? resolvedSearchParams.autoprint[0]
+    : resolvedSearchParams.autoprint;
 
-  const invoice = await prisma.invoice.findFirst({
-    where: { id: invoiceId, clinicId },
-    include: {
-      clinic: true,
-      client: true,
-      pet: true,
-      items: true,
-      payments: true,
-    },
-  });
+  if (autoPrint) {
+    query.set("autoprint", autoPrint);
+  }
 
-  if (!invoice) notFound();
-
-  const autoPrint = (await searchParams)?.autoprint === "1";
-
-  const data = {
-    clinic: {
-      name: invoice.clinic.name,
-      phone: invoice.clinic.phone ?? null,
-      email: invoice.clinic.email ?? null,
-      address: invoice.clinic.address ?? null,
-      rnc: (invoice.clinic as any).rnc ?? null,
-      logoUrl: await resolveStoredFileUrl((invoice.clinic as any).logoUrl ?? null, {
-        fileName: `logo-clinica-${invoice.clinic.id}.png`,
-      }),
-    },
-    invoice: {
-      number: invoice.number,
-      status: invoice.status as any,
-      issueDate: invoice.issueDate.toISOString(),
-      dueDate: invoice.dueDate ? invoice.dueDate.toISOString() : null,
-      paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
-      notes: invoice.notes ?? null,
-      subtotal: dec(invoice.subtotal),
-      tax: dec(invoice.tax),
-      discount: dec(invoice.discount),
-      total: dec(invoice.total),
-    },
-    client: {
-      fullName: invoice.client.fullName,
-      phone: invoice.client.phone ?? null,
-      email: invoice.client.email ?? null,
-      address: invoice.client.address ?? null,
-    },
-    pet: invoice.pet
-      ? {
-          name: invoice.pet.name,
-          species: (invoice.pet as any).species ?? null,
-          breed: invoice.pet.breed ?? null,
-        }
-      : null,
-    items: invoice.items.map((it) => ({
-      description: it.description,
-      quantity: dec(it.quantity),
-      unitPrice: dec(it.unitPrice),
-      lineTotal: dec(it.lineTotal),
-      type: (it.type as any) ?? null,
-    })),
-    payments: invoice.payments.map((p) => ({
-      method: p.method as any,
-      amount: dec(p.amount),
-      reference: p.reference ?? null,
-      paidAt: p.paidAt.toISOString(),
-    })),
-  };
-
-  return <InvoicePrintA4 data={data} autoPrint={autoPrint} />;
+  const queryString = query.toString();
+  redirect(`/invoices/${id}/print${queryString ? `?${queryString}` : ""}`);
 }

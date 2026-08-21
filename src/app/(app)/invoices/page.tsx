@@ -26,6 +26,9 @@ import { cn } from "@/lib/utils";
 import { apiListInvoices, apiUpdateInvoiceStatus, type InvoiceListRow } from "@/lib/api/invoices";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { openInvoiceA4Print, openInvoiceReceiptPrint } from "@/lib/printing/browser-printer";
+import { getManualReceiptPaper } from "@/lib/printing/settings";
+import { usePrintSettings } from "@/lib/printing/usePrintSettings";
 
 const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
   PAID: { icon: CheckCircle, label: "Pagada", color: "bg-emerald-100 text-emerald-700" },
@@ -48,6 +51,7 @@ const toMoney = (v: any) => {
 
 export default function InvoicesPage() {
   const access = useCurrentUserAccess();
+  const { settings: printSettings } = usePrintSettings();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
@@ -104,9 +108,19 @@ export default function InvoicesPage() {
     await load();
   };
 
-  const handlePrintTicket = (id: number) => {
-    // si luego creas /api/invoices/:id/pdf o /ticket, aquí lo abres
-    window.open(`/invoices/${id}/ticket?paper=58`, "_blank");
+  const handlePrintReceipt = (id: number) => {
+    openInvoiceReceiptPrint({
+      invoiceId: id,
+      paper: getManualReceiptPaper(printSettings),
+      autoPrint: true,
+    });
+  };
+
+  const handlePrintInvoice = (id: number) => {
+    openInvoiceA4Print({
+      invoiceId: id,
+      autoPrint: true,
+    });
   };
 
   // const handleDownloadPdf = (id: number) => {
@@ -325,10 +339,24 @@ export default function InvoicesPage() {
                         </Link>
                       </DropdownMenuItem>
 
-                      <DropdownMenuItem className="gap-2" asChild>
-                        <Link href={`/invoices/${invoice.id}/ticket`}>
-                          <Receipt className="w-4 h-4" /> Imprimir ticket
-                        </Link>
+                      <DropdownMenuItem
+                        className="gap-2"
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          handlePrintReceipt(invoice.id);
+                        }}
+                      >
+                        <Receipt className="w-4 h-4" /> Imprimir recibo
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        className="gap-2"
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          handlePrintInvoice(invoice.id);
+                        }}
+                      >
+                        <ReceiptText className="w-4 h-4" /> Imprimir factura
                       </DropdownMenuItem>
 
                       {/* <DropdownMenuItem className="gap-2" onClick={() => handleDownloadPdf(invoice.id)}>

@@ -137,7 +137,7 @@ export default function PatientsPage() {
     if (!birthDateISO) return null;
     const d = parseISO(birthDateISO);
     const years = differenceInYears(new Date(), d);
-    if (years > 0) return `${years} aÃ±o${years > 1 ? "s" : ""}`;
+    if (years > 0) return `${years} año${years > 1 ? "s" : ""}`;
     const months = differenceInMonths(new Date(), d);
     return `${months} mes${months > 1 ? "es" : ""}`;
   };
@@ -232,13 +232,13 @@ export default function PatientsPage() {
       header: "Paciente",
       cell: (row: PetRow) => (
         <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] border border-border/70 bg-secondary text-2xl">
+            {/* <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] border border-border/70 bg-secondary text-2xl">
             {speciesEmoji[row.species] || "ðŸ¾"}
-          </div>
+          </div> */}
           <div>
               <p className="font-semibold text-foreground">{row.name}</p>
               <p className="text-sm text-muted-foreground">
-              {row.species} â€¢ {row.breed || "Sin raza"}
+              {row.species} - {row.breed || "Sin raza"}
             </p>
           </div>
         </div>

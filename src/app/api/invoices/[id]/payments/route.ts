@@ -69,11 +69,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const paidTotal = sum._sum.amount ?? new Prisma.Decimal(0);
     const isFullyPaid = paidTotal.greaterThanOrEqualTo(inv.total);
+    const hasAnyPayment = paidTotal.greaterThan(new Prisma.Decimal(0));
 
     if (isFullyPaid) {
       await tx.invoice.update({
         where: { id: invoiceId },
         data: { status: InvoiceStatus.PAID, paidAt: new Date() },
+      });
+    } else if (hasAnyPayment) {
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: { status: InvoiceStatus.PARTIALLY_PAID, paidAt: null },
       });
     }
 

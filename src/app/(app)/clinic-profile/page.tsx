@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import {useMaskito} from '@maskito/react';
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import PrintSettingsCard from "@/components/printing/PrintSettingsCard";
   
 import options from '@/components/shared/PhoneMask';
 
@@ -591,6 +592,8 @@ export default function ProfilePage() {
         {activeTab === "invoice" && (
             <>
           <div className="space-y-6">
+            <PrintSettingsCard />
+
             <div className="space-y-2">
               <Label className="font-semibold">Notas en Factura</Label>
               <Textarea
