@@ -832,7 +832,8 @@ model VaccinationRecord {
   id        Int @id @default(autoincrement())
   clinicId  Int
   petId     Int
-  vaccineId Int
+  vaccineId Int?
+  vaccineName String
 
   visitId   Int?
   appliedAt DateTime  @default(now())
@@ -845,7 +846,7 @@ model VaccinationRecord {
 
   clinic  Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   pet     Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
-  vaccine VaccineCatalog @relation(fields: [vaccineId], references: [id], onDelete: Cascade)
+  vaccine VaccineCatalog? @relation(fields: [vaccineId], references: [id], onDelete: SetNull)
   visit   ClinicalVisit? @relation(fields: [visitId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, nextDueAt])

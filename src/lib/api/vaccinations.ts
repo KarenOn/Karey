@@ -1,5 +1,6 @@
 export type VaccinationRow = {
   id: number;
+  vaccineName: string;
   appliedAt: string;
   nextDueAt: string | null;
   batchNumber: string | null;

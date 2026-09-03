@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
+import { ClientFormSchema, zodFieldErrors } from "@/lib/validators/client";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { clinicId } = await requireClinicPermission("clients.update");
-  const paramsExtracted = await params;
-  const id = Number(paramsExtracted.id);
-  const body = await req.json();
+  const id = Number((await params).id);
+  const body = await req.json().catch(() => null);
+  const parsed = ClientFormSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "No pudimos actualizar el cliente. Revisa los datos e inténtalo nuevamente.", details: zodFieldErrors(parsed.error) },
+      { status: 422 }
+    );
+  }
 
   const existing = await prisma.client.findFirst({
     where: { id, clinicId },
@@ -20,11 +28,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const updated = await prisma.client.update({
     where: { id: existing.id },
     data: {
-      fullName: String(body.fullName ?? "").trim(),
-      phone: body.phone ? String(body.phone).trim() : null,
-      email: body.email ? String(body.email).trim() : null,
-      address: body.address ? String(body.address).trim() : null,
-      notes: body.notes ? String(body.notes).trim() : null,
+      fullName: parsed.data.fullName,
+      phone: parsed.data.phone,
+      email: parsed.data.email ?? null,
+      address: parsed.data.address ?? null,
+      notes: parsed.data.notes ?? null,
     },
   });
 
@@ -43,8 +51,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { clinicId } = await requireClinicPermission("clients.delete");
-  const paramsExtracted = await params;
-  const id = Number(paramsExtracted.id);
+  const id = Number((await params).id);
 
   const existing = await prisma.client.findFirst({
     where: { id, clinicId },

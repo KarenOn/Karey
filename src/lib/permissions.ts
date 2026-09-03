@@ -85,6 +85,14 @@ export function hasAnyPermission(perms: unknown, keys: string[]) {
   return keys.some((key) => hasPermission(perms, key));
 }
 
+export function canActAsVeterinarian(roleKey?: string | null, perms?: unknown) {
+  return (
+    isElevatedClinicRole(roleKey) ||
+    roleKey === "vet" ||
+    hasAnyPermission(perms, ["visits.create", "visits.update"])
+  );
+}
+
 export function buildClinicAccess(roleKey?: string | null, perms?: unknown): ClinicAccess {
   const elevated = isElevatedClinicRole(roleKey);
   const allow = (key: string, fallbacks: string[] = []) =>

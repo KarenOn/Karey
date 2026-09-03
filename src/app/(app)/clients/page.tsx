@@ -3,22 +3,18 @@
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import z from "zod";
+import { Edit, Eye, FileText, Mail, MapPin, PawPrint, Phone, Plus, Trash2 } from "lucide-react";
+import AppPageHero from "@/components/shared/AppPageHero";
+import { AppAlert } from "@/components/shared/AppAlert";
+import DataTable from "@/components/shared/Datatable";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
+import Modal from "@/components/shared/Modal";
+import ModalDelete from "@/components/shared/ModalDelete";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Phone, Mail, MapPin, Edit, Trash2, PawPrint, Eye, FileText } from "lucide-react";
-
-import DataTable from "@/components/shared/Datatable";
-import Modal from "@/components/shared/Modal";
-import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
-import ModalDelete from "@/components/shared/ModalDelete";
-import { AppAlert } from "@/components/shared/AppAlert";
-import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
-
 import { ClientFormSchema, zodFieldErrors } from "@/lib/validators/client";
-import z from "zod";
-import { useMaskito } from "@maskito/react";
-import options from '@/components/shared/PhoneMask';
 
 export type ClientPayload = z.infer<typeof ClientFormSchema>;
 
@@ -50,8 +46,9 @@ const emptyForm: ClientForm = {
 
 async function apiGetClients(): Promise<ClientRow[]> {
   const res = await fetch("/api/clients", { cache: "no-store" });
-  if (!res.ok) throw new Error("Error cargando clientes");
-  return res.json();
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.error ?? "Error cargando clientes");
+  return payload;
 }
 
 async function apiCreateClient(data: ClientPayload): Promise<ClientRow> {
@@ -60,8 +57,9 @@ async function apiCreateClient(data: ClientPayload): Promise<ClientRow> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Error creando cliente");
-  return res.json();
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.error ?? "Error creando cliente");
+  return payload;
 }
 
 async function apiUpdateClient(id: number, data: ClientPayload): Promise<ClientRow> {
@@ -70,13 +68,15 @@ async function apiUpdateClient(id: number, data: ClientPayload): Promise<ClientR
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Error actualizando cliente");
-  return res.json();
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.error ?? "Error actualizando cliente");
+  return payload;
 }
 
 async function apiDeleteClient(id: number): Promise<void> {
   const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Error eliminando cliente");
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.error ?? "Error eliminando cliente");
 }
 
 function ClientsPageContent() {
@@ -101,8 +101,7 @@ function ClientsPageContent() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<{ id: number; name: string } | null>(null);
   const [loadingDelete, setLoadingDelete] = useState(false);
-  const maskedInputRef = useMaskito({options});
-  
+
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: "success" | "info" | "warning" | "destructive";
@@ -110,26 +109,20 @@ function ClientsPageContent() {
     description?: string;
   }>({ variant: "info", title: "" });
 
-  const askDelete = (row: ClientRow) => {
-    setSelected({ id: row.id, name: row.fullName });
-    setDeleteOpen(true);
-  };
-
-  const loadClients = async () => {
+  async function loadClients() {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiGetClients();
-      setClients(data);
-    } catch (e: unknown) {
-      setError((e as Error)?.message ?? "Error cargando clientes");
+      setClients(await apiGetClients());
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Error cargando clientes");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    loadClients();
+    void loadClients();
   }, []);
 
   useEffect(() => {
@@ -140,7 +133,12 @@ function ClientsPageContent() {
     }
   }, [action, canCreateClients]);
 
-  const handleEdit = (client: ClientRow) => {
+  function askDelete(row: ClientRow) {
+    setSelected({ id: row.id, name: row.fullName });
+    setDeleteOpen(true);
+  }
+
+  function handleEdit(client: ClientRow) {
     if (!canUpdateClients) return;
     setEditingClient(client);
     setFormData({
@@ -151,47 +149,30 @@ function ClientsPageContent() {
       notes: client.notes ?? "",
     });
     setModalOpen(true);
-  };
+  }
 
-  const handleChange = (e: FormFieldChangeEvent) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  function handleChange(event: FormFieldChangeEvent) {
+    const { name, value } = event.target;
+    setFormData((current) => ({ ...current, [name]: String(value) }));
 
     if (errors[name]) {
-      setErrors((prev) => {
-        const copy = { ...prev };
-        delete copy[name];
-        return copy;
+      setErrors((current) => {
+        const next = { ...current };
+        delete next[name];
+        return next;
       });
     }
-  };
+  }
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  async function handleSubmit(event?: React.FormEvent) {
+    event?.preventDefault();
 
     if ((editingClient && !canUpdateClients) || (!editingClient && !canCreateClients)) {
-      setError("No tienes permisos para realizar esta accion.");
+      setError("No tienes permisos para realizar esta acción.");
       return;
     }
 
-    // const payload: ClientForm = {
-    //   fullName: formData.fullName.trim(),
-    //   phone: formData.phone.trim(),
-    //   email: formData.email.trim(),
-    //   address: formData.address.trim(),
-    //   notes: formData.notes.trim(),
-    // };
-
-    const payload = ClientFormSchema.safeParse({
-      fullName: formData.fullName ?? formData.fullName ?? "",
-      phone: formData.phone ?? "",
-      email: formData.email ?? "",
-      address: formData.address ?? "",
-      notes: formData.notes ?? "",
-    });
-
-    // if (!payload.fullName) return;
-
+    const payload = ClientFormSchema.safeParse(formData);
     if (!payload.success) {
       setErrors(zodFieldErrors(payload.error));
       return;
@@ -213,56 +194,51 @@ function ClientsPageContent() {
       setEditingClient(null);
       setFormData(emptyForm);
 
-      // limpia ?action=new si venías de ahí
-      if (action === "new") router.replace("/clients");
+      if (action === "new") {
+        router.replace("/clients");
+      }
 
       await loadClients();
-    } catch (e: unknown) {
-      setError((e as Error)?.message ?? "Error guardando cliente");
+      setAlert({
+        variant: "success",
+        title: editingClient ? "Editado" : "Guardado",
+        description: editingClient
+          ? "El cliente se actualizó correctamente."
+          : "El cliente se creó correctamente.",
+      });
+      setAlertOpen(true);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Error guardando cliente");
     } finally {
       setSaving(false);
-
-      if (editingClient) {
-        setAlert({
-          variant: "success",
-          title: "Editado",
-          description: "El cliente se actualizó correctamente.",
-        });
-      } else {
-        setAlert({
-          variant: "success",
-          title: "Guardado",
-          description: "El cliente se creó correctamente.",
-        });
-      }
-      setAlertOpen(true);
     }
-  };
+  }
 
-  const confirmDelete = async () => {
+  async function confirmDelete() {
     if (!selected) return;
     if (!canDeleteClients) {
       setError("No tienes permisos para eliminar clientes.");
       return;
     }
+
     try {
       setLoadingDelete(true);
       await apiDeleteClient(selected.id);
       await loadClients();
       setDeleteOpen(false);
       setSelected(null);
-    } finally {
-      setLoadingDelete(false);
-
       setAlert({
         variant: "success",
         title: "Eliminado",
         description: "El cliente se eliminó correctamente.",
       });
-      
       setAlertOpen(true);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Error eliminando cliente");
+    } finally {
+      setLoadingDelete(false);
     }
-  };
+  }
 
   const columns = useMemo(
     () => [
@@ -275,7 +251,12 @@ function ClientsPageContent() {
             </div>
             <div>
               <p className="font-semibold text-foreground">{row.fullName}</p>
-              {row.notes && <p className="flex items-center gap-1 text-xs text-muted-foreground"><FileText className="w-3 h-3" />{row.notes}</p>}
+              {row.notes ? (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <FileText className="h-3 w-3" />
+                  {row.notes}
+                </p>
+              ) : null}
             </div>
           </div>
         ),
@@ -285,11 +266,11 @@ function ClientsPageContent() {
         cell: (row: ClientRow) => (
           <div className="space-y-1">
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Phone className="w-3 h-3" /> {row.phone || <span className="text-muted-foreground/60">-</span>}
+              <Phone className="h-3 w-3" /> {row.phone || <span className="text-muted-foreground/60">-</span>}
             </p>
             {row.email ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="w-3 h-3" /> {row.email}
+                <Mail className="h-3 w-3" /> {row.email}
               </p>
             ) : null}
           </div>
@@ -300,7 +281,7 @@ function ClientsPageContent() {
         cell: (row: ClientRow) =>
           row.address ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="w-3 h-3" /> {row.address}
+              <MapPin className="h-3 w-3" /> {row.address}
             </p>
           ) : (
             <span className="text-muted-foreground/60">-</span>
@@ -312,7 +293,7 @@ function ClientsPageContent() {
           const count = row.petsCount ?? 0;
           return (
             <Badge variant="secondary" className="rounded-full border border-primary/15 bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary">
-              <PawPrint className="w-3 h-3 mr-1" />
+              <PawPrint className="mr-1 h-3 w-3" />
               {count} {count === 1 ? "mascota" : "mascotas"}
             </Badge>
           );
@@ -324,37 +305,35 @@ function ClientsPageContent() {
           <div className="flex items-center gap-2">
             <Link href={`/clients/${row.id}`}>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
-                <Eye className="w-4 h-4" />
+                <Eye className="h-4 w-4" />
               </Button>
             </Link>
-
             {canUpdateClients ? (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
+                disabled={saving}
+                onClick={(event) => {
+                  event.stopPropagation();
                   handleEdit(row);
                 }}
-                disabled={saving}
               >
-                <Edit className="w-4 h-4" />
+                <Edit className="h-4 w-4" />
               </Button>
             ) : null}
-
             {canDeleteClients ? (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
+                disabled={saving}
+                onClick={(event) => {
+                  event.stopPropagation();
                   askDelete(row);
                 }}
-                disabled={saving}
               >
-                <Trash2 className="w-4 h-4 text-red-500" />
+                <Trash2 className="h-4 w-4 text-red-500" />
               </Button>
             ) : null}
           </div>
@@ -385,24 +364,24 @@ function ClientsPageContent() {
                 setModalOpen(true);
               }}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="h-4 w-4" />
               Nuevo cliente
             </Button>
           ) : null
         }
         stats={[
           { label: "Clientes", value: clients.length, hint: "Total de clientes" },
-          { label: "Con acceso", value: clientsWithEmail, hint: "Clientes con acceso" }, //Hacer que el cliente pueda tener acceso a la app
+          { label: "Con acceso", value: clientsWithEmail, hint: "Clientes con acceso" },
           { label: "Con mascotas", value: clientsWithPets, hint: "Clientes con mascotas" },
           { label: "Mascotas", value: totalPets, hint: "Mascotas vinculadas" },
         ]}
       />
 
-      {error && (
+      {error ? (
         <div className="rounded-[1.5rem] border border-destructive/20 bg-destructive/8 p-4 text-sm text-destructive">
           {error}
         </div>
-      )}
+      ) : null}
 
       <DataTable
         columns={columns as any[]}
@@ -415,24 +394,24 @@ function ClientsPageContent() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editingClient ? "Editar Cliente" : "Nuevo Cliente"}
+        title={editingClient ? "Editar cliente" : "Nuevo cliente"}
         footer={
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancelar
             </Button>
             {(editingClient ? canUpdateClients : canCreateClients) ? (
-              <Button onClick={() => handleSubmit()} disabled={saving}>
-                {editingClient ? "Guardar Cambios" : "Crear Cliente"}
+              <Button disabled={saving} onClick={() => void handleSubmit()}>
+                {saving ? "Guardando..." : editingClient ? "Guardar cambios" : "Crear cliente"}
               </Button>
             ) : null}
           </div>
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
-              label="Nombre Completo"
+              label="Nombre completo"
               name="fullName"
               value={formData.fullName}
               onChange={handleChange}
@@ -440,17 +419,15 @@ function ClientsPageContent() {
               className="sm:col-span-2"
               error={errors.fullName}
             />
-
-            <FormField 
-              label="Teléfono" 
-              name="phone" 
-              value={formData.phone} 
-              onChange={handleChange} 
+            <FormField
+              label="Teléfono"
+              name="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={handleChange}
               required
-              inputMask={maskedInputRef}
               error={errors.phone}
             />
-
             <FormField
               label="Email"
               name="email"
@@ -459,9 +436,13 @@ function ClientsPageContent() {
               onChange={handleChange}
               error={errors.email}
             />
-
-            <FormField label="Dirección" name="address" value={formData.address} onChange={() => handleChange} error={errors.address} />
-
+            <FormField
+              label="Dirección"
+              name="address"
+              value={formData.address}
+              onChange={handleChange}
+              error={errors.address}
+            />
             <FormField
               label="Notas"
               name="notes"

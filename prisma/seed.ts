@@ -1,4 +1,4 @@
-import { Prisma } from "@/generated/prisma/client";
+﻿import { Prisma } from "@/generated/prisma/client";
 import {
   AppointmentStatus,
   AppointmentType,
@@ -1465,7 +1465,7 @@ const CLINICS: ClinicSeed[] = [
           {
             type: StockMovementType.SALE,
             quantity: 2,
-            reason: "Aplicadas en campaña del mes",
+            reason: "Aplicadas en campaÃ±a del mes",
             createdByKey: "vet_adrian",
             daysOffset: -7,
           },
@@ -2738,6 +2738,7 @@ async function seedClinic(tx: Prisma.TransactionClient, clinic: ClinicSeed) {
             clinicId: createdClinic.id,
             petId: pet.id,
             vaccineId: vaccine.id,
+            vaccineName: vaccine.name,
             visitId: visit.id,
             appliedAt: withTime(vaccination.appliedDaysOffset, 15, 0),
             nextDueAt:
