@@ -23,6 +23,8 @@ import { format, parseISO, differenceInYears, differenceInMonths } from "date-fn
 import { es } from "date-fns/locale";
 import Modal from "@/components/shared/Modal";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
+import SearchableSelect from "@/components/shared/SearchableSelect";
+import { Label } from "@/components/ui/label";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
@@ -34,6 +36,7 @@ type VisitDTO = any;
 type VaccDTO = any;
 type VaccineDTO = any;
 type AttachmentDTO = any;
+type VetDTO = { id: string; name: string; email: string };
 type AttachmentUploadDraft = {
   fileName: string;
   fileType: string;
@@ -100,6 +103,7 @@ function PatientDetailContent() {
   const [visits, setVisits] = useState<VisitDTO[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccDTO[]>([]);
   const [vaccinesCatalog, setVaccinesCatalog] = useState<VaccineDTO[]>([]);
+  const [availableVets, setAvailableVets] = useState<VetDTO[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -117,6 +121,7 @@ function PatientDetailContent() {
   // forms
   const [visitForm, setVisitForm] = useState<any>({
     visitAt: format(new Date(), "yyyy-MM-dd"),
+    vetId: "",
     diagnosis: "",
     treatment: "",
     notes: "",
@@ -126,6 +131,7 @@ function PatientDetailContent() {
 
   const [vaccineForm, setVaccineForm] = useState<any>({
     vaccineId: "",
+    vaccineName: "",
     appliedAt: format(new Date(), "yyyy-MM-dd"),
     nextDueAt: "",
     batchNumber: "",
@@ -189,6 +195,16 @@ function PatientDetailContent() {
     [vaccinesCatalog]
   );
 
+  const vetOptions = useMemo(
+    () =>
+      availableVets.map((vet) => ({
+        value: vet.id,
+        label: vet.name,
+        keywords: [vet.email],
+      })),
+    [availableVets]
+  );
+
   async function loadAll() {
     setLoading(true);
     try {
@@ -196,15 +212,17 @@ function PatientDetailContent() {
       console.log("Loaded pet:", petData);
       setPet(petData);
 
-      const [visitData, vaccData, catalog] = await Promise.all([
+      const [visitData, vaccData, catalog, appointmentMeta] = await Promise.all([
         apiGet<VisitDTO[]>(`/api/pets/${petId}/visits`),
         apiGet<VaccDTO[]>(`/api/pets/${petId}/vaccinations`),
         apiGet<VaccineDTO[]>(`/api/vaccines?clinicId=${petData.clinicId}`),
+        apiGet<{ vets: VetDTO[] }>(`/api/appointments/meta`),
       ]);
 
       setVisits(visitData);
       setVaccinations(vaccData);
       setVaccinesCatalog(catalog);
+      setAvailableVets(appointmentMeta.vets ?? []);
     } finally {
       setLoading(false);
     }
@@ -357,6 +375,7 @@ function PatientDetailContent() {
       setVisitModalOpen(false);
       setVisitForm({
         visitAt: format(new Date(), "yyyy-MM-dd"),
+        vetId: "",
         diagnosis: "",
         treatment: "",
         notes: "",
@@ -395,6 +414,7 @@ function PatientDetailContent() {
       setVaccineModalOpen(false);
       setVaccineForm({
         vaccineId: "",
+        vaccineName: "",
         appliedAt: format(new Date(), "yyyy-MM-dd"),
         nextDueAt: "",
         batchNumber: "",

@@ -49,6 +49,19 @@ const toMoney = (v: any) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+export function formatCurrency(
+  amount: number,
+  currency: string = 'DOP',
+): string {
+  return new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  // }).format(Math.abs(amount));
+  }).format(amount);
+}
+
 export default function InvoicesPage() {
   const access = useCurrentUserAccess();
   const { settings: printSettings } = usePrintSettings();
@@ -231,8 +244,8 @@ export default function InvoicesPage() {
         }
         stats={[
           { label: "Facturas", value: invoices.length, hint: "Total Facturas" },
-          { label: "Cobrado", value: totalPaid.toLocaleString(), hint: "Total Cobrado" },
-          { label: "Pendiente", value: totalPending.toLocaleString(), hint: "Total Pendiente" },
+          { label: "Cobrado", value: formatCurrency(totalPaid), hint: "Total Cobrado" },
+          { label: "Pendiente", value: formatCurrency(totalPending), hint: "Total Pendiente" },
         ]}
       />
 
@@ -253,7 +266,7 @@ export default function InvoicesPage() {
             Todas
           </Button>
 
-          {["ISSUED", "PAID", "VOID", "DRAFT"].map((key) => {
+          {["ISSUED", "PARTIALLY_PAID", "PAID", "VOID", "DRAFT"].map((key) => {
             const cfg = statusConfig[key] || { label: key, icon: Clock, color: "bg-zinc-100 text-zinc-700 dark:bg-zinc-500/10 dark:text-zinc-300" };
             return (
               <Button key={key} variant={statusFilter === key ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(key)}>
@@ -319,7 +332,7 @@ export default function InvoicesPage() {
 
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-foreground">${toMoney(invoice.total).toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-foreground">{formatCurrency(Number(invoice.total)).toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">
                       {invoice.itemsCount} {invoice.itemsCount === 1 ? "concepto" : "conceptos"}
                     </p>

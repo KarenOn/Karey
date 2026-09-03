@@ -1,22 +1,13 @@
 import { z } from "zod";
-
-const optionalTrimmedString = (max: number) =>
-  z.preprocess(
-    (value) => {
-      if (typeof value !== "string") {
-        return value;
-      }
-
-      const trimmed = value.trim();
-      return trimmed.length === 0 ? undefined : trimmed;
-    },
-    z.string().max(max).optional()
-  );
+import {
+  optionalPhoneSchema,
+  optionalTrimmedString,
+} from "@/lib/validators/common";
 
 export const UserProfileUpdateSchema = z.object({
   name: z.string().trim().min(2, "El nombre es requerido").max(120, "El nombre es demasiado largo"),
   avatarStorageRef: z.string().trim().max(1000).optional().or(z.literal("")),
-  phone: optionalTrimmedString(40),
+  phone: optionalPhoneSchema,
   jobTitle: optionalTrimmedString(80),
   bio: optionalTrimmedString(1200),
 });

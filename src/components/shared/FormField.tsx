@@ -1,122 +1,24 @@
-// "use client";
-
-// import React from "react";
-// import { Label } from "@/components/ui/label";
-// import { Input } from "@/components/ui/input";
-// import { Textarea } from "@/components/ui/textarea";
-// import {
-//   Select,
-//   SelectContent,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
-// import { Switch } from "@/components/ui/switch";
-
-// export default function FormField({
-//   label = "",
-//   name = "",
-//   type = "text",
-//   value,
-//   onChange,
-//   placeholder = "",
-//   options = [],
-//   required = false,
-//   disabled = false,
-//   className = "",
-//   error = ""
-// }) {
-//   const handleChange = (newValue) => {
-//     onChange({ target: { name, value: newValue } });
-//   };
-
-//   return (
-//     <div className={`space-y-2 ${className}`}>
-//       {label && (
-//         <Label htmlFor={name} className="text-sm font-medium text-slate-700">
-//           {label}
-//           {required ? <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">(Obligatorio)</span> : <span className="ml-2 text-xs text-muted-foreground">(Opcional)</span>}
-//         </Label>
-//       )}
-      
-//       {type === "textarea" ? (
-//         <>
-//           <Textarea
-//             id={name}
-//             name={name}
-//             value={value || ""}
-//             onChange={onChange}
-//             placeholder={placeholder}
-//             disabled={disabled}
-//             className="bg-white"
-//           />
-//           {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-//         </>
-//       ) : type === "select" ? (
-//         <>
-//           <Select value={value || ""} onValueChange={handleChange} disabled={disabled}>
-//             <SelectTrigger className="bg-white">
-//               <SelectValue placeholder={placeholder || "Seleccionar..."} />
-//             </SelectTrigger>
-//             <SelectContent>
-//               {options.map((opt) => (
-//                 <SelectItem key={opt.value} value={opt.value}>
-//                   {opt.label}
-//                 </SelectItem>
-//               ))}
-//             </SelectContent>
-//           </Select>
-//           {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-//         </>
-//       ) : type === "switch" ? (
-//         <>
-//           <div className="flex items-center gap-2">
-//             <Switch
-//               id={name}
-//               checked={value || false}
-//               onCheckedChange={(checked) => handleChange(checked)}
-//               disabled={disabled}
-//             />
-//             <Label htmlFor={name} className="text-sm text-slate-600">{placeholder}</Label>
-//           </div>
-//           {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-//         </>
-//       ) : (
-//         <>
-//           <Input
-//             id={name}
-//             name={name}
-//             type={type}
-//             value={value || ""}
-//             onChange={onChange}
-//             placeholder={placeholder}
-//             disabled={disabled}
-//             className="bg-white"
-//           />
-//           {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-//         </>
-//       )}
-//     </div>
-//   );
-// }
-
 "use client";
 
 import React from "react";
-import { Label } from "@/components/ui/label";
+import PhoneInput from "@/components/shared/PhoneInput";
+import SearchableSelect, { type SearchableSelectOption } from "@/components/shared/SearchableSelect";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 
-type Option = { value: string | number; label: string };
-type FieldType = "text" | "email" | "password" | "number" | "textarea" | "date" | "time" | "select" | "switch";
+type FieldType =
+  | "text"
+  | "email"
+  | "password"
+  | "number"
+  | "tel"
+  | "textarea"
+  | "date"
+  | "time"
+  | "select"
+  | "switch";
 type FieldValue = string | number | boolean | null | undefined;
 type FormFieldPrimitiveValue = string | number | boolean;
 
@@ -138,12 +40,16 @@ type FormFieldProps = {
   value?: FieldValue;
   onChange?: (event: FormFieldChangeEvent) => void;
   placeholder?: string;
-  options?: Option[];
+  options?: Array<
+    | { value: string | number; label: string }
+    | SearchableSelectOption
+  >;
   required?: boolean;
   disabled?: boolean;
   className?: string;
   error?: string;
-  inputMask?: React.Ref<HTMLInputElement>;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
 };
 
 export default function FormField({
@@ -153,12 +59,13 @@ export default function FormField({
   value,
   onChange,
   placeholder = "",
-  options = [] as Option[],
+  options = [],
   required = false,
   disabled = false,
   className = "",
   error = "",
-  inputMask,
+  searchPlaceholder,
+  emptyMessage,
 }: FormFieldProps) {
   const emitChange = (newValue: FormFieldPrimitiveValue, metadata?: { checked?: boolean; type?: string }) => {
     onChange?.({
@@ -173,102 +80,100 @@ export default function FormField({
     });
   };
 
-  const safeValue = value === undefined || value === null ? "" : String(value);
+  const normalizedOptions: SearchableSelectOption[] = options.map((option) => ({
+    value: String(option.value),
+    label: option.label,
+    keywords: "keywords" in option ? option.keywords : undefined,
+    disabled: "disabled" in option ? option.disabled : undefined,
+  }));
 
   return (
     <div className={`space-y-2 ${className}`}>
-      {label && (
+      {label ? (
         <Label htmlFor={name} className="text-sm font-semibold text-foreground/90">
           {label}
-          {required ? <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">(Obligatorio)</span> : <span className="ml-2 text-xs text-muted-foreground">(Opcional)</span>}
+          {required ? (
+            <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">
+              (Obligatorio)
+            </span>
+          ) : (
+            <span className="ml-2 text-xs text-muted-foreground">(Opcional)</span>
+          )}
         </Label>
-      )}
+      ) : null}
 
       {type === "textarea" ? (
-        <>
-          <Textarea
-            id={name}
-            name={name}
-            value={typeof value === "boolean" ? "" : (value ?? "")}
-            onChange={(event) =>
-              onChange?.({
-                name,
-                value: event.target.value,
-                target: {
-                  name,
-                  value: event.target.value,
-                  type: event.target.type,
-                },
-              })
-            }
-            placeholder={placeholder}
-            disabled={disabled}
-            className="bg-input"
-          />
-          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
-        </>
+        <Textarea
+          id={name}
+          name={name}
+          value={typeof value === "boolean" ? "" : (value ?? "")}
+          onChange={(event) =>
+            emitChange(event.target.value, {
+              type: event.target.type,
+            })
+          }
+          placeholder={placeholder}
+          disabled={disabled}
+          className="bg-input"
+        />
       ) : type === "select" ? (
-        <>
-          <Select
-            value={safeValue}
-            onValueChange={(val) => emitChange(val)}
-            disabled={disabled}
-          >
-            <SelectTrigger className="w-full bg-input">
-              <SelectValue placeholder={placeholder || "Seleccionar..."} />
-            </SelectTrigger>
-            <SelectContent>
-              {(options as Option[]).map((opt) => (
-                <SelectItem key={String(opt.value)} value={String(opt.value)}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
-        </>
+        <SearchableSelect
+          disabled={disabled}
+          emptyMessage={emptyMessage}
+          onValueChange={(nextValue) => emitChange(nextValue)}
+          options={normalizedOptions}
+          placeholder={placeholder || "Seleccionar..."}
+          searchPlaceholder={searchPlaceholder || `Buscar ${label.toLowerCase()}...`}
+          value={value === undefined || value === null ? "" : String(value)}
+        />
       ) : type === "switch" ? (
-        <>
-          <div className="flex items-center gap-2">
-            <Switch
-              id={name}
-              checked={Boolean(value)}
-              onCheckedChange={(checked) => emitChange(checked, { checked, type: "checkbox" })}
-              disabled={disabled}
-            />
-            <Label htmlFor={name} className="text-sm text-muted-foreground">
-              {placeholder}
-            </Label>
-          </div>
-          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
-        </>
-      ) : (
-        <>
-          <Input
+        <div className="flex items-center gap-2">
+          <Switch
             id={name}
-            name={name}
-            type={type}
-            value={typeof value === "boolean" ? "" : (value ?? "")}
-            onChange={(event) =>
-              onChange?.({
-                name,
-                value: event.target.type === "checkbox" ? event.target.checked : event.target.value,
-                target: {
-                  name,
-                  value: event.target.type === "checkbox" ? event.target.checked : event.target.value,
-                  checked: event.target.checked,
-                  type: event.target.type,
-                },
-              })
-            }
-            placeholder={placeholder}
+            checked={Boolean(value)}
+            onCheckedChange={(checked) => emitChange(checked, { checked, type: "checkbox" })}
             disabled={disabled}
-            className="bg-input"
-            ref={inputMask}
           />
-          {error && <p className="mt-1 text-sm font-medium text-red-500">{error}</p>}
-        </>
+          <Label htmlFor={name} className="text-sm text-muted-foreground">
+            {placeholder}
+          </Label>
+        </div>
+      ) : type === "tel" ? (
+        <PhoneInput
+          id={name}
+          name={name}
+          type="tel"
+          value={typeof value === "boolean" ? "" : (value ?? "")}
+          onChange={(event) =>
+            emitChange(event.target.value, {
+              checked: event.target.checked,
+              type: event.target.type,
+            })
+          }
+          disabled={disabled}
+        />
+      ) : (
+        <Input
+          id={name}
+          name={name}
+          type={type}
+          value={typeof value === "boolean" ? "" : (value ?? "")}
+          onChange={(event) =>
+            emitChange(
+              event.target.type === "checkbox" ? event.target.checked : event.target.value,
+              {
+                checked: event.target.checked,
+                type: event.target.type,
+              }
+            )
+          }
+          placeholder={placeholder}
+          disabled={disabled}
+          className="bg-input"
+        />
       )}
+
+      {error ? <p className="mt-1 text-sm font-medium text-red-500">{error}</p> : null}
     </div>
   );
 }

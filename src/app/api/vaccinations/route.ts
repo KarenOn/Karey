@@ -10,6 +10,7 @@ export async function GET() {
     orderBy: { appliedAt: "desc" },
     select: {
       id: true,
+      vaccineName: true,
       appliedAt: true,
       nextDueAt: true,
       batchNumber: true,

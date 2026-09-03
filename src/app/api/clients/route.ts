@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
+import { ClientFormSchema, zodFieldErrors } from "@/lib/validators/client";
 
 export async function GET() {
   const { clinicId } = await requireClinicPermission("clients.read");
@@ -12,40 +13,51 @@ export async function GET() {
   });
 
   return NextResponse.json(
-    clients.map((c) => ({
-      id: c.id,
-      fullName: c.fullName,
-      phone: c.phone,
-      email: c.email,
-      address: c.address,
-      notes: c.notes,
-      petsCount: c._count.pets,
+    clients.map((client) => ({
+      id: client.id,
+      fullName: client.fullName,
+      phone: client.phone,
+      email: client.email,
+      address: client.address,
+      notes: client.notes,
+      petsCount: client._count.pets,
     }))
   );
 }
 
 export async function POST(req: Request) {
   const { clinicId } = await requireClinicPermission("clients.create");
+  const body = await req.json().catch(() => null);
+  const parsed = ClientFormSchema.safeParse(body);
 
-  const body = await req.json();
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "No pudimos crear el cliente. Revisa los datos e inténtalo nuevamente.", details: zodFieldErrors(parsed.error) },
+      { status: 422 }
+    );
+  }
+
   const client = await prisma.client.create({
     data: {
       clinicId,
-      fullName: String(body.fullName ?? "").trim(),
-      phone: body.phone ? String(body.phone).trim() : null,
-      email: body.email ? String(body.email).trim() : null,
-      address: body.address ? String(body.address).trim() : null,
-      notes: body.notes ? String(body.notes).trim() : null,
+      fullName: parsed.data.fullName,
+      phone: parsed.data.phone,
+      email: parsed.data.email ?? null,
+      address: parsed.data.address ?? null,
+      notes: parsed.data.notes ?? null,
     },
   });
 
-  return NextResponse.json({
-    id: client.id,
-    fullName: client.fullName,
-    phone: client.phone,
-    email: client.email,
-    address: client.address,
-    notes: client.notes,
-    petsCount: 0,
-  });
+  return NextResponse.json(
+    {
+      id: client.id,
+      fullName: client.fullName,
+      phone: client.phone,
+      email: client.email,
+      address: client.address,
+      notes: client.notes,
+      petsCount: 0,
+    },
+    { status: 201 }
+  );
 }

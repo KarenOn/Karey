@@ -1,19 +1,14 @@
 import { z } from "zod";
+import { emptyStringToUndefined } from "@/lib/validators/common";
 
 export const ClinicalVisitCreateSchema = z.object({
-  // viene de la URL (/api/pets/:id/visits) => petId
-  visitAt: z.coerce.date().optional(), // si no mandas, Prisma pone now() por default
-  weightKg: z.coerce.number().nonnegative().optional(),
-  temperatureC: z.coerce.number().min(20).max(45).optional(),
-
-  diagnosis: z.string().trim().max(2000).optional().or(z.literal("")),
-  treatment: z.string().trim().max(2000).optional().or(z.literal("")),
-
-  // en tu schema existe "notes"
-  notes: z.string().trim().max(4000).optional().or(z.literal("")),
-
-  // opcional, si luego seleccionas el vet
-  vetId: z.string().trim().min(1).optional().or(z.literal("")),
+  visitAt: z.coerce.date().optional(),
+  weightKg: z.preprocess(emptyStringToUndefined, z.coerce.number().nonnegative().optional()),
+  temperatureC: z.preprocess(emptyStringToUndefined, z.coerce.number().min(20).max(45).optional()),
+  diagnosis: z.preprocess(emptyStringToUndefined, z.string().trim().max(2000).optional()),
+  treatment: z.preprocess(emptyStringToUndefined, z.string().trim().max(2000).optional()),
+  notes: z.preprocess(emptyStringToUndefined, z.string().trim().max(4000).optional()),
+  vetId: z.string().trim().min(1, "Selecciona el veterinario que atendio"),
 });
 
 export type ClinicalVisitCreateInput = z.infer<typeof ClinicalVisitCreateSchema>;

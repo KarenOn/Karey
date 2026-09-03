@@ -1,43 +1,43 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from "next/link";
+import { differenceInMonths, differenceInYears, format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
+import { Edit, Eye, PawPrint, Plus, Trash2, User as UserIcon } from "lucide-react";
+import AppPageHero from "@/components/shared/AppPageHero";
+import DataTable from "@/components/shared/Datatable";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
+import Modal from "@/components/shared/Modal";
+import ModalDelete from "@/components/shared/ModalDelete";
+import PhoneInput from "@/components/shared/PhoneInput";
+import SearchableSelect from "@/components/shared/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Eye, User as UserIcon, PawPrint } from "lucide-react";
-import { format, differenceInYears, differenceInMonths, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { apiCreateClient, apiListClients, type ClientRow } from "@/lib/api/clients";
+import { apiCreatePet, apiDeletePet, apiListPets, apiUpdatePet, type PetRow } from "@/lib/api/pets";
+import { apiListVaccinations, type VaccinationRow } from "@/lib/api/vaccinations";
+import { ClientFormSchema } from "@/lib/validators/client";
+import { PetCreateSchema, PetUpdateSchema } from "@/lib/validators/pet";
 import { toast } from "sonner";
 
-import DataTable from "@/components/shared/Datatable";
-import Modal from "@/components/shared/Modal";
-import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
-
-// (opcional) si ya creaste tu ModalDelete shared, Ãºsalo:
-import ModalDelete from "@/components/shared/ModalDelete";
-
-import { PetCreateSchema, PetUpdateSchema } from "@/lib/validators/pet";
-import { apiCreatePet, apiDeletePet, apiListPets, apiUpdatePet, type PetRow } from "@/lib/api/pets";
-import { apiListClients, type ClientRow } from "@/lib/api/clients";
-import { apiListVaccinations, type VaccinationRow } from "@/lib/api/vaccinations";
-import Link from "next/link";
-import AppPageHero from "@/components/shared/AppPageHero";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
-
 const speciesEmoji: Record<string, string> = {
-  DOG: "ðŸ•",
-  CAT: "ðŸ±",
-  BIRD: "ðŸ¦œ",
-  RABBIT: "ðŸ°",
-  OTHER: "ðŸ¾",
+  DOG: "🐕",
+  CAT: "🐱",
+  BIRD: "🦜",
+  RABBIT: "🐰",
+  OTHER: "🐾",
 };
 
 const speciesOptions = [
-  { value: "DOG", label: "ðŸ• Perro" },
-  { value: "CAT", label: "ðŸ± Gato" },
-  { value: "BIRD", label: "ðŸ¦œ Ave" },
-  { value: "RABBIT", label: "ðŸ° Conejo" },
-  { value: "OTHER", label: "ðŸ¾ Otro" },
+  { value: "DOG", label: "🐕 Perro", keywords: ["dog", "canino"] },
+  { value: "CAT", label: "🐱 Gato", keywords: ["cat", "felino"] },
+  { value: "BIRD", label: "🦜 Ave", keywords: ["bird", "pajaro"] },
+  { value: "RABBIT", label: "🐰 Conejo", keywords: ["rabbit"] },
+  { value: "OTHER", label: "🐾 Otro", keywords: ["other", "otro"] },
 ];
 
 const sexOptions = [
@@ -46,64 +46,80 @@ const sexOptions = [
   { value: "UNKNOWN", label: "Desconocido" },
 ];
 
-type PatientForm = {
-  name: string,
-  clientId: number,
-  species: string,
-  sex: string,
-  breed: string,
-  birthDate: string,
-  weightKg: string,
-  color: string,
-  microchip: string,
-  notes: string,
+type PatientFormState = {
+  name: string;
+  clientId: string;
+  species: string;
+  sex: string;
+  breed: string;
+  birthDate: string;
+  weightKg: string;
+  color: string;
+  microchip: string;
+  notes: string;
 };
 
-const emptyForm: PatientForm = {
+type QuickClientFormState = {
+  fullName: string;
+  phone: string;
+  email: string;
+};
+
+const emptyPatientForm: PatientFormState = {
   name: "",
-  clientId: 0,
+  clientId: "",
   species: "",
-  sex: "",
+  sex: "UNKNOWN",
   breed: "",
   birthDate: "",
   weightKg: "",
   color: "",
   microchip: "",
   notes: "",
+};
+
+const emptyQuickClientForm: QuickClientFormState = {
+  fullName: "",
+  phone: "",
+  email: "",
+};
+
+function calculateAge(birthDateISO: string | null) {
+  if (!birthDateISO) return null;
+  const date = parseISO(birthDateISO);
+  const years = differenceInYears(new Date(), date);
+  if (years > 0) return `${years} año${years > 1 ? "s" : ""}`;
+  const months = differenceInMonths(new Date(), date);
+  return `${months} mes${months > 1 ? "es" : ""}`;
 }
 
-type PetFormState = {
-  name?: string;
-  clientId?: string | number;
-  species?: string;
-  sex?: string;
-  breed?: string;
-  birthDate?: string;
-  weightKg?: string | number;
-  color?: string;
-  microchip?: string;
-  notes?: string;
-};
+function getValidationMessage(error: { issues: Array<{ message: string }> }) {
+  return error.issues[0]?.message ?? "Revisa los datos e inténtalo nuevamente.";
+}
 
 export default function PatientsPage() {
   const access = useCurrentUserAccess();
   const [activeTab, setActiveTab] = useState<"patients" | "vaccinations">("patients");
-
   const [pets, setPets] = useState<PetRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationRow[]>([]);
-
   const [loading, setLoading] = useState(true);
+  const [savingPatient, setSavingPatient] = useState(false);
+  const [savingClient, setSavingClient] = useState(false);
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
   const [editingPet, setEditingPet] = useState<PetRow | null>(null);
-  const [formData, setFormData] = useState<PetFormState>({ sex: "UNKNOWN" });
-  const canCreatePets = !!access?.actions.pets.create;
-  const canUpdatePets = !!access?.actions.pets.update;
-  const canDeletePets = !!access?.actions.pets.delete;
+  const [formData, setFormData] = useState<PatientFormState>(emptyPatientForm);
+  const [quickClientForm, setQuickClientForm] = useState<QuickClientFormState>(emptyQuickClientForm);
+  const [quickClientErrors, setQuickClientErrors] = useState<Record<string, string>>({});
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PetRow | null>(null);
+
+  const canCreatePets = !!access?.actions.pets.create;
+  const canUpdatePets = !!access?.actions.pets.update;
+  const canDeletePets = !!access?.actions.pets.delete;
 
   async function refreshAll() {
     setLoading(true);
@@ -122,122 +138,168 @@ export default function PatientsPage() {
   }
 
   useEffect(() => {
-    refreshAll();
+    void refreshAll();
   }, []);
 
   const clientOptions = useMemo(
-    () => clients.map((c) => ({ value: c.id, label: c.fullName })),
+    () =>
+      clients.map((client) => ({
+        value: String(client.id),
+        label: client.fullName,
+        keywords: [client.phone ?? "", client.email ?? ""],
+      })),
     [clients]
   );
 
-  const getClientName = (clientId: number) =>
-    clients.find((c) => c.id === clientId)?.fullName ?? "-";
+  function handlePatientChange(event: FormFieldChangeEvent) {
+    setFormData((current) => ({
+      ...current,
+      [event.target.name]: String(event.target.value),
+    }));
+  }
 
-  const calculateAge = (birthDateISO: string | null) => {
-    if (!birthDateISO) return null;
-    const d = parseISO(birthDateISO);
-    const years = differenceInYears(new Date(), d);
-    if (years > 0) return `${years} año${years > 1 ? "s" : ""}`;
-    const months = differenceInMonths(new Date(), d);
-    return `${months} mes${months > 1 ? "es" : ""}`;
-  };
-
-  const handleChange = (e: FormFieldChangeEvent) => {
-    const value =
-      e?.target?.type === "checkbox" ? e.target.checked : e?.target?.value ?? e;
-    setFormData((prev) => ({ ...prev, [e.target.name]: value }));
-  };
-
-  const openCreate = () => {
+  function openCreate() {
     if (!canCreatePets) return;
     setEditingPet(null);
-    setFormData({ ...emptyForm, sex: "UNKNOWN" });
-    setModalOpen(true);
-  };
+    setFormData(emptyPatientForm);
+    setPatientModalOpen(true);
+  }
 
-  const openEdit = (pet: PetRow) => {
+  function openEdit(pet: PetRow) {
     if (!canUpdatePets) return;
     setEditingPet(pet);
     setFormData({
       name: pet.name,
-      clientId: pet.clientId,
+      clientId: String(pet.clientId),
       species: pet.species,
       sex: pet.sex,
       breed: pet.breed ?? "",
       birthDate: pet.birthDate ? pet.birthDate.slice(0, 10) : "",
-      weightKg: pet.weightKg ?? "",
+      weightKg: pet.weightKg != null ? String(pet.weightKg) : "",
       color: pet.color ?? "",
       microchip: pet.microchip ?? "",
       notes: pet.notes ?? "",
     });
-    setModalOpen(true);
-  };
+    setPatientModalOpen(true);
+  }
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((editingPet && !canUpdatePets) || (!editingPet && !canCreatePets)) {
+  function openQuickClient(prefill = "") {
+    setQuickClientErrors({});
+    setQuickClientForm({
+      ...emptyQuickClientForm,
+      fullName: prefill,
+    });
+    setQuickClientOpen(true);
+  }
+
+  async function submitQuickClient() {
+    const parsed = ClientFormSchema.safeParse(quickClientForm);
+    if (!parsed.success) {
+      const nextErrors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path.join(".") || "form";
+        if (!nextErrors[key]) nextErrors[key] = issue.message;
+      }
+      setQuickClientErrors(nextErrors);
       return;
     }
 
     try {
+      setSavingClient(true);
+      const created = await apiCreateClient(parsed.data);
+      setClients((current) => [created, ...current]);
+      setFormData((current) => ({ ...current, clientId: String(created.id) }));
+      setQuickClientOpen(false);
+      setQuickClientForm(emptyQuickClientForm);
+      toast.success("El cliente fue registrado.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No pudimos crear el cliente. Revisa los datos e inténtalo nuevamente."
+      );
+    } finally {
+      setSavingClient(false);
+    }
+  }
+
+  async function submitPatient(event?: React.FormEvent) {
+    event?.preventDefault();
+    if ((editingPet && !canUpdatePets) || (!editingPet && !canCreatePets)) {
+      return;
+    }
+
+    const payload = {
+      ...formData,
+      clientId: Number(formData.clientId),
+      weightKg: formData.weightKg === "" ? undefined : Number(formData.weightKg),
+      birthDate: formData.birthDate || undefined,
+    };
+
+    try {
+      setSavingPatient(true);
       if (editingPet) {
-        const parsed = PetUpdateSchema.safeParse(formData);
+        const parsed = PetUpdateSchema.safeParse(payload);
         if (!parsed.success) {
-          console.error(parsed.error.flatten());
-          alert("Revisa los campos del formulario (update).");
+          toast.error(getValidationMessage(parsed.error));
           return;
         }
+
         await apiUpdatePet(editingPet.id, parsed.data);
+        toast.success("El paciente fue actualizado.");
       } else {
-        const parsed = PetCreateSchema.safeParse(formData);
+        const parsed = PetCreateSchema.safeParse(payload);
         if (!parsed.success) {
-          console.error(parsed.error.flatten());
-          alert("Revisa los campos del formulario (create).");
+          toast.error(getValidationMessage(parsed.error));
           return;
         }
+
         await apiCreatePet(parsed.data);
+        toast.success("El paciente fue registrado.");
       }
 
-      setModalOpen(false);
+      setPatientModalOpen(false);
       setEditingPet(null);
-      setFormData({ sex: "UNKNOWN" });
+      setFormData(emptyPatientForm);
       await refreshAll();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo guardar el paciente.");
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo guardar el paciente."
+      );
+    } finally {
+      setSavingPatient(false);
     }
-  };
+  }
 
-  const confirmDelete = (pet: PetRow) => {
+  function confirmDelete(pet: PetRow) {
     if (!canDeletePets) return;
     setDeleteTarget(pet);
     setDeleteOpen(true);
-  };
+  }
 
-
-  const doDelete = async () => {
+  async function doDelete() {
     if (!deleteTarget) return;
-
     try {
       await apiDeletePet(deleteTarget.id);
       setDeleteOpen(false);
       setDeleteTarget(null);
       await refreshAll();
+      toast.success("El paciente fue eliminado.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo eliminar el paciente.");
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo eliminar el paciente."
+      );
     }
-  };
+  }
 
   const petColumns = [
     {
       header: "Paciente",
       cell: (row: PetRow) => (
         <div className="flex items-center gap-3">
-            {/* <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] border border-border/70 bg-secondary text-2xl">
-            {speciesEmoji[row.species] || "ðŸ¾"}
-          </div> */}
           <div>
-              <p className="font-semibold text-foreground">{row.name}</p>
-              <p className="text-sm text-muted-foreground">
+            <p className="font-semibold text-foreground">{row.name}</p>
+            <p className="text-sm text-muted-foreground">
               {row.species} - {row.breed || "Sin raza"}
             </p>
           </div>
@@ -246,22 +308,33 @@ export default function PatientsPage() {
     },
     {
       header: "Propietario",
-      cell: (row: PetRow) => (
-        <div className="flex items-center gap-2">
-            <UserIcon className="w-4 h-4 text-muted-foreground" />
-            <span className="text-foreground">{getClientName(row.clientId)}</span>
-        </div>
-      ),
+      cell: (row: PetRow) => {
+        const client = clients.find((item) => item.id === row.clientId);
+        return (
+          <div className="flex items-center gap-2">
+            <UserIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-foreground">{client?.fullName ?? "-"}</span>
+          </div>
+        );
+      },
     },
     {
       header: "Edad",
-      cell: (row: PetRow) =>
-        calculateAge(row.birthDate) || <span className="text-muted-foreground/60">-</span>,
+      cell: (row: PetRow) => calculateAge(row.birthDate) ?? <span className="text-muted-foreground/60">-</span>,
     },
     {
       header: "Sexo",
       cell: (row: PetRow) => (
-          <Badge className={row.sex === "MALE" ? "bg-secondary text-foreground font-semibold" : row.sex === "FEMALE" ? "bg-primary/12 text-primary font-semibold" : "bg-muted text-foreground font-semibold"} variant="secondary">
+        <Badge
+          className={
+            row.sex === "MALE"
+              ? "bg-secondary text-foreground font-semibold"
+              : row.sex === "FEMALE"
+                ? "bg-primary/12 text-primary font-semibold"
+                : "bg-muted text-foreground font-semibold"
+          }
+          variant="secondary"
+        >
           {row.sex === "MALE" ? "Macho" : row.sex === "FEMALE" ? "Hembra" : "Desconocido"}
         </Badge>
       ),
@@ -272,18 +345,17 @@ export default function PatientsPage() {
         <div className="flex items-center gap-2">
           <Link href={`/pets/${row.id}`}>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
-              <Eye className="w-4 h-4" />
+              <Eye className="h-4 w-4" />
             </Button>
           </Link>
-          
           {canUpdatePets ? (
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => openEdit(row)}>
-              <Edit className="w-4 h-4" />
+              <Edit className="h-4 w-4" />
             </Button>
           ) : null}
           {canDeletePets ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDelete(row)}>
-              <Trash2 className="w-4 h-4 text-red-500" />
+              <Trash2 className="h-4 w-4 text-red-500" />
             </Button>
           ) : null}
         </div>
@@ -296,51 +368,39 @@ export default function PatientsPage() {
       header: "Paciente",
       cell: (row: VaccinationRow) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-pink-50 flex items-center justify-center text-xl">
-            {row.pet ? speciesEmoji[row.pet.species] : "ðŸ¾"}
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-pink-50 text-xl">
+            {row.pet ? speciesEmoji[row.pet.species] : "🐾"}
           </div>
           <span className="font-medium text-foreground">{row.pet?.name || "-"}</span>
         </div>
       ),
     },
-    { header: "Vacuna", cell: (row: VaccinationRow) => row.vaccine?.name ?? "-" },
+    { header: "Vacuna", cell: (row: VaccinationRow) => row.vaccineName ?? row.vaccine?.name ?? "-" },
     {
-      header: "Fecha AplicaciÃ³n",
-      cell: (row: VaccinationRow) =>
-        format(parseISO(row.appliedAt), "d MMM yyyy", { locale: es }),
+      header: "Fecha Aplicación",
+      cell: (row: VaccinationRow) => format(parseISO(row.appliedAt), "d MMM yyyy", { locale: es }),
     },
     {
-      header: "PrÃ³xima Dosis",
+      header: "Próxima Dosis",
       cell: (row: VaccinationRow) =>
-        row.nextDueAt
-          ? format(parseISO(row.nextDueAt), "d MMM yyyy", { locale: es })
-          : <span className="text-muted-foreground/60">-</span>,
+        row.nextDueAt ? (
+          format(parseISO(row.nextDueAt), "d MMM yyyy", { locale: es })
+        ) : (
+          <span className="text-muted-foreground/60">-</span>
+        ),
     },
   ];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-500"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-teal-500" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* <div className="app-page-hero flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="app-kicker mb-3 border-0">Pacientes y vacunas</div>
-          <h2 className="app-heading text-3xl sm:text-4xl">Mascotas con mejor contexto y una lectura mÃƒÂ¡s cÃƒÂ³moda.</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Gestiona pacientes, propietarios y su historial con una interfaz mÃƒÂ¡s densa, amable y consistente con el resto de la app.</p>
-        </div>
-        <Button
-          onClick={openCreate}
-        >
-          <Plus className="w-4 h-4 mr-2" /> Nuevo Paciente
-        </Button>
-      </div> */}
-
       <AppPageHero
         badgeIcon={<PawPrint className="size-3.5" />}
         badgeLabel="Pacientes y vacunas"
@@ -348,11 +408,8 @@ export default function PatientsPage() {
         description="Gestiona pacientes, propietarios y su historial"
         actions={
           canCreatePets ? (
-            <Button
-              className="gap-2"
-              onClick={openCreate}
-            >
-              <Plus className="w-4 h-4" />
+            <Button className="gap-2" onClick={openCreate}>
+              <Plus className="h-4 w-4" />
               Nuevo paciente
             </Button>
           ) : null
@@ -360,95 +417,190 @@ export default function PatientsPage() {
         stats={[
           { label: "Pacientes", value: pets.length, hint: "Total de pacientes" },
           { label: "Vacunas", value: vaccinations.length, hint: "Total de vacunas" },
-          // { label: "Con mascotas", value: clientsWithPets, hint: "Historias activas" },
-          // { label: "Mascotas", value: totalPets, hint: "Pacientes vinculados" },
         ]}
       />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v === "vaccinations" ? "vaccinations" : "patients")}>
-        <TabsList>
-          <TabsTrigger value="patients">Pacientes</TabsTrigger>
-          <TabsTrigger value="vaccinations">Vacunas</TabsTrigger>
-        </TabsList>
+      <div className="space-y-6">
+        <div className="inline-flex rounded-2xl border border-border/70 p-1">
+          <Button variant={activeTab === "patients" ? "default" : "ghost"} onClick={() => setActiveTab("patients")}>
+            Pacientes
+          </Button>
+          <Button variant={activeTab === "vaccinations" ? "default" : "ghost"} onClick={() => setActiveTab("vaccinations")}>
+            Vacunas
+          </Button>
+        </div>
 
-        <TabsContent value="patients" className="mt-6">
+        {activeTab === "patients" ? (
           <DataTable
             columns={petColumns}
             data={pets}
             searchKey="name"
             searchPlaceholder="Buscar paciente..."
             emptyMessage="No hay pacientes registrados"
-            
           />
-        </TabsContent>
-
-        <TabsContent value="vaccinations" className="mt-6">
+        ) : (
           <DataTable
             columns={vaccinationColumns}
             data={vaccinations}
-            searchKey={undefined}
             emptyMessage="No hay vacunaciones registradas"
+            searchKey={undefined}
           />
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editingPet ? "Editar Paciente" : "Nuevo Paciente"}
+        open={patientModalOpen}
+        onClose={() => setPatientModalOpen(false)}
+        title={editingPet ? "Editar paciente" : "Nuevo paciente"}
         size="lg"
         footer={
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
+            <Button variant="outline" onClick={() => setPatientModalOpen(false)}>
               Cancelar
             </Button>
-            {(editingPet ? canUpdatePets : canCreatePets) ? (
-              <Button onClick={submit} className="bg-gradient-to-r from-teal-500 to-teal-600">
-                {editingPet ? "Guardar Cambios" : "Crear Paciente"}
-              </Button>
-            ) : null}
+            <Button disabled={savingPatient} onClick={() => void submitPatient()}>
+              {savingPatient
+                ? editingPet
+                  ? "Guardando..."
+                  : "Creando..."
+                : editingPet
+                  ? "Guardar cambios"
+                  : "Crear paciente"}
+            </Button>
           </div>
         }
       >
-        <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Nombre" name="name" value={formData.name} onChange={handleChange} required />
-            <FormField
-              label="Propietario"
-              name="clientId"
-              type="select"
-              value={formData.clientId}
-              onChange={handleChange}
-              options={clientOptions}
-              required
-            />
+        <form onSubmit={(event) => void submitPatient(event)} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Nombre" name="name" value={formData.name} onChange={handlePatientChange} required />
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground/90">
+                Dueño / responsable
+                <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">
+                  (Obligatorio)
+                </span>
+              </Label>
+              <SearchableSelect
+                allowCustomValue
+                customValueLabel={(input) => `+ Registrar nuevo dueño: "${input}"`}
+                emptyMessage="No encontramos clientes."
+                onValueChange={(nextValue, detail) => {
+                  if (detail?.isCustom) {
+                    openQuickClient(nextValue);
+                    return;
+                  }
+                  setFormData((current) => ({ ...current, clientId: nextValue }));
+                }}
+                options={clientOptions}
+                placeholder="Seleccionar cliente"
+                searchPlaceholder="Buscar por nombre, teléfono o correo..."
+                value={formData.clientId}
+              />
+            </div>
+
             <FormField
               label="Especie"
               name="species"
               type="select"
               value={formData.species}
-              onChange={handleChange}
+              onChange={handlePatientChange}
               options={speciesOptions}
               required
+              searchPlaceholder="Buscar especie..."
             />
-            <FormField label="Raza" name="breed" value={formData.breed} onChange={handleChange} />
-            <FormField label="Fecha de Nacimiento" name="birthDate" type="date" value={formData.birthDate} onChange={handleChange} />
-            <FormField label="Sexo" name="sex" type="select" value={formData.sex} onChange={handleChange} options={sexOptions} />
-
-            <FormField label="Peso (kg)" name="weightKg" type="number" value={formData.weightKg} onChange={handleChange} />
-            <FormField label="Color/Pelaje" name="color" value={formData.color} onChange={handleChange} />
-            <FormField label="Microchip" name="microchip" value={formData.microchip} onChange={handleChange} />
-
+            <FormField label="Raza" name="breed" value={formData.breed} onChange={handlePatientChange} />
+            <FormField label="Fecha de nacimiento" name="birthDate" type="date" value={formData.birthDate} onChange={handlePatientChange} />
+            <FormField
+              label="Sexo"
+              name="sex"
+              type="select"
+              value={formData.sex}
+              onChange={handlePatientChange}
+              options={sexOptions}
+              searchPlaceholder="Buscar sexo..."
+            />
+            <FormField label="Peso (kg)" name="weightKg" type="number" value={formData.weightKg} onChange={handlePatientChange} />
+            <FormField label="Color / pelaje" name="color" value={formData.color} onChange={handlePatientChange} />
+            <FormField label="Microchip" name="microchip" value={formData.microchip} onChange={handlePatientChange} />
             <FormField
               label="Notas"
               name="notes"
               type="textarea"
               value={formData.notes}
-              onChange={handleChange}
+              onChange={handlePatientChange}
               className="sm:col-span-2"
             />
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={quickClientOpen}
+        onClose={() => setQuickClientOpen(false)}
+        title="Registrar nuevo dueño"
+        size="sm"
+        footer={
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setQuickClientOpen(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={savingClient} onClick={() => void submitQuickClient()}>
+              {savingClient ? "Creando..." : "Crear cliente"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="quick-client-name" className="text-sm font-semibold text-foreground/90">
+              Nombre completo
+            </Label>
+            <Input
+              id="quick-client-name"
+              value={quickClientForm.fullName}
+              onChange={(event) =>
+                setQuickClientForm((current) => ({ ...current, fullName: event.target.value }))
+              }
+            />
+            {quickClientErrors.fullName ? (
+              <p className="text-sm font-medium text-red-500">{quickClientErrors.fullName}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="quick-client-phone" className="text-sm font-semibold text-foreground/90">
+              Teléfono
+            </Label>
+            <PhoneInput
+              id="quick-client-phone"
+              value={quickClientForm.phone}
+              onChange={(event) =>
+                setQuickClientForm((current) => ({ ...current, phone: event.target.value }))
+              }
+            />
+            {quickClientErrors.phone ? (
+              <p className="text-sm font-medium text-red-500">{quickClientErrors.phone}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="quick-client-email" className="text-sm font-semibold text-foreground/90">
+              Correo electrónico
+            </Label>
+            <Input
+              id="quick-client-email"
+              type="email"
+              value={quickClientForm.email}
+              onChange={(event) =>
+                setQuickClientForm((current) => ({ ...current, email: event.target.value }))
+              }
+            />
+            {quickClientErrors.email ? (
+              <p className="text-sm font-medium text-red-500">{quickClientErrors.email}</p>
+            ) : null}
+          </div>
+        </div>
       </Modal>
 
       <ModalDelete
@@ -456,9 +608,6 @@ export default function PatientsPage() {
         onOpenChange={setDeleteOpen}
         title="Eliminar paciente"
         itemName={deleteTarget?.name}
-        // description={`Â¿Seguro que deseas eliminar a "${deleteTarget?.name}"? Esta acciÃ³n no se puede deshacer.`}
-        // dangerText="Eliminar"
-        // onClose={() => { setDeleteOpen(false); setDeleteTarget(null); }}
         onConfirm={doDelete}
       />
     </div>
