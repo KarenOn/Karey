@@ -1,15 +1,46 @@
 {
   "version": 1,
   "skills": {
-    "frontend-design": {
-      "source": "anthropics/skills",
+    "design-review": {
+      "source": "julianoczkowski/designer-skills",
       "sourceType": "github",
-      "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+      "skillPath": "design-review/SKILL.md",
+      "computedHash": "a90668e07da71e4fe011148e2f989f628521d384cf4f1aaa0f3fddc836254cfb"
+    },
+    "extract-design-system": {
+      "source": "arvindrk/extract-design-system",
+      "sourceType": "github",
+      "skillPath": "skills/extract-design-system/SKILL.md",
+      "computedHash": "c66852c6bc6e0267dbcc9651fa698701387fc11c5058104bc33e67f495936f7e"
+    },
+    "frontend-design": {
+      "source": "vadimcomanescu/codex-skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/design/frontend-design/SKILL.md",
+      "computedHash": "5c8f978fdc851be107880df9d06400088646fba9f0901734888dc2540154697b"
+    },
+    "migrate-radix-to-base": {
+      "source": "shadcn/ui",
+      "sourceType": "github",
+      "skillPath": "skills/migrate-radix-to-base/SKILL.md",
+      "computedHash": "4fdc31bf287f674ba6bf91a648120f7b34cd7ef370f998f2cc116fed067789c5"
     },
     "next-best-practices": {
       "source": "vercel-labs/next-skills",
       "sourceType": "github",
       "computedHash": "db85045827ebeb83ac8dbc992b69188755eeb74dcf01cbf5e694d58aa494a106"
+    },
+    "shadcn": {
+      "source": "shadcn/ui",
+      "sourceType": "github",
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "9b5a0bc8d34287ac67d8e59a84ce3beb0cc29d2bfc50159804600d79cfc2a549"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
     }
   }
 }

@@ -407,7 +407,7 @@ export default function NewTurnModal({
     <Modal
       onClose={onOpenChange}
       open={open}
-      size="xl"
+      size="full"
       title="Nuevo turno"
       footer={
         <div className="flex gap-3">
@@ -658,7 +658,7 @@ export default function NewTurnModal({
                 {mode === "search" ? "Cliente existente" : "Cliente nuevo"}
               </Badge>
               <Badge variant="secondary" className="rounded-full px-3 py-1">
-                Estado inicial: waiting
+                Estado inicial: en espera
               </Badge>
             </div>
 

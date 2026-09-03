@@ -9,10 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "framer-motion";
+import SearchInput from "@/components/shared/SearchInput";
+import DataTablePagination from "@/components/shared/DataTablePagination";
 
 export type DataTableRow = Record<string, unknown> & {
   id?: string | number;
@@ -28,90 +26,121 @@ type DataTableProps<T extends DataTableRow> = {
   columns: DataTableColumn<T>[];
   data: T[];
   searchPlaceholder?: string;
-  searchKey?: string;
+  searchKey?: keyof T & string;
+  searchKeys?: Array<keyof T & string>;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
+  title?: string;
+  description?: string;
+  actions?: React.ReactNode;
 };
 
-export default function DataTable<T extends DataTableRow>({ 
-  columns, 
-  data, 
+export default function DataTable<T extends DataTableRow>({
+  columns,
+  data,
   searchPlaceholder = "Buscar...",
   searchKey,
+  searchKeys,
+  searchValue,
+  onSearchChange,
   onRowClick,
-  emptyMessage = "No hay datos disponibles"
+  emptyMessage = "No hay datos disponibles",
+  title = "Registros",
+  description,
+  actions,
 }: DataTableProps<T>) {
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = React.useState(10);
+  const activeSearch = searchValue ?? search;
+  const searchableKeys = searchKeys ?? (searchKey ? [searchKey] : []);
 
-  const filteredData = searchKey
-    ? data.filter((item) => 
-        String(item[searchKey] || '').toLowerCase().includes(search.toLowerCase())
-      )
+  const filteredData = searchableKeys.length > 0
+    ? data.filter((item) => searchableKeys.some((key) => String(item[key] || "").toLowerCase().includes(activeSearch.toLowerCase())))
     : data;
 
+  React.useEffect(() => {
+    setPage(0);
+  }, [data, pageSize]);
+
   const paginatedData = filteredData.slice(page * pageSize, (page + 1) * pageSize);
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const resultsDescription =
+    description ??
+    `${filteredData.length} ${
+      filteredData.length === 1 ? "registro encontrado" : "registros encontrados"
+    }`;
 
   return (
-    <div className="space-y-5">
-      <div className="app-panel-strong overflow-hidden p-4 sm:p-5">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="app-panel-strong overflow-hidden">
+      <div className="border-b border-border/70 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Vista estructurada</p>
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filteredData.length} registro(s) encontrado(s) {filteredData.length !== data.length ? `de ${data.length}` : ""}
+              {resultsDescription}
+              {filteredData.length !== data.length ? ` de ${data.length}` : ""}
             </p>
           </div>
 
-          {searchKey && (
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:max-w-xl">
+            {searchableKeys.length > 0 ? (
+              <SearchInput
+                className="sm:max-w-sm"
                 placeholder={searchPlaceholder}
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                className="pl-11"
+                value={activeSearch}
+                onChange={(event) => {
+                  if (onSearchChange) onSearchChange(event.target.value);
+                  else setSearch(event.target.value);
+                  setPage(0);
+                }}
+                onClear={() => {
+                  if (onSearchChange) onSearchChange("");
+                  else setSearch("");
+                  setPage(0);
+                }}
               />
-            </div>
-          )}
+            ) : null}
+            {actions}
+          </div>
         </div>
+      </div>
 
-        <div className="overflow-hidden rounded-[1.6rem] border border-border/70 bg-background/70">
+      <div className="px-4 py-4 sm:px-5">
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-background">
           <Table>
             <TableHeader>
-              <TableRow className="bg-secondary/65 hover:bg-secondary/65">
-                {columns.map((col, i) => (
-                  <TableHead key={i} className="font-semibold text-muted-foreground">
-                    {col.header}
-                  </TableHead>
+              <TableRow className="bg-muted/55 hover:bg-muted/55">
+                {columns.map((col, index) => (
+                  <TableHead key={index}>{col.header}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="py-16 text-center text-muted-foreground">
-                    {emptyMessage}
+                  <TableCell colSpan={columns.length} className="py-10">
+                    <div className="app-empty text-center text-sm">{emptyMessage}</div>
                   </TableCell>
                 </TableRow>
               ) : (
                 paginatedData.map((row, rowIndex) => (
-                  <motion.tr
+                  <TableRow
                     key={row.id || rowIndex}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: rowIndex * 0.03 }}
                     onClick={() => onRowClick?.(row)}
-                    className={`border-b border-border/60 ${onRowClick ? 'cursor-pointer hover:bg-secondary/55' : ''} transition-colors`}
+                    className={onRowClick ? "cursor-pointer" : undefined}
                   >
                     {columns.map((col, colIndex) => (
                       <TableCell key={colIndex} className="py-4">
-                        {col.cell ? col.cell(row) : (col.accessorKey ? (row[col.accessorKey] as React.ReactNode) : null)}
+                        {col.cell
+                          ? col.cell(row)
+                          : col.accessorKey
+                            ? (row[col.accessorKey] as React.ReactNode)
+                            : null}
                       </TableCell>
                     ))}
-                  </motion.tr>
+                  </TableRow>
                 ))
               )}
             </TableBody>
@@ -119,31 +148,7 @@ export default function DataTable<T extends DataTableRow>({
         </div>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Mostrando {page * pageSize + 1} - {Math.min((page + 1) * pageSize, filteredData.length)} de {filteredData.length}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={page === 0}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {filteredData.length > 0 ? <DataTablePagination page={page} pageSize={pageSize} total={filteredData.length} onPageChange={setPage} pageSizeOptions={[10, 20, 50]} onPageSizeChange={(nextPageSize) => { setPageSize(nextPageSize); setPage(0); }} /> : null}
     </div>
   );
 }

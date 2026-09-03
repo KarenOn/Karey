@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { KeyRound, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import AppPageHero from "@/components/shared/AppPageHero";
+import DataTablePagination from "@/components/shared/DataTablePagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -119,6 +120,8 @@ export default function EmployeesPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [membersPage, setMembersPage] = useState(0);
+  const [membersPageSize, setMembersPageSize] = useState(10);
   const [capabilities, setCapabilities] = useState<Capabilities>({
     canInviteEmployees: false,
     canUpdateEmployees: false,
@@ -275,6 +278,11 @@ export default function EmployeesPage() {
 
   const activeMembers = members.filter((member) => member.isActive).length;
   const activeRoles = roles.filter((role) => role.isActive).length;
+  const visibleMembers = members.slice(membersPage * membersPageSize, (membersPage + 1) * membersPageSize);
+
+  useEffect(() => {
+    setMembersPage(0);
+  }, [membersPageSize, members.length]);
 
   return (
     <div className="space-y-6">
@@ -345,7 +353,7 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((member) => (
+                {visibleMembers.map((member) => (
                   <tr
                     key={member.id}
                     className="border-t border-border/50 transition-colors hover:bg-muted/35"
@@ -414,6 +422,7 @@ export default function EmployeesPage() {
             </table>
           </div>
         )}
+        {!loading && members.length > 0 ? <DataTablePagination page={membersPage} pageSize={membersPageSize} total={members.length} onPageChange={setMembersPage} pageSizeOptions={[10, 20, 50]} onPageSizeChange={(pageSize) => { setMembersPageSize(pageSize); setMembersPage(0); }} /> : null}
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

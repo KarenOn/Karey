@@ -470,7 +470,7 @@ function PatientDetailContent() {
     <div className="space-y-6">
       {/* Header */}
       <div className="app-page-hero flex items-center gap-4">
-        <Button variant="outline" size="icon" className="rounded-2xl" onClick={() => history.back()}>
+        <Button variant="outline" size="icon" onClick={() => history.back()}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
 
@@ -485,19 +485,19 @@ function PatientDetailContent() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pet Info */}
-        <div className="app-panel-strong overflow-hidden">
-          <div className="bg-[linear-gradient(135deg,color-mix(in_srgb,var(--brand-teal)_82%,white_18%),color-mix(in_srgb,var(--brand-navy)_82%,white_18%))] p-6 text-center text-white">
-            <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[1.75rem] border border-white/15 bg-white/12 text-5xl backdrop-blur">
+        <aside className="app-panel-strong h-fit overflow-hidden">
+          <div className="border-b border-border/70 bg-muted/35 p-5 text-center text-foreground">
+            <div className="app-stat-icon mx-auto mb-3 h-16 w-16 text-3xl">
               {speciesEmoji[pet.species] || "🐾"}
             </div>
-            <h3 className="text-2xl font-bold">{pet.name}</h3>
-            <p className="text-white/76">
+            <h3 className="text-xl font-semibold">{pet.name}</h3>
+            <p className="text-sm text-muted-foreground">
               {pet.species} • {pet.breed || "-"}
             </p>
           </div>
 
-          <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4 p-5">
+            <div className="grid grid-cols-2 gap-3">
               <div className="app-panel-muted p-3 text-center">
                 <Calendar className="mx-auto mb-1 h-5 w-5 text-muted-foreground" />
                 <p className="text-xs text-muted-foreground">Edad</p>
@@ -551,7 +551,7 @@ function PatientDetailContent() {
               </div>
             )}
           </div>
-        </div>
+        </aside>
 
         {/* Tabs */}
         <div className="lg:col-span-2 space-y-4">

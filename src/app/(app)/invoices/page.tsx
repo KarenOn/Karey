@@ -29,6 +29,7 @@ import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { openInvoiceA4Print, openInvoiceReceiptPrint } from "@/lib/printing/browser-printer";
 import { getManualReceiptPaper } from "@/lib/printing/settings";
 import { usePrintSettings } from "@/lib/printing/usePrintSettings";
+import DataTablePagination from "@/components/shared/DataTablePagination";
 
 const statusConfig: Record<string, { icon: any; label: string; color: string }> = {
   PAID: { icon: CheckCircle, label: "Pagada", color: "bg-emerald-100 text-emerald-700" },
@@ -67,6 +68,8 @@ export default function InvoicesPage() {
   const { settings: printSettings } = usePrintSettings();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +94,10 @@ export default function InvoicesPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, statusFilter]);
+
   const filteredInvoices = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return invoices.filter((inv) => {
@@ -104,6 +111,11 @@ export default function InvoicesPage() {
       return matchesSearch && matchesStatus;
     });
   }, [invoices, searchTerm, statusFilter]);
+
+  const visibleInvoices = useMemo(
+    () => filteredInvoices.slice(page * pageSize, (page + 1) * pageSize),
+    [filteredInvoices, page, pageSize]
+  );
 
   const totalPending = useMemo(
     () => invoices.filter((i) => i.status === "ISSUED").reduce((acc, i) => acc + toMoney(i.total), 0),
@@ -279,7 +291,7 @@ export default function InvoicesPage() {
 
       {/* Invoices List */}
       <div className="space-y-4">
-        {filteredInvoices.map((invoice) => {
+        {visibleInvoices.map((invoice) => {
           const status = statusConfig[invoice.status] || statusConfig.ISSUED;
           const StatusIcon = status.icon;
 
@@ -292,7 +304,7 @@ export default function InvoicesPage() {
           return (
             <div
               key={invoice.id}
-              className="app-panel-strong rounded-2xl p-6 transition-all duration-300 hover:-translate-y-0.5"
+              className="app-panel-strong p-5 transition-colors hover:bg-muted/30"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">
@@ -406,6 +418,7 @@ export default function InvoicesPage() {
           <div className="text-center py-10 text-muted-foreground">No hay facturas con ese filtro</div>
         )}
       </div>
+      {filteredInvoices.length > 0 ? <DataTablePagination page={page} pageSize={pageSize} total={filteredInvoices.length} onPageChange={setPage} pageSizeOptions={[10, 20, 50]} onPageSizeChange={(nextPageSize) => { setPageSize(nextPageSize); setPage(0); }} /> : null}
     </div>
   );
 }

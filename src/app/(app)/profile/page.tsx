@@ -81,7 +81,7 @@ export default function UserProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [snapshot, setSnapshot] = useState<ProfileData | null>(null);
   const [passwordForm, setPasswordForm] = useState<PasswordForm>(emptyPasswordForm);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -141,6 +141,14 @@ export default function UserProfilePage() {
       .join("");
   }, [profile?.name]);
 
+  const isProfileDirty = useMemo(() => {
+    if (!profile || !snapshot) return false;
+
+    return ["name", "avatarStorageRef", "phone", "jobTitle", "bio"].some(
+      (key) => profile[key as keyof ProfileData] !== snapshot[key as keyof ProfileData]
+    );
+  }, [profile, snapshot]);
+
   const startEditing = () => {
     if (!profile) {
       return;
@@ -152,7 +160,7 @@ export default function UserProfilePage() {
 
   const cancelEditing = async () => {
     if (!profile || !snapshot) {
-      setEditing(false);
+      setEditing(true);
       return;
     }
 
@@ -310,10 +318,10 @@ export default function UserProfilePage() {
         actions={
           editing ? (
             <>
-              <Button disabled={saving} onClick={() => void cancelEditing()} type="button" variant="outline">
-                Cancelar
-              </Button>
-              <Button disabled={saving} onClick={() => void saveProfile()} type="button">
+              {isProfileDirty ? <Button disabled={saving} onClick={() => void cancelEditing()} type="button" variant="outline">
+                Descartar cambios
+              </Button> : null}
+              <Button disabled={saving || !isProfileDirty} onClick={() => void saveProfile()} type="button">
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Guardar cambios
               </Button>

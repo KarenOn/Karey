@@ -1,28 +1,34 @@
 "use client";
 
 import Image from "next/image";
-import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import React, { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
-  Users,
-  PawPrint,
-  Calendar,
-  Package,
-  FileText,
-  ChevronRight,
-  Stethoscope,
   Bell,
-  Menu,
+  CircleHelp,
+  Calendar,
+  ChevronRight,
   ClipboardList,
-  Sun,
-  Moon,
+  FileText,
   IdCardLanyard,
-  ShieldCheck,
+  LayoutDashboard,
   LogOut,
+  Menu,
+  Moon,
+  Plus,
+  Package,
+  PawPrint,
+  ShieldCheck,
+  Stethoscope,
+  Sun,
+  Users,
+  User,
+  Receipt,
+  Text,
+  Monitor,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,10 +44,9 @@ import ClinicAvatar from "@/components/shared/ClinicAvatar";
 import { cn } from "@/lib/utils";
 import type { CurrentUserProfile } from "@/lib/current-user-profile";
 import ClinicOnboardingModal from "@/components/layout/ClinicOnboardingModal";
-import {
-  CurrentUserProvider,
-} from "@/components/layout/current-user-context";
+import { CurrentUserProvider } from "@/components/layout/current-user-context";
 import EmailVerificationBanner from "@/components/layout/EmailVerificationBanner";
+import GlobalSearch from "@/components/layout/GlobalSearch";
 
 type ModuleKey =
   | "dashboard"
@@ -63,20 +68,6 @@ type NavItem = {
   pageKey: string;
   hint: string;
   moduleKey: Exclude<ModuleKey, "clinicProfile">;
-};
-
-const pageDescriptions: Record<string, string> = {
-  "/today": "Consulta las citas, pacientes en espera y cobros pendientes del día.",
-  "/dashboard": "Resumen de la clínica con indicadores, agenda y facturación.",
-  "/clients": "Consulta los datos de contacto y el historial básico de cada cliente.",
-  "/today-turns": "Controla las atenciones sin cita y el estado de cada paciente.",
-  "/pets": "Consulta pacientes, especies, vacunas y seguimiento clínico.",
-  "/appointments": "Organiza la agenda y confirma la asistencia de cada cita.",
-  "/inventory": "Controla existencias, alertas y movimientos del inventario.",
-  "/invoices": "Consulta cobros, estados y documentos de facturación.",
-  "/services": "Mantén actualizado el catálogo de servicios de la clínica.",
-  "/employees": "Gestiona el equipo, los roles y los permisos de la clínica.",
-  "/clinic-profile": "Actualiza los datos, la identidad y la operación general de la clínica.",
 };
 
 type AppSidebarProps = {
@@ -140,14 +131,6 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         hint: "Mascotas",
         moduleKey: "pets",
       },
-      // {
-      //   name: "Walk-ins",
-      //   icon: Calendar,
-      //   pageKey: "Appointments",
-      //   href: "/today-turns",
-      //   hint: "Turnos sin cita",
-      //   moduleKey: "todayTurns",
-      // },
       {
         name: "Agenda",
         icon: Calendar,
@@ -177,7 +160,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         icon: Stethoscope,
         pageKey: "Services",
         href: "/services",
-        hint: "Catalogo",
+        hint: "Catálogo",
         moduleKey: "services",
       },
       {
@@ -254,37 +237,20 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
     return navigation.filter((item) => currentUser.access.modules[item.moduleKey]);
   }, [currentUser, navigation]);
 
-  const currentTitle = useMemo(() => {
-    const item = availableNavigation.find((navItem) => pathname === navItem.href || pathname.startsWith(navItem.href + "/"));
-    if (!item) return currentUser?.clinicName ?? "Karey Vet";
-    return item.name;
-  }, [availableNavigation, currentUser?.clinicName, pathname]);
-
-  const currentDescription = useMemo(() => {
-    const current = [...availableNavigation, clinicCta].find(
-      (item) => pathname === item.href || pathname.startsWith(item.href + "/")
-    );
-    if (pathname === "/profile") {
-      return "Actualiza tu perfil, tus datos de contacto y la seguridad de tu cuenta.";
-    }
-    return current ? pageDescriptions[current.href] : "Sistema de gestión veterinaria con una vista clara y fácil de usar.";
-  }, [availableNavigation, clinicCta, pathname]);
-
   const currentModuleAllowed = useMemo(() => {
     if (!currentUser) {
       return true;
     }
 
     const match = routeModuleMap.find(
-      (item) => pathname === item.prefix || pathname.startsWith(item.prefix + "/")
+      (item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`)
     );
 
     return match ? currentUser.access.modules[match.moduleKey] : true;
   }, [currentUser, pathname]);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const activeClinic = isActive(clinicCta.href);
-  const isDark = resolvedTheme === "dark";
   const userInitials =
     currentUser?.name
       ?.split(" ")
@@ -299,67 +265,64 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         <div className="app-grid pointer-events-none fixed inset-0 opacity-70" />
 
         <AnimatePresence>
-          {sidebarOpen && (
-            <motion.div
+          {sidebarOpen ? (
+            <motion.button
+              type="button"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden"
+              aria-label="Cerrar menú lateral"
             />
-          )}
+          ) : null}
         </AnimatePresence>
 
         <aside
-          className={`fixed top-0 left-0 z-50 h-full transition-all duration-300 ease-out px-3 py-3 lg:px-4 lg:py-4
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:translate-x-0
-          ${collapsed ? "lg:w-28" : "lg:w-[20rem]"}`}
+          className={cn(
+            "fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:translate-x-0",
+            sidebarOpen && "translate-x-0",
+            collapsed ? "w-[6.5rem]" : "w-[16rem]"
+          )}
         >
-          <div
-            className={cn(
-              "relative flex h-full flex-col overflow-hidden rounded-[2rem] border p-3",
-              isDark
-                ? "border-[rgba(149,170,224,0.32)] bg-[linear-gradient(180deg,#2d3a66_0%,#1f2950_100%)]"
-                : "glass border-white/35"
-            )}
-          >
-            <div className="pointer-events-none absolute inset-x-5 top-0 h-44 rounded-b-[2rem] bg-[radial-gradient(circle_at_top,rgba(13,148,136,0.24),transparent_62%)]" />
-
-            <div
-              className={cn(
-                "relative flex items-center gap-3 rounded-[1.6rem] border px-4 py-4",
-                collapsed ? "justify-center" : "justify-between",
-                isDark ? "border-white/16 bg-white/6" : "border-white/20 bg-white/55"
-              )}
-            >
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-[1.35rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)]">
-                  <PawPrint className="size-5 text-white" />
+          <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar px-3 py-4">
+            <div className="flex items-center justify-between gap-3 px-1">
+              <Link
+                href="/today"
+                className={cn(
+                  "flex min-w-0 items-center gap-3 rounded-xl px-2 py-2",
+                  collapsed && "justify-center"
+                )}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                  <PawPrint className="h-5 w-5" />
                 </div>
-                {!collapsed && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0">
-                    <p className="font-display truncate text-xl font-semibold text-foreground">Karey Vet</p>
-                    <p className="mt-0.5 truncate text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {!collapsed ? (
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-semibold text-sidebar-foreground">
+                      Karey Vet
+                    </p>
+                    <p className="truncate text-xs text-sidebar-muted">
                       Gestión veterinaria
                     </p>
-                  </motion.div>
-                )}
-              </div>
+                  </div>
+                ) : null}
+              </Link>
 
               <button
-                onClick={() => setCollapsed(!collapsed)}
-                className={cn(
-                  "hidden size-9 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition hover:text-foreground lg:flex",
-                  isDark ? "border-white/20 bg-white/6" : "border-border/70 bg-background/70"
-                )}
+                type="button"
+                onClick={() => setCollapsed((current) => !current)}
+                className="hidden h-9 w-9 items-center justify-center rounded-lg border border-sidebar-border text-sidebar-muted transition hover:bg-muted hover:text-sidebar-foreground lg:inline-flex"
                 aria-label="Contraer menú lateral"
               >
-                <ChevronRight className={`size-4 transition-transform ${collapsed ? "" : "rotate-180"}`} />
+                <ChevronRight
+                  className={cn("h-4 w-4 transition-transform", !collapsed && "rotate-180")}
+                />
               </button>
             </div>
 
-            <nav className="relative mt-4 flex-1 space-y-1.5 overflow-y-auto pr-1">
+            <nav className="mt-6 flex-1 space-y-1 overflow-y-auto pr-1">
               {availableNavigation.map((item) => {
                 const active = isActive(item.href);
 
@@ -368,189 +331,224 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     key={item.name}
                     href={item.href}
                     onClick={() => setSidebarOpen(false)}
-                    className={cn(
-                      "group flex rounded-[1.35rem] border py-3 transition-all duration-200",
-                      collapsed ? "justify-center gap-0 px-2" : "items-center gap-3 px-3",
-                      active
-                        ? "border-white/20 bg-[linear-gradient(135deg,rgba(13,148,136,0.92),rgba(45,58,102,0.94))] text-white"
-                        : isDark
-                          ? "border-transparent text-white/80 hover:border-white/18 hover:bg-white/8 hover:text-white"
-                          : "border-transparent text-muted-foreground hover:border-border/60 hover:bg-background/70 hover:text-foreground"
-                    )}
                     title={collapsed ? item.name : undefined}
+                    className={cn(
+                      "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
+                      collapsed && "justify-center px-2",
+                      active
+                        ? "bg-sidebar-active text-sidebar-foreground"
+                        : "text-sidebar-muted hover:bg-muted/70 hover:text-foreground"
+                    )}
                   >
+                    {active && !collapsed ? (
+                      <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary" />
+                    ) : null}
                     <div
                       className={cn(
-                        "flex size-11 shrink-0 items-center justify-center rounded-3xl border transition-colors",
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors",
                         active
-                          ? "border-white/15 bg-white/12"
-                          : isDark
-                            ? "border-white/16 bg-white/7 group-hover:border-white/24 group-hover:bg-white/11"
-                            : "border-border/60 bg-background/70 group-hover:border-primary/30 group-hover:bg-primary/8"
+                          ? "border-primary/15 bg-white text-primary dark:bg-primary/10"
+                          : "border-transparent bg-transparent group-hover:border-border group-hover:bg-background"
                       )}
                     >
-                      <item.icon className={cn("size-5", collapsed && "mx-auto")} />
+                      <item.icon className="h-4 w-4" />
                     </div>
-                    {!collapsed && (
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-extrabold tracking-[0.01em]">{item.name}</p>
-                        <p className={cn("truncate text-xs", active ? "text-white/75" : "text-muted-foreground")}>
-                          {item.hint}
-                        </p>
+                    {!collapsed ? (
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{item.name}</p>
+                        <p className="truncate text-xs text-sidebar-muted">{item.hint}</p>
                       </div>
-                    )}
+                    ) : null}
                   </Link>
                 );
               })}
             </nav>
 
             {currentUser?.access.modules.clinicProfile ? (
-              <div className="relative mt-4 space-y-3 border-t border-border/70 px-1 pt-4 shrink-0">
+              <div className="mt-4 border-t border-sidebar-border pt-4">
                 <Link
                   href={clinicCta.href}
                   onClick={() => setSidebarOpen(false)}
                   title={collapsed ? clinicCta.name : undefined}
                   className={cn(
-                    "flex rounded-[1.35rem] border py-3 transition-all duration-200",
-                    collapsed ? "justify-center gap-0 px-2" : "items-center gap-3 px-3",
+                    "group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                    collapsed && "justify-center px-2",
                     activeClinic
-                      ? "border-white/20 bg-[linear-gradient(135deg,rgba(13,148,136,0.92),rgba(45,58,102,0.94))] text-white"
-                      : isDark
-                        ? "border-white/16 bg-white/5 text-white hover:border-white/24 hover:bg-white/10"
-                        : "border-border/70 bg-background/65 text-foreground hover:border-primary/25 hover:bg-background"
+                      ? "bg-sidebar-active text-sidebar-foreground"
+                      : "text-sidebar-muted hover:bg-muted/70 hover:text-foreground"
                   )}
                 >
                   <ClinicAvatar
                     name={currentUser?.clinicName ?? clinicCta.name}
                     logoUrl={currentUser?.clinicLogoUrl ?? null}
                     className={cn(
-                      "size-11 shrink-0 rounded-3xl border",
+                      "h-9 w-9 shrink-0 rounded-lg border",
                       activeClinic
-                        ? "border-white/15 bg-white/12"
-                        : isDark
-                          ? "border-white/16 bg-white/7"
-                          : "border-border/60 bg-background/70"
+                        ? "border-primary/15 bg-white dark:bg-primary/10"
+                        : "border-sidebar-border bg-background"
                     )}
-                    iconClassName={cn("size-5", collapsed && "mx-auto")}
+                    iconClassName="h-4 w-4"
                   />
-                  {!collapsed && (
-                    <div>
-                      <p className="text-sm font-extrabold">{clinicCta.name}</p>
-                      <p className={cn("text-xs", activeClinic ? "text-white/75" : "text-muted-foreground")}>
+                  {!collapsed ? (
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{clinicCta.name}</p>
+                      <p className="truncate text-xs text-sidebar-muted">
                         Identidad y ajustes
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </Link>
               </div>
             ) : null}
           </div>
         </aside>
 
-        <main className={`relative transition-all duration-300 ${collapsed ? "lg:pl-28" : "lg:pl-80"}`}>
-          <header className="sticky top-0 z-30 px-4 pb-3 pt-4 lg:px-6">
-            <div className="glass flex items-center justify-between gap-4 rounded-[1.9rem] px-4 py-4 lg:px-6">
-              <div className="flex min-w-0 items-center gap-4">
+        <main
+          className={cn(
+            "relative min-h-screen transition-[padding] duration-200",
+            collapsed ? "lg:pl-[6.5rem]" : "lg:pl-[16rem]"
+          )}
+        >
+          <header className="sticky top-0 z-20 border-b border-border/70 bg-header/95 backdrop-blur">
+            <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 lg:px-6">
+              <div className="flex min-w-0 items-center gap-3">
                 <button
+                  type="button"
                   onClick={() => setSidebarOpen(true)}
-                  className="rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background lg:hidden"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:bg-secondary lg:hidden"
                   aria-label="Abrir menú lateral"
                 >
-                  <Menu className="size-5 text-foreground" />
+                  <Menu className="h-5 w-5" />
                 </button>
 
-                <div className="min-w-0">
-                  <h1 className="app-heading truncate text-2xl lg:text-[2rem]">{currentTitle}</h1>
-                  <p className="app-subtle hidden truncate text-sm md:block">{currentDescription}</p>
-                </div>
+                <GlobalSearch />
               </div>
 
-              <div className="flex items-center gap-2 lg:gap-3">
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="hidden sm:inline-flex"><Plus className="h-4 w-4" />Nuevo</Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild><Link href="/clients?action=new"><User className="h-4 w-4" /> Cliente</Link></DropdownMenuItem>
+                    <DropdownMenuItem asChild><Link href="/invoices/new"><FileText className="h-4 w-4" /> Factura</Link></DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Ayuda y atajos"><CircleHelp className="h-4 w-4" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel>Ayuda rápida</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild><Link href="/today">Consulta el centro operativo</Link></DropdownMenuItem>
+                    <DropdownMenuItem asChild><Link href="/appointments">Gestiona citas desde Agenda</Link></DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled>Buscar en toda la app: Ctrl K</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <button
-                  className="relative rounded-2xl border border-border/70 bg-background/80 p-2.5 transition-colors hover:bg-background"
+                  type="button"
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-secondary hover:text-foreground"
                   aria-label="Notificaciones"
                 >
-                  <Bell className="size-4 text-muted-foreground" />
-                  <span className="absolute right-2 top-2 size-2 rounded-full bg-(--brand-gold)" />
+                  <Bell className="h-4 w-4" />
+                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--brand-gold)]" />
                 </button>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-3 rounded-[1.2rem] border border-border/70 bg-background/75 px-2.5 py-2 text-left transition hover:bg-background">
-                      <span className="relative flex size-10 items-center justify-center overflow-hidden rounded-3xl bg-[linear-gradient(135deg,rgba(13,148,136,0.18),rgba(45,58,102,0.18))] text-primary">
-                        {currentUser?.avatarUrl ? (
-                          <Image
-                            alt={currentUser.name}
-                            className="object-cover"
-                            fill
-                            sizes="40px"
-                            src={currentUser.avatarUrl}
-                          />
-                        ) : (
-                          <span className="text-xs font-black uppercase">{userInitials}</span>
-                        )}
+                    <Button variant="outline" size="icon">
+                      <Sun className="h-[1.1rem] w-[1.1rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+                      <Moon className="absolute h-[1.1rem] w-[1.1rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+                      <span className="sr-only">
+                        Cambiar tema {resolvedTheme === "dark" ? "oscuro" : "claro"}
                       </span>
-
-                      <div className="hidden leading-4 md:block">
-                        <p className="font-semibold text-foreground">{currentUser?.name ?? "Mi cuenta"}</p>
-                        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          {currentUser?.roleLabel ?? "Usuario"}
-                        </span>
-                      </div>
-                    </button>
+                    </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="start">
-                    <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {currentUser?.isGlobalAdmin ? (
-                      <DropdownMenuItem asChild className="font-semibold">
-                        <Link href="/admin/clinics">Administración</Link>
-                      </DropdownMenuItem>
-                    ) : null}
-                    <DropdownMenuItem asChild className="font-semibold">
-                      <Link href="/profile">Perfil</Link>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setTheme("light")}>
+                      <Sun className="h-4 w-4" />
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="font-semibold" onClick={() => handleSignOut()} variant="destructive">
-                      <LogOut className="size-4" />
-                      Cerrar sesión
+                    <DropdownMenuItem onClick={() => setTheme("dark")}>
+                      <Moon className="h-4 w-4" />
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("system")}>
+                      <Monitor className="h-4 w-4" />
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="relative">
-                      <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-                      <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-                      <span className="sr-only">Cambiar tema</span>
-                    </Button>
+                    <button className="flex items-center gap-3 rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:bg-secondary">
+                      <span className="relative flex h-5 w-9 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-primary">
+                        {currentUser?.avatarUrl ? (
+                          <Image
+                            alt={currentUser.name}
+                            className="object-cover"
+                            fill
+                            sizes="36px"
+                            src={currentUser.avatarUrl}
+                          />
+                        ) : (
+                          <span className="text-xs font-semibold uppercase">{userInitials}</span>
+                        )}
+                      </span>
+
+                      <div className="hidden leading-4 md:block">
+                        <p className="font-semibold text-foreground">
+                          {currentUser?.name ?? "Mi cuenta"}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {currentUser?.roleLabel ?? "Usuario"}
+                        </span>
+                      </div>
+                    </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setTheme("light")}>Claro</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setTheme("dark")}>Oscuro</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setTheme("system")}>Usar sistema</DropdownMenuItem>
+                    <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {currentUser?.isGlobalAdmin ? (
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/clinics">Administración</Link>
+                      </DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile">Perfil</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => handleSignOut()}
+                      variant="destructive"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Cerrar sesión
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
           </header>
 
-          <div className="px-4 pb-8 lg:px-6 lg:pb-10">
-            <div className="min-h-[calc(100vh-8rem)]">
+          <div className="px-4 py-5 lg:px-6 lg:py-6">
+            <div className="mx-auto max-w-[1440px]">
               <EmailVerificationBanner />
               {currentModuleAllowed ? (
                 children
               ) : (
                 <div className="app-panel-strong mx-auto flex max-w-3xl flex-col items-start gap-4 p-8">
-                  <div className="app-stat-icon h-12 w-12 rounded-[1rem]">
+                  <div className="app-stat-icon h-12 w-12">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-foreground">No tienes acceso a esta sección</h2>
+                    <h2 className="text-xl font-semibold text-foreground">
+                      No tienes acceso a esta sección
+                    </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Tu rol actual no incluye permisos para entrar aquí. Si necesitas acceso,
-                      comunícate con el administrador de la clínica.
+                      Tu rol actual no incluye permisos para entrar aquí. Si necesitas
+                      acceso, comunícate con el administrador de la clínica.
                     </p>
                   </div>
                 </div>

@@ -46,6 +46,12 @@ const sexOptions = [
   { value: "UNKNOWN", label: "Desconocido" },
 ];
 
+function formatSpecies(species: string) {
+  const option = speciesOptions.find((item) => item.value === species);
+  if (!option) return species;
+  return option.label.replace(/^[^\s]+\s/, "");
+}
+
 type PatientFormState = {
   name: string;
   clientId: string;
@@ -293,17 +299,17 @@ export default function PatientsPage() {
   }
 
   const petColumns = [
-    {
-      header: "Paciente",
-      cell: (row: PetRow) => (
-        <div className="flex items-center gap-3">
-          <div>
-            <p className="font-semibold text-foreground">{row.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {row.species} - {row.breed || "Sin raza"}
-            </p>
+      {
+        header: "Paciente",
+        cell: (row: PetRow) => (
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="font-semibold text-foreground">{row.name}</p>
+              <p className="text-sm text-muted-foreground">
+                {formatSpecies(row.species)} - {row.breed || "Sin raza"}
+              </p>
+            </div>
           </div>
-        </div>
       ),
     },
     {
@@ -340,21 +346,38 @@ export default function PatientsPage() {
       ),
     },
     {
-      header: "Acciones",
-      cell: (row: PetRow) => (
-        <div className="flex items-center gap-2">
-          <Link href={`/pets/${row.id}`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
+        header: "Acciones",
+        cell: (row: PetRow) => (
+          <div className="flex items-center gap-2">
+            <Link href={`/pets/${row.id}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label={`Ver paciente ${row.name}`}
+            >
               <Eye className="h-4 w-4" />
             </Button>
           </Link>
           {canUpdatePets ? (
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => openEdit(row)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => openEdit(row)}
+              aria-label={`Editar paciente ${row.name}`}
+            >
               <Edit className="h-4 w-4" />
             </Button>
           ) : null}
           {canDeletePets ? (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDelete(row)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => confirmDelete(row)}
+              aria-label={`Eliminar paciente ${row.name}`}
+            >
               <Trash2 className="h-4 w-4 text-red-500" />
             </Button>
           ) : null}
@@ -405,7 +428,7 @@ export default function PatientsPage() {
         badgeIcon={<PawPrint className="size-3.5" />}
         badgeLabel="Pacientes y vacunas"
         title="Pacientes"
-        description="Gestiona pacientes, propietarios y su historial"
+        description="Consulta pacientes, propietarios y seguimiento clínico desde una misma vista."
         actions={
           canCreatePets ? (
             <Button className="gap-2" onClick={openCreate}>
@@ -434,6 +457,8 @@ export default function PatientsPage() {
           <DataTable
             columns={petColumns}
             data={pets}
+            title="Pacientes"
+            description={`${pets.length} ${pets.length === 1 ? "paciente registrado" : "pacientes registrados"}`}
             searchKey="name"
             searchPlaceholder="Buscar paciente..."
             emptyMessage="No hay pacientes registrados"
@@ -442,6 +467,8 @@ export default function PatientsPage() {
           <DataTable
             columns={vaccinationColumns}
             data={vaccinations}
+            title="Vacunaciones"
+            description={`${vaccinations.length} ${vaccinations.length === 1 ? "registro aplicado" : "registros aplicados"}`}
             emptyMessage="No hay vacunaciones registradas"
             searchKey={undefined}
           />

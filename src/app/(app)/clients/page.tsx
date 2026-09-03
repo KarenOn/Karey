@@ -1,13 +1,13 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import z from "zod";
 import { Edit, Eye, FileText, Mail, MapPin, PawPrint, Phone, Plus, Trash2 } from "lucide-react";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { AppAlert } from "@/components/shared/AppAlert";
-import DataTable from "@/components/shared/Datatable";
+import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
@@ -133,12 +133,12 @@ function ClientsPageContent() {
     }
   }, [action, canCreateClients]);
 
-  function askDelete(row: ClientRow) {
+  const askDelete = useCallback((row: ClientRow) => {
     setSelected({ id: row.id, name: row.fullName });
     setDeleteOpen(true);
-  }
+  }, []);
 
-  function handleEdit(client: ClientRow) {
+  const handleEdit = useCallback((client: ClientRow) => {
     if (!canUpdateClients) return;
     setEditingClient(client);
     setFormData({
@@ -149,7 +149,7 @@ function ClientsPageContent() {
       notes: client.notes ?? "",
     });
     setModalOpen(true);
-  }
+  }, [canUpdateClients]);
 
   function handleChange(event: FormFieldChangeEvent) {
     const { name, value } = event.target;
@@ -240,13 +240,13 @@ function ClientsPageContent() {
     }
   }
 
-  const columns = useMemo(
+  const columns = useMemo<DataTableColumn<ClientRow>[]>(
     () => [
       {
         header: "Cliente",
         cell: (row: ClientRow) => (
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--brand-teal)_84%,white_16%),color-mix(in_srgb,var(--brand-navy)_82%,white_18%))] text-sm font-bold text-white shadow-[0_16px_34px_-24px_rgba(15,118,110,0.5)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-sm font-semibold text-primary">
               {row.fullName?.charAt(0).toUpperCase()}
             </div>
             <div>
@@ -304,7 +304,12 @@ function ClientsPageContent() {
         cell: (row: ClientRow) => (
           <div className="flex items-center gap-2">
             <Link href={`/clients/${row.id}`}>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                aria-label={`Ver cliente ${row.fullName}`}
+              >
                 <Eye className="h-4 w-4" />
               </Button>
             </Link>
@@ -312,12 +317,13 @@ function ClientsPageContent() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
                 disabled={saving}
                 onClick={(event) => {
                   event.stopPropagation();
                   handleEdit(row);
                 }}
+                aria-label={`Editar cliente ${row.fullName}`}
               >
                 <Edit className="h-4 w-4" />
               </Button>
@@ -326,12 +332,13 @@ function ClientsPageContent() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-xl text-destructive hover:text-destructive"
+                className="h-8 w-8 text-destructive hover:text-destructive"
                 disabled={saving}
                 onClick={(event) => {
                   event.stopPropagation();
                   askDelete(row);
                 }}
+                aria-label={`Eliminar cliente ${row.fullName}`}
               >
                 <Trash2 className="h-4 w-4 text-red-500" />
               </Button>
@@ -340,7 +347,7 @@ function ClientsPageContent() {
         ),
       },
     ],
-    [canDeleteClients, canUpdateClients, saving]
+    [askDelete, canDeleteClients, canUpdateClients, handleEdit, saving]
   );
 
   const clientsWithEmail = clients.filter((client) => Boolean(client.email)).length;
@@ -353,7 +360,7 @@ function ClientsPageContent() {
         badgeIcon={<PawPrint className="size-3.5" />}
         badgeLabel="Clientes y familias"
         title="Clientes"
-        description="Gestiona tus clientes y sus mascotas de manera eficiente"
+        description="Consulta los datos de contacto y el historial básico de cada cliente."
         actions={
           canCreateClients ? (
             <Button
@@ -384,8 +391,10 @@ function ClientsPageContent() {
       ) : null}
 
       <DataTable
-        columns={columns as any[]}
+        columns={columns}
         data={clients}
+        title="Clientes"
+        description={`${clients.length} ${clients.length === 1 ? "registro encontrado" : "registros encontrados"}`}
         searchKey="fullName"
         searchPlaceholder="Buscar cliente..."
         emptyMessage={loading ? "Cargando..." : "No hay clientes registrados"}

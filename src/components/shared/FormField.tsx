@@ -50,6 +50,7 @@ type FormFieldProps = {
   error?: string;
   searchPlaceholder?: string;
   emptyMessage?: string;
+  helperText?: string;
 };
 
 export default function FormField({
@@ -66,6 +67,7 @@ export default function FormField({
   error = "",
   searchPlaceholder,
   emptyMessage,
+  helperText,
 }: FormFieldProps) {
   const emitChange = (newValue: FormFieldPrimitiveValue, metadata?: { checked?: boolean; type?: string }) => {
     onChange?.({
@@ -90,15 +92,13 @@ export default function FormField({
   return (
     <div className={`space-y-2 ${className}`}>
       {label ? (
-        <Label htmlFor={name} className="text-sm font-semibold text-foreground/90">
+        <Label htmlFor={name} className="text-sm font-semibold text-foreground">
           {label}
           {required ? (
-            <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">
-              (Obligatorio)
+            <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Obligatorio
             </span>
-          ) : (
-            <span className="ml-2 text-xs text-muted-foreground">(Opcional)</span>
-          )}
+          ) : null}
         </Label>
       ) : null}
 
@@ -122,6 +122,7 @@ export default function FormField({
           emptyMessage={emptyMessage}
           onValueChange={(nextValue) => emitChange(nextValue)}
           options={normalizedOptions}
+          buttonClassName="h-11 rounded-lg"
           placeholder={placeholder || "Seleccionar..."}
           searchPlaceholder={searchPlaceholder || `Buscar ${label.toLowerCase()}...`}
           value={value === undefined || value === null ? "" : String(value)}
@@ -173,6 +174,9 @@ export default function FormField({
         />
       )}
 
+      {helperText && !error ? (
+        <p className="text-xs text-muted-foreground">{helperText}</p>
+      ) : null}
       {error ? <p className="mt-1 text-sm font-medium text-red-500">{error}</p> : null}
     </div>
   );

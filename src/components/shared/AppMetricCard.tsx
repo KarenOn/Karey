@@ -33,10 +33,10 @@ export default function AppMetricCard({
         {badge ? <Badge variant="outline">{badge}</Badge> : null}
       </div>
 
-      <p className="relative mt-4 text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="relative mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </p>
-      <p className="relative mt-2 text-3xl font-extrabold tracking-[-0.03em] text-foreground">
+      <p className="relative mt-2 text-3xl font-semibold tracking-[-0.03em] text-foreground">
         {value}
       </p>
       {hint ? (

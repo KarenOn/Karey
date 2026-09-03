@@ -85,7 +85,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(true);
   const [activeTab, setActiveTab] = useState<"general" | "fiscal" | "schedule" | "invoice">("general");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -109,6 +109,7 @@ export default function ProfilePage() {
         const data = await fetchJson<ClinicProfile>("/api/clinic-profile");
         if (!mounted) return;
         setProfile(data);
+        setSnapshot(data);
       } catch (e: any) {
         if (!mounted) return;
         setErr(e?.message ?? "Error cargando perfil");
@@ -129,7 +130,7 @@ export default function ProfilePage() {
 
   const cancelEdit = () => {
     if (snapshot) setProfile(snapshot);
-    setIsEditing(false);
+    setIsEditing(true);
     setErr(null);
   };
 
@@ -186,7 +187,7 @@ export default function ProfilePage() {
 
       setProfile(updated);
       setSnapshot(updated);
-      setIsEditing(false);
+      setIsEditing(true);
       setSaved(true);
       window.dispatchEvent(new Event("user-profile-updated"));
       setTimeout(() => setSaved(false), 2000);
@@ -196,6 +197,11 @@ export default function ProfilePage() {
       setSaving(false);
     }
   };
+
+  const isDirty = useMemo(() => {
+    if (!profile || !snapshot) return false;
+    return JSON.stringify(profile) !== JSON.stringify(snapshot);
+  }, [profile, snapshot]);
 
   const handleLogoUploaded = (file: {
     fileName: string;
@@ -299,10 +305,10 @@ export default function ProfilePage() {
           <div className="flex gap-2">
             {isEditing ? (
               <>
-                <Button variant="outline" onClick={cancelEdit} className="gap-2" disabled={saving}>
-                  <X className="w-4 h-4" /> Cancelar
-                </Button>
-                <Button onClick={handleSave} className="gap-2" disabled={saving}>
+                {isDirty ? <Button variant="outline" onClick={cancelEdit} className="gap-2" disabled={saving}>
+                  <X className="w-4 h-4" /> Descartar cambios
+                </Button> : null}
+                <Button onClick={handleSave} className="gap-2" disabled={saving || !isDirty}>
                   {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                   {saved ? "Guardado" : saving ? "Guardando..." : "Guardar"}
                 </Button>
@@ -320,7 +326,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="inline-flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-muted p-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -328,10 +334,10 @@ export default function ProfilePage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                "flex items-center gap-2 rounded-2xl px-5 py-3 font-medium transition-all whitespace-nowrap",
+                "flex h-9 items-center gap-2 rounded-md border border-transparent px-3 text-sm font-medium transition-colors whitespace-nowrap",
                 activeTab === tab.id
-                  ? "bg-primary text-primary-foreground"
-                  : "app-panel-muted text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon className="w-4 h-4" />
@@ -358,10 +364,10 @@ export default function ProfilePage() {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">
-                          {profile.logoStorageRef ? "Logo listo" : "Sin logo cargado"}
+                          {profile.logoStorageRef ? "Logo cargado" : "Sin logo cargado"}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          Se guarda de forma privada en S3 y se consulta con URL firmada.
+                          Formatos permitidos: JPG, PNG, JPEG. Tamaño máximo: 2MB.
                         </p>
                       </div>
                     </div>
@@ -490,7 +496,7 @@ export default function ProfilePage() {
         {/* FISCAL */}
         {activeTab === "fiscal" && (
           <div className="space-y-6">
-            <div className="rounded-[1.5rem] border border-amber-500/20 bg-amber-500/10 p-4">
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-800">Esta información aparecerá en las facturas generadas.</p>
             </div>
 

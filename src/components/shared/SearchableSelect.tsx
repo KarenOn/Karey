@@ -76,7 +76,7 @@ export default function SearchableSelect({
         <Button
           aria-expanded={open}
           className={cn(
-            "w-full justify-between rounded-xl border border-border/70 bg-input px-3 font-normal text-foreground",
+            "h-11 w-full justify-between rounded-lg border border-border bg-background px-3 font-normal text-foreground shadow-none",
             !selectedOption && !value && "text-muted-foreground",
             buttonClassName
           )}

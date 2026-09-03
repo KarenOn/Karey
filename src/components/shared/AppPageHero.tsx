@@ -22,6 +22,8 @@ type AppPageHeroProps = {
   stats?: HeroStat[];
   className?: string;
   back?: boolean;
+  backHref?: string;
+  breadcrumb?: React.ReactNode;
 };
 
 export default function AppPageHero({
@@ -32,50 +34,74 @@ export default function AppPageHero({
   actions,
   stats = [],
   className,
-  back = false
+  back = false,
+  backHref = "/invoices",
+  breadcrumb
 }: AppPageHeroProps) {
+  const statGridClassName =
+    stats.length >= 4
+      ? "xl:grid-cols-4"
+      : stats.length === 3
+        ? "xl:grid-cols-3"
+        : stats.length === 2
+          ? "xl:grid-cols-2"
+          : "xl:grid-cols-1";
+
   return (
-    <section className={cn("app-page-hero", className)}>
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-3xl">
-          <div className="items-center">
-            {back && (
-              <Link href="/invoices">
-                <Button variant="ghost" size="icon" className="rounded-xl">
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
-              </Link>
-            )}
+    <section className={cn("space-y-4", className)}>
+      <div className="app-page-hero">
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-3">
+              {back ? (
+                <Link href={backHref}>
+                  <Button variant="outline" size="icon" className="shrink-0">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                </Link>
+              ) : null}
+              {breadcrumb ? <p className="text-xs font-medium text-muted-foreground">{breadcrumb}</p> : null}
+              {badgeLabel ? (
+                <Badge className="app-kicker border-0">
+                  {badgeIcon}
+                  {badgeLabel}
+                </Badge>
+              ) : null}
+            </div>
 
-            <Badge className="app-kicker mb-3 border-0">
-              {badgeIcon}
-              {badgeLabel}
-            </Badge>
+            <h2 className="app-heading mt-3 text-[2.15rem] text-foreground sm:text-[2.45rem]">
+              {title}
+            </h2>
+            {description ? (
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+                {description}
+              </p>
+            ) : null}
           </div>
-          
-          <h2 className="app-heading text-3xl sm:text-4xl">{title}</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-            {description}
-          </p>
-        </div>
 
-        {actions ? (
-          <div className="flex flex-wrap items-center gap-3">{actions}</div>
-        ) : null}
+          {actions ? (
+            <div className="flex flex-wrap items-center gap-3">{actions}</div>
+          ) : null}
+        </div>
       </div>
 
       {stats.length > 0 ? (
-        <div className={`relative mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-${stats.length}`}>
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3 sm:grid-cols-2",
+            statGridClassName
+          )}
+        >
           {stats.map((stat) => (
-            <div key={stat.label} className="app-panel-muted p-4">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+            <div key={stat.label} className="app-stat-card">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {stat.label}
               </p>
-              <p className="mt-2 text-2xl font-extrabold text-foreground sm:text-3xl">
+              <p className="mt-2 text-2xl font-semibold text-foreground sm:text-[2rem]">
                 {stat.value}
               </p>
               {stat.hint ? (
-                <p className="mt-1 text-xs text-muted-foreground">{stat.hint}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{stat.hint}</p>
               ) : null}
             </div>
           ))}

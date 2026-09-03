@@ -12,13 +12,15 @@ import {
   LoaderCircle,
   Plus,
   Receipt,
+  Sparkles,
   Stethoscope,
   UserRound,
 } from "lucide-react";
+import { AppAlert } from "@/components/shared/AppAlert";
+import AppPageHero from "@/components/shared/AppPageHero";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AppAlert } from "@/components/shared/AppAlert";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { cn } from "@/lib/utils";
 import NewTurnModal from "./NewTurnModal";
 
@@ -89,30 +91,30 @@ type PatientCardItem = {
 };
 
 const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
-  AESTHETIC: "Estética",
-  BATH: "Baño",
+  AESTHETIC: "Estetica",
+  BATH: "Bano",
   CHECKUP: "Chequeo",
   CONSULTATION: "Consulta",
-  DEWORMING: "Desparasitación",
+  DEWORMING: "Desparasitacion",
   EMERGENCY: "Emergencia",
-  GROOMING: "Peluquería",
-  HOSPITALIZATION: "Hospitalización",
+  GROOMING: "Peluqueria",
+  HOSPITALIZATION: "Hospitalizacion",
   OTHER: "Otro",
-  SURGERY: "Cirugía",
-  VACCINATION: "Vacunación",
+  SURGERY: "Cirugia",
+  VACCINATION: "Vacunacion",
 };
 
 const TURN_SERVICE_LABELS: Record<TodayTurnService, string> = {
-  BATH: "Baño",
-  GROOMING: "Peluquería",
-  HOSPITALIZATION: "Hospitalización",
+  BATH: "Bano",
+  GROOMING: "Peluqueria",
+  HOSPITALIZATION: "Hospitalizacion",
   OTHER: "Otro",
-  SURGERY: "Cirugía",
+  SURGERY: "Cirugia",
 };
 
 const STATE_LABELS: Record<UnifiedState, string> = {
   done: "Atendido",
-  in_progress: "En atención",
+  in_progress: "En atencion",
   waiting: "En espera",
 };
 
@@ -145,7 +147,7 @@ function capitalize(value: string) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Ocurrió un error inesperado.";
+  return error instanceof Error ? error.message : "Ocurrio un error inesperado.";
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -162,7 +164,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     const payload = (await response.json().catch(() => null)) as
       | { error?: string }
       | null;
-    throw new Error(payload?.error ?? "No pudimos completar esta acción.");
+    throw new Error(payload?.error ?? "No pudimos completar esta accion.");
   }
 
   return response.json();
@@ -212,81 +214,49 @@ function buildInvoiceUrl(input: {
   return `/invoices/new?${params.toString()}`;
 }
 
-function TodayHeader({
-  canCreateTurns,
-  dateIso,
-  onNewTurn,
-}: {
-  canCreateTurns: boolean;
-  dateIso: string;
-  onNewTurn: () => void;
-}) {
-  const date = new Date(dateIso);
-  const weekday = capitalize(format(date, "EEEE", { locale: es }));
-  const dayNumber = format(date, "d");
-  const month = capitalize(format(date, "MMMM", { locale: es }));
-
-  return (
-    <div className="flex flex-col gap-4 rounded-[1.75rem] border border-border/70 bg-card px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <div className="min-w-0">
-        <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-          Operación del día
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
-          {weekday} {dayNumber}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {month}. Consulta las citas, pacientes en espera y atenciones activas de la jornada.
-        </p>
-      </div>
-
-      {canCreateTurns ? (
-        <Button onClick={onNewTurn} className="h-11 rounded-2xl px-5">
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar paciente sin cita
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 function TodaySection({
   children,
   count,
+  description,
   emptyMessage,
   icon: Icon,
+  priority = false,
   title,
 }: {
   children: React.ReactNode;
   count: number;
+  description: string;
   emptyMessage: string;
   icon: React.ElementType;
+  priority?: boolean;
   title: string;
 }) {
   return (
-    <section className="rounded-[1.75rem] border border-border/70 bg-card shadow-sm">
-      <header className="flex items-center justify-between border-b border-border/70 px-5 py-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-foreground">
-            <Icon className="h-4 w-4" />
+    <section
+      className={cn(
+        "app-panel-strong overflow-hidden p-0",
+        priority && "border-primary/20"
+      )}
+    >
+      <header className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4 sm:px-6">
+        <div className="flex items-start gap-3">
+          <div className="app-stat-icon mt-0.5 h-10 w-10">
+            <Icon className="size-4.5" />
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-            <p className="text-sm text-muted-foreground">
-              {count} {count === 1 ? "paciente" : "pacientes"}
-            </p>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-foreground sm:text-lg">
+              {title}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
+        <Badge variant="outline" className="shrink-0">
+          {count} {count === 1 ? "paciente" : "pacientes"}
+        </Badge>
       </header>
 
       <div className="space-y-3 p-4 sm:p-5">
-        {count === 0 ? (
-          <div className="rounded-[1.25rem] border border-dashed border-border bg-muted/35 px-4 py-8 text-center text-sm text-muted-foreground">
-            {emptyMessage}
-          </div>
-        ) : (
-          children
-        )}
+        {count === 0 ? <div className="app-empty">{emptyMessage}</div> : children}
       </div>
     </section>
   );
@@ -304,29 +274,31 @@ function PatientCard({
   onPrimaryAction?: (() => void) | null;
 }) {
   const stateUi = STATE_STYLES[item.state];
+  const interactive = typeof onCardClick === "function";
 
   return (
     <article
       className={cn(
-        "group rounded-[1.4rem] border border-border/70 border-l-4 bg-background/80 px-4 py-4 text-left transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm",
+        "rounded-xl border border-border/70 border-l-4 bg-background px-4 py-4 transition",
         stateUi.border,
-        typeof onCardClick === "function" && "cursor-pointer"
+        interactive && "cursor-pointer hover:border-primary/30 hover:bg-muted/20"
       )}
       onClick={onCardClick}
-      role="button"
-      tabIndex={0}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
       onKeyDown={(event) => {
+        if (!interactive) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onCardClick();
         }
       }}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             {item.timeLabel ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
+              <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground">
                 <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
                 {item.timeLabel}
               </span>
@@ -335,7 +307,7 @@ function PatientCard({
               <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", stateUi.dot)} />
               {STATE_LABELS[item.state]}
             </Badge>
-            <Badge variant="outline" className="rounded-full">
+            <Badge variant="outline">
               {item.source === "appointment" ? "Cita" : "Sin cita"}
             </Badge>
           </div>
@@ -350,17 +322,15 @@ function PatientCard({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">
-              {item.serviceLabel}
-            </Badge>
-          </div>
+          <Badge variant="secondary" className="w-fit">
+            {item.serviceLabel}
+          </Badge>
         </div>
 
         {item.primaryActionLabel && onPrimaryAction ? (
-          <div className="sm:pl-4">
+          <div className="lg:pl-4">
             <Button
-              className={cn("h-10 rounded-2xl px-4", stateUi.button)}
+              className={cn("h-10 rounded-lg px-4", stateUi.button)}
               disabled={busy}
               onClick={(event) => {
                 event.stopPropagation();
@@ -419,14 +389,17 @@ export default function TodayWorkspace({
   const canUpdateAppointments = !!access?.actions.appointments.update;
   const canCreateInvoices = !!access?.actions.invoices.create;
 
-  const showAlert = useCallback((
-    variant: AlertState["variant"],
-    title: string,
-    description?: string
-  ) => {
-    setAlert({ variant, title, description });
-    setAlertOpen(true);
-  }, []);
+  const showAlert = useCallback(
+    (
+      variant: AlertState["variant"],
+      title: string,
+      description?: string
+    ) => {
+      setAlert({ variant, title, description });
+      setAlertOpen(true);
+    },
+    []
+  );
 
   const showTurnModalError = useCallback(
     (title: string, description?: string) => {
@@ -439,11 +412,11 @@ export default function TodayWorkspace({
     const createdInvoiceId = searchParams.get("createdInvoiceId");
     if (!createdInvoiceId) return;
 
-      showAlert(
-        "success",
-        "Factura creada",
-        `La factura ${createdInvoiceId} se registró y el paciente pasó a Atendidos.`
-      );
+    showAlert(
+      "success",
+      "Factura creada",
+      `La factura ${createdInvoiceId} se registro y el paciente paso a Atendidos.`
+    );
     router.replace(pathname);
   }, [pathname, router, searchParams, showAlert]);
 
@@ -619,7 +592,11 @@ export default function TodayWorkspace({
 
   async function markTurnInProgress(turn: TodayTurnItem) {
     if (!canUpdateTurns) {
-      showAlert("warning", "Sin permisos", "No tienes permiso para actualizar atenciones sin cita.");
+      showAlert(
+        "warning",
+        "Sin permisos",
+        "No tienes permiso para actualizar atenciones sin cita."
+      );
       return;
     }
 
@@ -640,7 +617,7 @@ export default function TodayWorkspace({
     } catch (error) {
       showAlert(
         "destructive",
-        "No se pudo iniciar la atención",
+        "No se pudo iniciar la atencion",
         getErrorMessage(error)
       );
     } finally {
@@ -682,155 +659,203 @@ export default function TodayWorkspace({
     );
   }
 
+  const date = useMemo(() => new Date(initialDateIso), [initialDateIso]);
+  const weekday = capitalize(format(date, "EEEE", { locale: es }));
+  const monthLabel = capitalize(format(date, "MMMM", { locale: es }));
+  const dayNumber = format(date, "d");
+  const totalTracked = appointments.length + turns.length;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
-      <TodayHeader
-        canCreateTurns={canCreateTurns}
-        dateIso={initialDateIso}
-        onNewTurn={() => setTurnModalOpen(true)}
+    <div className="space-y-6">
+      <AppPageHero
+        badgeIcon={<Sparkles className="size-3.5" />}
+        badgeLabel="Centro operativo"
+        title={`Hoy · ${weekday} ${dayNumber}`}
+        description={`Revisa la agenda, las llegadas sin cita y la atencion activa de ${monthLabel} desde una sola vista.`}
+        actions={
+          canCreateTurns ? (
+            <Button className="gap-2" onClick={() => setTurnModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Agregar paciente sin cita
+            </Button>
+          ) : null
+        }
+        stats={[
+          {
+            label: "Proximas citas",
+            value: appointmentCards.length,
+            hint: "Pendientes por atender",
+          },
+          {
+            label: "Sin cita",
+            value: waitingTurnCards.length,
+            hint: "Pacientes en espera",
+          },
+          {
+            label: "En atencion",
+            value: inProgressCards.length,
+            hint: "Casos activos",
+          },
+          {
+            label: "Atendidos",
+            value: doneCards.length,
+            hint: `${totalTracked} movimientos registrados hoy`,
+          },
+        ]}
       />
 
-      <TodaySection
-        count={appointmentCards.length}
-        emptyMessage="No hay citas pendientes para hoy."
-        icon={CalendarClock}
-        title="Próximas citas"
-      >
-        {appointmentCards.map((item) => (
-          <PatientCard
-            key={`appointment-${item.id}`}
-            busy={busyKey === `appointment-${item.id}`}
-            item={item}
-            onCardClick={() => {
-              const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
-              if (!appointment || !canUpdateAppointments) return;
-              void markAppointmentInProgress(appointment);
-            }}
-            onPrimaryAction={
-              canUpdateAppointments
-                ? () => {
-                    const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
-                    if (!appointment) return;
-                    void markAppointmentInProgress(appointment);
-                  }
-                : null
-            }
-          />
-        ))}
-      </TodaySection>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <TodaySection
+          count={appointmentCards.length}
+          description="Agenda confirmada para la jornada actual."
+          emptyMessage="No hay citas pendientes para hoy."
+          icon={CalendarClock}
+          title="Proximas citas"
+        >
+          {appointmentCards.map((item) => (
+            <PatientCard
+              key={`appointment-${item.id}`}
+              busy={busyKey === `appointment-${item.id}`}
+              item={item}
+              onCardClick={() => {
+                const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
+                if (!appointment || !canUpdateAppointments) return;
+                void markAppointmentInProgress(appointment);
+              }}
+              onPrimaryAction={
+                canUpdateAppointments
+                  ? () => {
+                      const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
+                      if (!appointment) return;
+                      void markAppointmentInProgress(appointment);
+                    }
+                  : null
+              }
+            />
+          ))}
+        </TodaySection>
 
-      <TodaySection
-        count={waitingTurnCards.length}
-        emptyMessage="No hay pacientes sin cita en espera en este momento."
-        icon={ClipboardList}
-        title="Sin cita en espera"
-      >
-        {waitingTurnCards.map((item) => (
-          <PatientCard
-            key={`turn-${item.id}`}
-            busy={busyKey === `turn-${item.id}`}
-            item={item}
-            onCardClick={() => {
-              const turn = waitingTurns.find((entry) => entry.id === item.id);
-              if (!turn || !canUpdateTurns) return;
-              void markTurnInProgress(turn);
-            }}
-            onPrimaryAction={
-              canUpdateTurns
-                ? () => {
-                    const turn = waitingTurns.find((entry) => entry.id === item.id);
-                    if (!turn) return;
-                    void markTurnInProgress(turn);
-                  }
-                : null
-            }
-          />
-        ))}
-      </TodaySection>
+        <TodaySection
+          count={waitingTurnCards.length}
+          description="Pacientes que llegaron sin una cita agendada."
+          emptyMessage="No hay pacientes sin cita en espera en este momento."
+          icon={ClipboardList}
+          title="Sin cita en espera"
+        >
+          {waitingTurnCards.map((item) => (
+            <PatientCard
+              key={`turn-${item.id}`}
+              busy={busyKey === `turn-${item.id}`}
+              item={item}
+              onCardClick={() => {
+                const turn = waitingTurns.find((entry) => entry.id === item.id);
+                if (!turn || !canUpdateTurns) return;
+                void markTurnInProgress(turn);
+              }}
+              onPrimaryAction={
+                canUpdateTurns
+                  ? () => {
+                      const turn = waitingTurns.find((entry) => entry.id === item.id);
+                      if (!turn) return;
+                      void markTurnInProgress(turn);
+                    }
+                  : null
+              }
+            />
+          ))}
+        </TodaySection>
+      </div>
 
       <TodaySection
         count={inProgressCards.length}
-        emptyMessage="No hay pacientes en atención ahora mismo."
+        description="Pacientes que ya estan siendo atendidos o listos para facturar."
+        emptyMessage="No hay pacientes en atencion ahora mismo."
         icon={Stethoscope}
-        title="En atención"
+        priority
+        title="En atencion"
       >
-        {inProgressCards.map((item) => (
-          <PatientCard
-            key={`${item.source}-${item.id}-progress`}
-            busy={busyKey === `${item.source}-${item.id}-progress`}
-            item={item}
-            onCardClick={() => {
-              if (item.source === "appointment") {
-                const appointment = appointments.find((entry) => entry.id === item.id);
-                if (!appointment) return;
-                goToInvoiceFlow({
-                  appointmentId: appointment.id,
-                  clientId: appointment.clientId,
-                  invoiceId: appointment.invoiceId,
-                  petId: appointment.petId,
-                  petName: appointment.petName,
-                });
-                return;
-              }
+        <div className="grid gap-3 xl:grid-cols-2">
+          {inProgressCards.map((item) => (
+            <PatientCard
+              key={`${item.source}-${item.id}-progress`}
+              busy={busyKey === `${item.source}-${item.id}-progress`}
+              item={item}
+              onCardClick={() => {
+                if (item.source === "appointment") {
+                  const appointment = appointments.find((entry) => entry.id === item.id);
+                  if (!appointment) return;
+                  goToInvoiceFlow({
+                    appointmentId: appointment.id,
+                    clientId: appointment.clientId,
+                    invoiceId: appointment.invoiceId,
+                    petId: appointment.petId,
+                    petName: appointment.petName,
+                  });
+                  return;
+                }
 
-              const turn = turns.find((entry) => entry.id === item.id);
-              if (!turn) return;
-              goToInvoiceFlow({
-                clientId: turn.clientId,
-                ownerName: turn.ownerName,
-                petId: turn.petId,
-                petName: turn.petName,
-                serviceName: turn.serviceName,
-                todayTurnId: turn.id,
-              });
-            }}
-            onPrimaryAction={() => {
-              if (item.source === "appointment") {
-                const appointment = appointments.find((entry) => entry.id === item.id);
-                if (!appointment) return;
+                const turn = turns.find((entry) => entry.id === item.id);
+                if (!turn) return;
                 goToInvoiceFlow({
-                  appointmentId: appointment.id,
-                  clientId: appointment.clientId,
-                  invoiceId: appointment.invoiceId,
-                  petId: appointment.petId,
-                  petName: appointment.petName,
+                  clientId: turn.clientId,
+                  ownerName: turn.ownerName,
+                  petId: turn.petId,
+                  petName: turn.petName,
+                  serviceName: turn.serviceName,
+                  todayTurnId: turn.id,
                 });
-                return;
-              }
+              }}
+              onPrimaryAction={() => {
+                if (item.source === "appointment") {
+                  const appointment = appointments.find((entry) => entry.id === item.id);
+                  if (!appointment) return;
+                  goToInvoiceFlow({
+                    appointmentId: appointment.id,
+                    clientId: appointment.clientId,
+                    invoiceId: appointment.invoiceId,
+                    petId: appointment.petId,
+                    petName: appointment.petName,
+                  });
+                  return;
+                }
 
-              const turn = turns.find((entry) => entry.id === item.id);
-              if (!turn) return;
-              goToInvoiceFlow({
-                clientId: turn.clientId,
-                ownerName: turn.ownerName,
-                petId: turn.petId,
-                petName: turn.petName,
-                serviceName: turn.serviceName,
-                todayTurnId: turn.id,
-              });
-            }}
-          />
-        ))}
+                const turn = turns.find((entry) => entry.id === item.id);
+                if (!turn) return;
+                goToInvoiceFlow({
+                  clientId: turn.clientId,
+                  ownerName: turn.ownerName,
+                  petId: turn.petId,
+                  petName: turn.petName,
+                  serviceName: turn.serviceName,
+                  todayTurnId: turn.id,
+                });
+              }}
+            />
+          ))}
+        </div>
       </TodaySection>
 
       <TodaySection
         count={doneCards.length}
-        emptyMessage="Todavía no hay pacientes atendidos hoy."
+        description="Historico rapido de pacientes ya resueltos en la jornada."
+        emptyMessage="Todavia no hay pacientes atendidos hoy."
         icon={CheckCircle2}
         title="Atendidos"
       >
-        {doneCards.map((item) => (
-          <PatientCard
-            key={`${item.source}-${item.id}-done`}
-            busy={false}
-            item={item}
-            onCardClick={() => {
-              if (item.detailHref) {
-                router.push(item.detailHref);
-              }
-            }}
-          />
-        ))}
+        <div className="grid gap-3 xl:grid-cols-2">
+          {doneCards.map((item) => (
+            <PatientCard
+              key={`${item.source}-${item.id}-done`}
+              busy={false}
+              item={item}
+              onCardClick={() => {
+                if (item.detailHref) {
+                  router.push(item.detailHref);
+                }
+              }}
+            />
+          ))}
+        </div>
       </TodaySection>
 
       <NewTurnModal
@@ -843,7 +868,7 @@ export default function TodayWorkspace({
           showAlert(
             "success",
             "Paciente agregado",
-            "El paciente quedó agregado en la columna En espera."
+            "El paciente quedo agregado en la columna En espera."
           );
         }}
         onOpenChange={setTurnModalOpen}

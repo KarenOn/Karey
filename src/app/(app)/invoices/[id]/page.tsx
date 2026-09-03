@@ -323,7 +323,7 @@ export default function InvoiceDetailPage() {
       />
 
       {showPaymentActions ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+        <div className="app-panel-strong border-emerald-200 bg-emerald-50 p-5 dark:bg-emerald-500/10">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-emerald-800">
@@ -359,27 +359,26 @@ export default function InvoiceDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT: Invoice sheet */}
         <div className="lg:col-span-2">
-          <div className="print-sheet overflow-hidden rounded-2xl border bg-card">
-            {/* Top brand bar */}
-            <div className="bg-gradient-to-r from-teal-500 to-teal-600 text-white p-6">
+          <article className="print-sheet app-panel-strong overflow-hidden">
+            <div className="border-b border-border bg-muted/35 p-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-sm">
+                <div className="app-stat-icon h-12 w-12">
                   <PawPrint className="w-6 h-6" />
                 </div>
                 <div className="leading-tight">
-                  <p className="text-xl font-bold">{invoice?.clinic.name ?? "Karey Vet"}</p>
-                  <p className="text-teal-100 text-sm">Factura veterinaria</p>
+                  <p className="text-xl font-semibold text-foreground">{invoice?.clinic.name ?? "Karey Vet"}</p>
+                  <p className="text-sm text-muted-foreground">Factura veterinaria</p>
                 </div>
               </div>
 
               <div className="mt-5 flex items-end justify-between">
                 <div>
-                  <p className="text-teal-100 text-sm">Factura</p>
-                  <p className="text-2xl font-bold">{invoice.number}</p>
+                   <p className="text-sm text-muted-foreground">Factura</p>
+                   <p className="text-2xl font-semibold text-foreground">{invoice.number}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-teal-100 text-sm">Fecha</p>
-                  <p className="font-semibold">
+                   <p className="text-sm text-muted-foreground">Fecha</p>
+                   <p className="font-semibold text-foreground">
                     {issueDate ? format(issueDate, "d MMM yyyy", { locale: es }) : "—"}
                   </p>
                 </div>
@@ -464,14 +463,14 @@ export default function InvoiceDetailPage() {
                 </div>
               ) : null}
             </div>
-          </div>
+          </article>
         </div>
 
         {/* RIGHT: Info cards */}
         <div className="space-y-6">
           {/* Cliente */}
           <div className={invoice.pet ? "grid grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
-            <div className="rounded-2xl border bg-card p-6">
+             <div className="app-panel-strong p-5">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <User className="w-5 h-5 text-teal-500" /> Cliente
               </h3>
@@ -501,13 +500,13 @@ export default function InvoiceDetailPage() {
 
             {/* Paciente */}
             {invoice.pet ? (
-              <div className="rounded-2xl border bg-card p-6">
+               <div className="app-panel-strong p-5">
                 <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                   <PawPrint className="w-5 h-5 text-teal-500" /> Paciente
                 </h3>
 
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center text-3xl">
+                   <div className="app-stat-icon h-12 w-12 text-2xl">
                     {petEmoji}
                   </div>
                   <div>
@@ -522,7 +521,7 @@ export default function InvoiceDetailPage() {
           </div>
 
           {/* Pago / resumen */}
-          <div className="rounded-2xl border bg-card p-6">
+           <div className="app-panel-strong p-5">
             <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-teal-500" /> Pago
             </h3>
