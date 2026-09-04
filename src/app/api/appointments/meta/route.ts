@@ -5,7 +5,7 @@ import { requireClinicPermission } from "@/lib/server-auth";
 import { APPOINTMENT_STATUSES, APPOINTMENT_TYPES } from "@/lib/validators/appointments";
 
 export async function GET() {
-  const { clinicId } = await requireClinicPermission("appointments.read");
+  const { clinicId, member } = await requireClinicPermission("appointments.read");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -53,5 +53,6 @@ export async function GET() {
     schedules: normalizedSchedules,
     appointmentTypes: APPOINTMENT_TYPES,
     appointmentStatuses: APPOINTMENT_STATUSES,
+    clinicTimezone: member.clinic.timezone,
   });
 }

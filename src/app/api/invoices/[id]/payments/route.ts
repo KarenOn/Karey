@@ -36,14 +36,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const body = await req.json().catch(() => null);
   const parsed = PaymentCreateSchema.safeParse(body);
-  console.log("Entre a hacer un pago", parsed);
   if (!parsed.success) {
     return NextResponse.json({ error: "Pago inválido", details: zodDetails(parsed.error) }, { status: 422 });
   }
 
   const input = parsed.data;
-  console.log("Input payment:", input);
-
   const result = await prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findFirst({
       where: { id: invoiceId, clinicId },

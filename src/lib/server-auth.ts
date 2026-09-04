@@ -1,6 +1,5 @@
 import { headers } from "next/headers";
 import { auth, getActiveClinicMembershipForUser } from "@/lib/auth";
-import { activatePendingEmployeeInviteForUser } from "@/lib/employee-invites";
 import { prisma } from "@/lib/prisma";
 import {
   hasPermission,
@@ -37,14 +36,28 @@ export async function isSessionUserGlobalAdmin(userId: string, fallbackRole?: st
 
 export async function requireClinicPermission(permission: PermissionKey) {
   const session = await getSessionOrThrow();
-  let member = await getActiveClinicMembershipForUser(session.user.id);
 
-  if (!member && session.user.email) {
-    await activatePendingEmployeeInviteForUser(session.user.id, session.user.email);
-    member = await getActiveClinicMembershipForUser(session.user.id);
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { banned: true },
+  });
+
+  if (user?.banned) {
+    throw new Error("ACCESS_REVOKED");
   }
 
+  const member = await getActiveClinicMembershipForUser(session.user.id);
+
   if (!member) {
+    const inactiveMembership = await prisma.clinicMember.findFirst({
+      where: { userId: session.user.id, isActive: false },
+      select: { id: true },
+    });
+
+    if (inactiveMembership) {
+      throw new Error("ACCESS_REVOKED");
+    }
+
     throw new Error("FORBIDDEN");
   }
 

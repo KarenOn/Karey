@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const { clinicId, member } = await requireClinicPermission("employees.read");
     const members = await prisma.clinicMember.findMany({
-      where: { clinicId, isActive: true },
+      where: { clinicId },
       include: {
         user: { select: { id: true, name: true, email: true } },
         role: { select: { id: true, key: true, name: true } },
@@ -16,8 +16,11 @@ export async function GET() {
     });
 
     const invites = await prisma.employeeInvite.findMany({
-      where: { clinicId, acceptedAt: null, expiresAt: { gt: new Date() } },
-      include: { role: { select: { id: true, name: true } } },
+      where: { clinicId, acceptedAt: null },
+      include: {
+        role: { select: { id: true, name: true } },
+        invitedUser: { select: { name: true } },
+      },
       orderBy: [{ createdAt: "desc" }],
     });
 
@@ -32,7 +35,7 @@ export async function GET() {
         canManageRoles: elevated || hasPermission(member?.role.permissions, "roles.manage"),
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 }

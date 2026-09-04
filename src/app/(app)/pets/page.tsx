@@ -23,6 +23,8 @@ import { apiListVaccinations, type VaccinationRow } from "@/lib/api/vaccinations
 import { ClientFormSchema } from "@/lib/validators/client";
 import { PetCreateSchema, PetUpdateSchema } from "@/lib/validators/pet";
 import { toast } from "sonner";
+import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
+import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -32,13 +34,7 @@ const speciesEmoji: Record<string, string> = {
   OTHER: "🐾",
 };
 
-const speciesOptions = [
-  { value: "DOG", label: "🐕 Perro", keywords: ["dog", "canino"] },
-  { value: "CAT", label: "🐱 Gato", keywords: ["cat", "felino"] },
-  { value: "BIRD", label: "🦜 Ave", keywords: ["bird", "pajaro"] },
-  { value: "RABBIT", label: "🐰 Conejo", keywords: ["rabbit"] },
-  { value: "OTHER", label: "🐾 Otro", keywords: ["other", "otro"] },
-];
+const speciesOptions = PET_SPECIES_OPTIONS;
 
 const sexOptions = [
   { value: "MALE", label: "Macho" },
@@ -416,9 +412,7 @@ export default function PatientsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-teal-500" />
-      </div>
+      <DataTableSkeleton />
     );
   }
 

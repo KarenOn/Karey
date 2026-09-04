@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import NewTurnModal from "./NewTurnModal";
+import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
 
 type AppointmentStatus =
   | "SCHEDULED"
@@ -53,6 +54,7 @@ export type TodayAppointmentItem = {
   startAt: string;
   status: AppointmentStatus;
   type: string;
+  vetId: string | null;
 };
 
 export type TodayTurnItem = {
@@ -378,6 +380,7 @@ export default function TodayWorkspace({
   const [turns, setTurns] = useState<TodayTurnItem[]>(initialTurns);
   const [turnModalOpen, setTurnModalOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [encounter, setEncounter] = useState<{ appointmentId: number; petId: number; clientId: number } | null>(null);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<AlertState>({
     variant: "info",
@@ -415,7 +418,8 @@ export default function TodayWorkspace({
     showAlert(
       "success",
       "Factura creada",
-      `La factura ${createdInvoiceId} se registro y el paciente paso a Atendidos.`
+      // `La factura ${createdInvoiceId} se registro y el paciente paso a Atendidos.`
+      `La factura se registro y el paciente paso a Atendidos.`
     );
     router.replace(pathname);
   }, [pathname, router, searchParams, showAlert]);
@@ -579,6 +583,8 @@ export default function TodayWorkspace({
           item.id === appointment.id ? { ...item, status: "IN_PROGRESS" } : item
         )
       );
+      setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId });
+      showAlert("success", "Cita puesta en atención", "La cita está en progreso.");
     } catch (error) {
       showAlert(
         "destructive",
@@ -623,6 +629,16 @@ export default function TodayWorkspace({
     } finally {
       setBusyKey(null);
     }
+  }
+
+  async function finishEncounter() {
+    if (!encounter) return;
+    const target = appointments.find((appointment) => appointment.id === encounter.appointmentId && appointment.status === "IN_PROGRESS");
+    if (target) {
+      await requestJson(`/api/appointments/${target.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "COMPLETED" }) });
+      setAppointments((current) => current.map((item) => item.id === target.id ? { ...item, status: "COMPLETED" } : item));
+    }
+    setEncounter(null);
   }
 
   function goToInvoiceFlow(input: {
@@ -875,6 +891,7 @@ export default function TodayWorkspace({
         onShowError={showTurnModalError}
         open={turnModalOpen}
       />
+      {encounter ? <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/30 p-4"><div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl bg-card p-6 shadow-xl"><div className="mb-4 flex items-center justify-between"><h2 className="app-heading text-3xl text-foreground">Atención clínica</h2><Button variant="outline" onClick={() => setEncounter(null)}>Cerrar</Button></div><EncounterWorkflow petId={encounter.petId} clientId={encounter.clientId} vets={[]} onFinish={() => void finishEncounter()} /></div></div> : null}
 
       <AppAlert
         description={alert.description}

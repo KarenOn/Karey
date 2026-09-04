@@ -59,7 +59,7 @@ export default function EmailVerificationBanner() {
   }
 
   return (
-    <div className="mb-5 overflow-hidden rounded-[1.6rem] border border-amber-500/25 bg-amber-500/10">
+    <div className="mb-5 overflow-hidden rounded-lg border border-amber-500/25 bg-amber-500/10">
       <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-700">

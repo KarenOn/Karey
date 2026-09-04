@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMaskito } from "@maskito/react";
 import {
   BadgeCheck,
-  Camera,
   IdCard,
   KeyRound,
   Loader2,
@@ -16,6 +15,7 @@ import {
   UserRound,
 } from "lucide-react";
 import SignedFileUploader from "@/components/shared/SignedFileUploader";
+import PasswordInput from "@/components/shared/PasswordInput";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { AppAlert, type AppAlertVariant } from "@/components/shared/AppAlert";
 import { Button } from "@/components/ui/button";
@@ -357,7 +357,7 @@ export default function UserProfilePage() {
                   <SignedFileUploader
                     accept="image/*"
                     buttonLabel=""
-                    className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground"
+                    className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground dark:bg-primary/80"
                     onError={(message) => {
                       setAlert({
                         variant: "destructive",
@@ -370,10 +370,10 @@ export default function UserProfilePage() {
                     scope="user-avatar"
                   />
                   <Button
-                    className="h-10 w-10 rounded-full p-0"
+                    className="h-10 w-10 rounded-full p-0 dark:bg-destructive/80"
                     onClick={() => void removeAvatar()}
                     type="button"
-                    variant="outline"
+                    variant="destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -509,12 +509,11 @@ export default function UserProfilePage() {
             <div className="mt-5 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="current-password">Contraseña actual</Label>
-                <Input
+                <PasswordInput
                   id="current-password"
                   onChange={(event) =>
                     setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
                   }
-                  type="password"
                   placeholder="Escribe tu contraseña actual"
                   autoComplete="current-password"
                   value={passwordForm.currentPassword}
@@ -523,12 +522,11 @@ export default function UserProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="new-password">Nueva contraseña</Label>
-                <Input
+                <PasswordInput
                   id="new-password"
                   onChange={(event) =>
                     setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))
                   }
-                  type="password"
                   placeholder="Escribe una nueva contraseña"
                   autoComplete="new-password"
                   value={passwordForm.newPassword}
@@ -537,12 +535,11 @@ export default function UserProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar nueva contraseña</Label>
-                <Input
+                <PasswordInput
                   id="confirm-password"
                   onChange={(event) =>
                     setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))
                   }
-                  type="password"
                   placeholder="Vuelve a escribir la nueva contraseña"
                   autoComplete="new-password"
                   value={passwordForm.confirmPassword}

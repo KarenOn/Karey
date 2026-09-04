@@ -260,7 +260,7 @@ export default function InvoiceDetailPage() {
 
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-foreground">{invoice.number}</h1>
+              <h1 className="app-heading text-3xl text-foreground sm:text-4xl">{invoice.number}</h1>
               <Badge className={`${ui?.badge} border px-3 py-1`}>
                 <StatusIcon className="w-4 h-4 mr-1" />
                 {ui?.label}

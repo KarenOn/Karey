@@ -25,6 +25,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
+import type { PetSpecies } from "@/types/common";
+import SearchableSelect from "@/components/shared/SearchableSelect";
 
 type TodayTurnStatus =
   | "WAITING"
@@ -86,7 +89,7 @@ type NewClientFormState = {
   clientName: string;
   petName: string;
   phone: string;
-  species: "DOG" | "CAT" | "OTHER";
+  species: PetSpecies;
 };
 
 type RequestInitJson = RequestInit & {
@@ -165,14 +168,7 @@ async function requestJson<T>(url: string, init?: RequestInitJson): Promise<T> {
   return response.json();
 }
 
-const SPECIES_OPTIONS: Array<{
-  label: string;
-  value: NewClientFormState["species"];
-}> = [
-  { value: "DOG", label: "Perro" },
-  { value: "CAT", label: "Gato" },
-  { value: "OTHER", label: "Otro" },
-];
+const SPECIES_OPTIONS = PET_SPECIES_OPTIONS;
 
 const emptyCreateForm: NewClientFormState = {
   clientName: "",
@@ -479,7 +475,7 @@ export default function NewTurnModal({
                         key={`${result.clientId}-${result.petId}`}
                         type="button"
                         className={cn(
-                          "flex w-full items-center justify-between rounded-[1rem] border px-4 py-3 text-left transition",
+                          "flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition",
                           active
                             ? "border-primary/40 bg-primary/8 shadow-sm"
                             : "border-border/70 bg-background hover:border-primary/25 hover:bg-muted/30"
@@ -512,7 +508,7 @@ export default function NewTurnModal({
                     );
                   })
                 ) : (
-                  <div className="rounded-[1rem] border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
+                  <div className="rounded-lg border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
                     No encontramos coincidencias. Puedes crear el cliente y la mascota aqui mismo.
                   </div>
                 )}
@@ -600,24 +596,20 @@ export default function NewTurnModal({
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-              <div className="space-y-2">
-                <Label>Servicio</Label>
-                <Select onValueChange={setSelectedServiceId} value={selectedServiceId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un servicio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {services.map((service) => (
-                      <SelectItem key={service.id} value={String(service.id)}>
-                        {service.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-2">
+                  <Label>Servicio</Label>
+                  <SearchableSelect
+                    options={services.map((service) => ({ value: String(service.id), label: service.name, keywords: [service.category ?? ""] }))}
+                    value={selectedServiceId}
+                    onValueChange={setSelectedServiceId}
+                    placeholder="Selecciona un servicio"
+                    searchPlaceholder="Buscar servicio..."
+                    disabled={loadingData}
+                  />
+                </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-[1rem] border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Duracion
                   </p>
@@ -627,7 +619,7 @@ export default function NewTurnModal({
                   </p>
                 </div>
 
-                <div className="rounded-[1rem] border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Precio
                   </p>
@@ -662,7 +654,7 @@ export default function NewTurnModal({
               </Badge>
             </div>
 
-            <div className="mt-4 rounded-[1rem] border border-border/70 bg-background px-4 py-4">
+            <div className="mt-4 rounded-lg border border-border/70 bg-background px-4 py-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <PawPrint className="h-4 w-4" />

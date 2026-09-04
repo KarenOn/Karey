@@ -11,7 +11,7 @@ const UpdateMemberSchema = z.object({
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { clinicId } = await requireClinicPermission("employees.update");
+    const { clinicId, session } = await requireClinicPermission("employees.update");
     const { id } = await params;
     const memberId = Number(id);
 
@@ -19,6 +19,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const existing = await prisma.clinicMember.findFirst({ where: { id: memberId, clinicId } });
     if (!existing) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+    if (existing.userId === session.user.id) {
+      return NextResponse.json({ error: "No puedes modificar tu propio usuario" }, { status: 403 });
+    }
 
     if (body.roleId !== undefined) {
       const role = await prisma.role.findFirst({

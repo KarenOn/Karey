@@ -30,6 +30,7 @@ type DataTableProps<T extends DataTableRow> = {
   searchKeys?: Array<keyof T & string>;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
+  searchPredicate?: (item: T, query: string) => boolean;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
   title?: string;
@@ -45,6 +46,7 @@ export default function DataTable<T extends DataTableRow>({
   searchKeys,
   searchValue,
   onSearchChange,
+  searchPredicate,
   onRowClick,
   emptyMessage = "No hay datos disponibles",
   title = "Registros",
@@ -57,13 +59,15 @@ export default function DataTable<T extends DataTableRow>({
   const activeSearch = searchValue ?? search;
   const searchableKeys = searchKeys ?? (searchKey ? [searchKey] : []);
 
-  const filteredData = searchableKeys.length > 0
-    ? data.filter((item) => searchableKeys.some((key) => String(item[key] || "").toLowerCase().includes(activeSearch.toLowerCase())))
-    : data;
+  const filteredData = searchPredicate
+    ? data.filter((item) => searchPredicate(item, activeSearch.trim().toLowerCase()))
+    : searchableKeys.length > 0
+      ? data.filter((item) => searchableKeys.some((key) => String(item[key] || "").toLowerCase().includes(activeSearch.toLowerCase())))
+      : data;
 
   React.useEffect(() => {
     setPage(0);
-  }, [data, pageSize]);
+  }, [data, pageSize, activeSearch]);
 
   const paginatedData = filteredData.slice(page * pageSize, (page + 1) * pageSize);
   const resultsDescription =
@@ -85,7 +89,7 @@ export default function DataTable<T extends DataTableRow>({
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:max-w-xl">
-            {searchableKeys.length > 0 ? (
+            {searchableKeys.length > 0 || searchPredicate ? (
               <SearchInput
                 className="sm:max-w-sm"
                 placeholder={searchPlaceholder}

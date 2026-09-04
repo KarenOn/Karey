@@ -2,10 +2,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { KeyRound, LoaderCircle, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import AppPageHero from "@/components/shared/AppPageHero";
 import DataTablePagination from "@/components/shared/DataTablePagination";
+import SearchableSelect from "@/components/shared/SearchableSelect";
+import SearchInput from "@/components/shared/SearchInput";
+import StatusBadge from "@/components/shared/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,15 +22,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCurrentUserProfile } from "@/components/layout/current-user-context";
 
 type PermissionMap = Record<string, string[]>;
 type Role = {
@@ -42,11 +40,12 @@ type Role = {
 };
 type Member = {
   id: number;
+  userId: string;
   isActive: boolean;
   user: { name: string | null; email: string };
   role: { id: number; name: string };
 };
-type Invite = { id: number; email: string; expiresAt: string; role: { name: string } };
+type Invite = { id: number; email: string; expiresAt: string; role: { name: string }; invitedUser?: { name: string | null } | null };
 type Capabilities = {
   canInviteEmployees: boolean;
   canUpdateEmployees: boolean;
@@ -115,6 +114,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export default function EmployeesPage() {
+  const currentUser = useCurrentUserProfile();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
@@ -122,6 +122,14 @@ export default function EmployeesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [membersPage, setMembersPage] = useState(0);
   const [membersPageSize, setMembersPageSize] = useState(10);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberStatus, setMemberStatus] = useState("ALL");
+  const [pendingMemberId, setPendingMemberId] = useState<number | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ member: Member; roleId: number; roleName: string } | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Member | null>(null);
+  const [resendTarget, setResendTarget] = useState<Invite | null>(null);
+  const [resendingInvite, setResendingInvite] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities>({
     canInviteEmployees: false,
     canUpdateEmployees: false,
@@ -144,8 +152,8 @@ export default function EmployeesPage() {
     [roles]
   );
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadAll(showLoading = true) {
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [employeesRes, rolesRes] = await Promise.all([
@@ -189,6 +197,8 @@ export default function EmployeesPage() {
   }, []);
 
   async function submitInvite() {
+    if (inviteSubmitting) return;
+    setInviteSubmitting(true);
     try {
       const res = await fetch("/api/employees/invite", {
         method: "POST",
@@ -203,13 +213,34 @@ export default function EmployeesPage() {
       if (!res.ok) throw new Error(data?.error ?? "Error creando empleado");
       setInviteResult({ inviteUrl: data.inviteUrl, tempPassword: data.tempPassword ?? null });
       toast.success("Empleado creado");
-      await loadAll();
+      await loadAll(false);
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error creando empleado"));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  }
+
+  async function resendInvite() {
+    if (!resendTarget || resendingInvite) return;
+    setResendingInvite(true);
+    try {
+      const response = await fetch(`/api/employees/invite/${resendTarget.id}/resend`, { method: "POST" });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error ?? "No se pudo reenviar la invitación");
+      setResendTarget(null);
+      await loadAll(false);
+      toast.success("Invitación reenviada correctamente");
+    } catch (resendError) {
+      toast.error(errorMessage(resendError, "No se pudo reenviar la invitación"));
+    } finally {
+      setResendingInvite(false);
     }
   }
 
   async function updateMember(memberId: number, patch: { roleId?: number; isActive?: boolean }) {
+    if (pendingMemberId === memberId) return;
+    setPendingMemberId(memberId);
     try {
       const res = await fetch(`/api/employees/${memberId}`, {
         method: "PATCH",
@@ -218,11 +249,24 @@ export default function EmployeesPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Error actualizando empleado");
+      setMembers((current) => current.map((member) => member.id === memberId ? {
+        ...member,
+        isActive: data.isActive ?? member.isActive,
+        role: roleOptions.find((role) => role.id === (data.roleId ?? member.role.id)) ?? member.role,
+      } : member));
       toast.success("Empleado actualizado");
-      await loadAll();
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error actualizando empleado"));
+    } finally {
+      setPendingMemberId(null);
     }
+  }
+
+  async function confirmRoleChange() {
+    if (!pendingRoleChange) return;
+    const { member, roleId } = pendingRoleChange;
+    await updateMember(member.id, { roleId });
+    setPendingRoleChange(null);
   }
 
   function openCreateRole() {
@@ -261,7 +305,7 @@ export default function EmployeesPage() {
       if (!res.ok) throw new Error(data?.error ?? "Error guardando rol");
       toast.success(roleForm.id ? "Rol actualizado" : "Rol creado");
       setRoleOpen(false);
-      await loadAll();
+      await loadAll(false);
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error guardando rol"));
     }
@@ -278,11 +322,19 @@ export default function EmployeesPage() {
 
   const activeMembers = members.filter((member) => member.isActive).length;
   const activeRoles = roles.filter((role) => role.isActive).length;
-  const visibleMembers = members.slice(membersPage * membersPageSize, (membersPage + 1) * membersPageSize);
+  const filteredMembers = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    return members.filter((member) => {
+      const statusMatches = memberStatus === "ALL" || (memberStatus === "ACTIVE" ? member.isActive : !member.isActive);
+      const searchMatches = !query || [member.user.name, member.user.email].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+      return statusMatches && searchMatches;
+    });
+  }, [memberSearch, memberStatus, members]);
+  const visibleMembers = filteredMembers.slice(membersPage * membersPageSize, (membersPage + 1) * membersPageSize);
 
   useEffect(() => {
     setMembersPage(0);
-  }, [membersPageSize, members.length]);
+  }, [membersPageSize, memberSearch, memberStatus, members.length]);
 
   return (
     <div className="space-y-6">
@@ -336,13 +388,27 @@ export default function EmployeesPage() {
               Administra acceso, rol y estado operativo del equipo.
             </p>
           </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <SearchInput value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} onClear={() => setMemberSearch("")} placeholder="Buscar por nombre o correo..." className="sm:max-w-md" />
+            <Select value={memberStatus} onValueChange={setMemberStatus}>
+              <SelectTrigger className="sm:w-44"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="ACTIVE">Activos</SelectItem>
+                <SelectItem value="INACTIVE">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {!capabilities.canUpdateEmployees ? <Badge variant="outline">Solo lectura</Badge> : null}
         </div>
         {loading ? (
-          <div className="p-5 text-sm text-muted-foreground">Cargando...</div>
+          // <div className="p-5 text-sm text-muted-foreground">Cargando...</div>
+          <div className="flex min-h-60 items-center justify-center">
+            <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+          </div>
         ) : (
           <div className="overflow-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-190 text-sm">
               <thead className="bg-muted/45 text-xs uppercase tracking-[0.16em] text-muted-foreground">
                 <tr>
                   <th className="px-5 py-3 text-left font-extrabold">Empleado</th>
@@ -360,7 +426,7 @@ export default function EmployeesPage() {
                   >
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="app-stat-icon h-10 w-10 rounded-[1rem]">
+                        <div className="app-stat-icon h-10 w-10 rounded-lg">
                           <Users className="h-4 w-4" />
                         </div>
                         <div>
@@ -373,47 +439,36 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-5 py-4 text-muted-foreground">{member.user.email}</td>
                     <td className="px-5 py-4">
-                      <Select
+                      <SearchableSelect
+                        options={roleOptions.map((role) => ({ value: String(role.id), label: role.name }))}
                         value={String(member.role.id)}
-                        onValueChange={(value) =>
-                          updateMember(member.id, { roleId: Number(value) })
-                        }
-                        disabled={!capabilities.canUpdateEmployees}
-                      >
-                        <SelectTrigger className="w-[220px] rounded-xl bg-input/60">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roleOptions.map((role) => (
-                            <SelectItem key={role.id} value={String(role.id)}>
-                              {role.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onValueChange={(value) => {
+                          const nextRole = roleOptions.find((role) => role.id === Number(value));
+                          if (nextRole && nextRole.id !== member.role.id) setPendingRoleChange({ member, roleId: nextRole.id, roleName: nextRole.name });
+                        }}
+                        disabled={!capabilities.canUpdateEmployees || currentUser?.userId === member.userId || pendingMemberId === member.id}
+                        loading={pendingMemberId === member.id}
+                        title={currentUser?.userId === member.userId ? "No puedes cambiar tu propio rol" : undefined}
+                        buttonClassName="w-[220px] rounded-lg bg-input/60"
+                        searchPlaceholder="Buscar rol..."
+                      />
                     </td>
                     <td className="px-5 py-4">
-                      <Badge
-                        variant="outline"
-                        className={
-                          member.isActive
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : "border-border/70 bg-muted text-muted-foreground"
-                        }
-                      >
-                        {member.isActive ? "Activo" : "Inactivo"}
-                      </Badge>
+                      <StatusBadge active={member.isActive} />
                     </td>
                     <td className="px-5 py-4 text-right">
                       <Button
                         variant="secondary"
                         size="sm"
                         disabled={!capabilities.canUpdateEmployees}
-                        onClick={() =>
-                          updateMember(member.id, { isActive: !member.isActive })
-                        }
+                        onClick={() => {
+                          if (currentUser?.userId === member.userId) return;
+                          if (member.isActive) setDeactivateTarget(member);
+                          else void updateMember(member.id, { isActive: true });
+                        }}
+                        title={currentUser?.userId === member.userId ? "No puedes desactivar tu propio usuario" : undefined}
                       >
-                        {member.isActive ? "Desactivar" : "Activar"}
+                        {pendingMemberId === member.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : member.isActive ? "Desactivar" : "Activar"}
                       </Button>
                     </td>
                   </tr>
@@ -422,8 +477,84 @@ export default function EmployeesPage() {
             </table>
           </div>
         )}
-        {!loading && members.length > 0 ? <DataTablePagination page={membersPage} pageSize={membersPageSize} total={members.length} onPageChange={setMembersPage} pageSizeOptions={[10, 20, 50]} onPageSizeChange={(pageSize) => { setMembersPageSize(pageSize); setMembersPage(0); }} /> : null}
+        {!loading && filteredMembers.length > 0 ? <DataTablePagination page={membersPage} pageSize={membersPageSize} total={filteredMembers.length} onPageChange={setMembersPage} pageSizeOptions={[10, 20, 50]} onPageSizeChange={(pageSize) => { setMembersPageSize(pageSize); setMembersPage(0); }} /> : null}
       </Card>
+
+      <Dialog open={!!pendingRoleChange} onOpenChange={(open) => { if (!open) setPendingRoleChange(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar rol del empleado</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas cambiar el rol de &quot;{pendingRoleChange?.member.user.name || pendingRoleChange?.member.user.email}&quot; de &quot;{pendingRoleChange?.member.role.name}&quot; a &quot;{pendingRoleChange?.roleName}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingRoleChange(null)}>Cancelar</Button>
+            <Button onClick={() => void confirmRoleChange()} disabled={pendingMemberId !== null}>
+              {pendingMemberId !== null ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Cambiar rol
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deactivateTarget} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Desactivar empleado</DialogTitle>
+            <DialogDescription>
+              Este empleado ya no podrá operar normalmente en la plataforma hasta que sea activado nuevamente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeactivateTarget(null)}>Cancelar</Button>
+            <Button onClick={async () => {
+                if (!deactivateTarget) return;
+                const target = deactivateTarget;
+                await updateMember(target.id, { isActive: false });
+                setDeactivateTarget(null);
+              }}>
+              {pendingMemberId === deactivateTarget?.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Desactivar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resendTarget} onOpenChange={(open) => { if (!open) setResendTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reenviar invitación</DialogTitle>
+            <DialogDescription>
+              Se generará una nueva contraseña temporal y la invitación anterior dejará de ser válida. Se enviará un nuevo correo a {resendTarget?.email ?? "la cuenta invitada"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResendTarget(null)}>Cancelar</Button>
+            <Button onClick={async () => {
+                // if (!deactivateTarget) return;
+                // const target = deactivateTarget;
+                // await updateMember(target.id, { isActive: false });
+                // setDeactivateTarget(null);
+                resendInvite();
+              }}>
+              {pendingMemberId === resendTarget?.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {resendingInvite ? "Reenviando..." : "Reenviar invitación"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* <ModalDelete
+        open={!!resendTarget}
+        onOpenChange={(open) => { if (!open && !resendingInvite) setResendTarget(null); }}
+        title="Reenviar invitación"
+        itemName={resendTarget?.invitedUser?.name || resendTarget?.email}
+        description={`Se generará una nueva contraseña temporal y la invitación anterior dejará de ser válida. Se enviará un nuevo correo a ${resendTarget?.email ?? "la cuenta invitada"}.`}
+        dangerText={resendingInvite ? "Reenviando..." : "Reenviar invitación"}
+        loading={resendingInvite}
+        onConfirm={resendInvite}
+      /> */}
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="app-panel-strong p-5 shadow-none">
@@ -439,7 +570,10 @@ export default function EmployeesPage() {
             </div>
           </div>
           {loading ? (
-            <div className="text-sm text-muted-foreground">Cargando...</div>
+            // <div className="text-sm text-muted-foreground">Cargando...</div>
+            <div className="flex min-h-60 items-center justify-center">
+              <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+            </div>
           ) : (
             <div className="space-y-3">
               {roles.map((role) => (
@@ -495,7 +629,10 @@ export default function EmployeesPage() {
             </p>
           </div>
           {loading ? (
-            <div className="text-sm text-muted-foreground">Cargando...</div>
+            // <div className="text-sm text-muted-foreground">Cargando...</div>
+            <div className="flex min-h-60 items-center justify-center">
+              <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+            </div>
           ) : invites.length === 0 ? (
             <div className="app-panel-muted p-4 text-sm text-muted-foreground">
               No hay invitaciones pendientes.
@@ -508,14 +645,16 @@ export default function EmployeesPage() {
                   className="app-panel-muted flex items-start justify-between gap-3 p-4"
                 >
                   <div>
-                    <p className="font-medium text-foreground">{invite.email}</p>
+                    <p className="font-medium text-foreground">{invite.invitedUser?.name || "Nombre no disponible"}</p>
+                    <p className="text-sm text-muted-foreground">{invite.email}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{invite.role.name}</p>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <p className="font-semibold uppercase tracking-[0.16em]">Expira</p>
+                  <div className="flex shrink-0 flex-col items-end gap-2 text-right text-xs text-muted-foreground">
+                    <p className="font-semibold uppercase tracking-[0.16em]">{new Date(invite.expiresAt) > new Date() ? "Expira" : "Expirada"}</p>
                     <p className="mt-1 text-sm normal-case tracking-normal text-foreground">
                       {new Date(invite.expiresAt).toLocaleString("es-BO")}
                     </p>
+                    {capabilities.canInviteEmployees ? <Button variant="outline" size="sm" onClick={() => setResendTarget(invite)}>Reenviar invitación</Button> : null}
                   </div>
                 </div>
               ))}
@@ -554,23 +693,16 @@ export default function EmployeesPage() {
             </div>
             <div className="space-y-2">
               <Label>Rol</Label>
-              <Select
+              <SearchableSelect
+                options={roleOptions.map((role) => ({ value: String(role.id), label: role.name }))}
                 value={inviteForm.roleId}
                 onValueChange={(value) =>
                   setInviteForm((current) => ({ ...current, roleId: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl bg-input/60">
-                  <SelectValue placeholder="Selecciona un rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((role) => (
-                    <SelectItem key={role.id} value={String(role.id)}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Selecciona un rol"
+                searchPlaceholder="Buscar rol..."
+                buttonClassName="rounded-lg bg-input/60"
+              />
             </div>
             {inviteResult ? (
               <Card className="app-panel-muted space-y-3 p-4 text-sm shadow-none">
@@ -610,9 +742,10 @@ export default function EmployeesPage() {
             </Button>
             <Button
               onClick={submitInvite}
-              disabled={!inviteForm.name || !inviteForm.email || !inviteForm.roleId}
+              disabled={!inviteForm.name || !inviteForm.email || !inviteForm.roleId || inviteSubmitting}
             >
-              Crear empleado
+              {inviteSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {inviteSubmitting ? "Creando..." : "Crear empleado"}
             </Button>
           </DialogFooter>
         </DialogContent>

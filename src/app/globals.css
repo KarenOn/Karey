@@ -10,6 +10,8 @@
   --brand-ink: #24344f;
   --brand-gold: #c79a1a;
   --brand-cloud: #f5f8fb;
+  --font-sans: var(--font-inter), sans-serif;
+  --font-display: var(--font-oswald), var(--font-inter), sans-serif;
   --radius: 0.625rem;
   --shadow-sm: 0 8px 24px rgba(23, 42, 72, 0.06);
   --shadow-md: 0 18px 40px rgba(23, 42, 72, 0.1);
@@ -157,6 +159,8 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-inter), sans-serif;
+    --font-sans: var(--font-inter), sans-serif;
+    --font-display: var(--font-oswald), var(--font-inter), sans-serif;
     background-image:
       radial-gradient(circle at top left, rgba(13, 148, 136, 0.08) 0, transparent 26%),
       radial-gradient(circle at top right, rgba(199, 154, 26, 0.08) 0, transparent 22%),
@@ -171,8 +175,17 @@
 }
 
 @layer components {
+  @keyframes appointment-glow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(13, 148, 136, 0.08), 0 12px 30px rgba(13, 148, 136, 0.16); }
+    50% { box-shadow: 0 0 0 1px rgba(13, 148, 136, 0.18), 0 14px 42px rgba(13, 148, 136, 0.3); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-safe\:animate-\[appointment-glow_2s_ease-in-out_infinite\] { animation: none; }
+  }
+
   .font-display {
-    font-family: var(--font-inter), var(--font-display), sans-serif;
+    font-family: var(--font-display);
   }
 
   .app-shell-bg {
@@ -306,9 +319,9 @@
   }
 
   .app-heading {
-    font-family: var(--font-inter), var(--font-display), sans-serif;
-    font-weight: 500;
-    letter-spacing: -0.03em;
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.025em;
     line-height: 1.05;
     text-wrap: balance;
   }

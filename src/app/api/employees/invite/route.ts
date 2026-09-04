@@ -67,6 +67,7 @@ export async function POST(req: Request) {
             id: crypto.randomBytes(16).toString("hex"),
             name: body.name,
             role: null,
+            mustChangePassword: true,
           },
         });
 

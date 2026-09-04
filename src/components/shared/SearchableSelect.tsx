@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,8 +25,10 @@ type SearchableSelectProps = {
   searchPlaceholder?: string;
   emptyMessage?: string;
   disabled?: boolean;
+  loading?: boolean;
   className?: string;
   buttonClassName?: string;
+  title?: string;
   allowCustomValue?: boolean;
   customValueLabel?: (input: string) => string;
 };
@@ -43,8 +45,10 @@ export default function SearchableSelect({
   searchPlaceholder = "Buscar...",
   emptyMessage = "No encontramos resultados.",
   disabled = false,
+  loading = false,
   className,
   buttonClassName,
+  title,
   allowCustomValue = false,
   customValueLabel = (input) => `Usar "${input}"`,
 }: SearchableSelectProps) {
@@ -80,8 +84,9 @@ export default function SearchableSelect({
             !selectedOption && !value && "text-muted-foreground",
             buttonClassName
           )}
-          disabled={disabled}
+          disabled={disabled || loading}
           role="combobox"
+          title={title}
           type="button"
           variant="outline"
         >
@@ -91,7 +96,7 @@ export default function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}>
+      <PopoverContent align="start" className={cn("w-(--radix-popover-trigger-width) p-0", className)}>
         <Command shouldFilter>
           <CommandInput
             onValueChange={setQuery}
@@ -99,7 +104,11 @@ export default function SearchableSelect({
             value={query}
           />
           <CommandList>
-            <CommandEmpty>
+            {loading ? (
+              <div className="flex min-h-32 items-center justify-center">
+                <LoaderCircle className="h-6 w-6 animate-spin text-primary" aria-label="Cargando opciones" />
+              </div>
+            ) : <CommandEmpty>
               <div className="space-y-2 px-2 py-3 text-sm text-muted-foreground">
                 <p>{emptyMessage}</p>
                 {canCreateCustomValue ? (
@@ -117,8 +126,8 @@ export default function SearchableSelect({
                   </Button>
                 ) : null}
               </div>
-            </CommandEmpty>
-            <CommandGroup>
+            </CommandEmpty>}
+            {!loading ? <CommandGroup>
               {options.map((option) => (
                 <CommandItem
                   disabled={option.disabled}
@@ -153,7 +162,7 @@ export default function SearchableSelect({
                   <span className="truncate">{customValueLabel(query.trim())}</span>
                 </CommandItem>
               ) : null}
-            </CommandGroup>
+            </CommandGroup> : null}
           </CommandList>
         </Command>
       </PopoverContent>

@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   Edit,
+  LoaderCircle,
   Plus,
   Trash2,
   UserRound,
@@ -17,15 +18,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AppAlert } from "@/components/shared/AppAlert";
 import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
-import FormField from "@/components/shared/FormField";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { safeDate } from "@/lib/utility";
 import { cn } from "@/lib/utils";
+import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
+import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
+import { getClinicDateKey } from "@/lib/appointment-time";
 
 type PetDTO = { id: number; name: string; species: string; clientId: number };
 type ClientDTO = { id: number; fullName: string; phone?: string | null };
@@ -57,6 +64,7 @@ type AppointmentMetaResponse = {
   schedules: ScheduleDTO[];
   appointmentTypes: string[];
   appointmentStatuses: string[];
+  clinicTimezone: string;
 };
 
 type AppointmentTableRow = AppointmentDTO & { searchText: string };
@@ -259,6 +267,7 @@ export default function AppointmentsPage() {
   const [schedules, setSchedules] = useState<ScheduleDTO[]>([]);
   const [appointmentTypes, setAppointmentTypes] = useState<string[]>([]);
   const [appointmentStatuses, setAppointmentStatuses] = useState<string[]>([]);
+  const [clinicTimezone, setClinicTimezone] = useState("America/Santo_Domingo");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AppointmentDTO | null>(null);
@@ -277,6 +286,11 @@ export default function AppointmentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [encounter, setEncounter] = useState<{ appointmentId: number; petId: number; clientId: number } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<AppointmentDTO | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentDTO | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: "success" | "info" | "warning" | "destructive";
@@ -296,8 +310,8 @@ export default function AppointmentsPage() {
     setAlertOpen(true);
   }, []);
 
-  const refreshAll = useCallback(async () => {
-    setLoading(true);
+  const refreshAll = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
 
     try {
@@ -313,6 +327,7 @@ export default function AppointmentsPage() {
       setSchedules(meta.schedules);
       setAppointmentTypes(meta.appointmentTypes);
       setAppointmentStatuses(meta.appointmentStatuses);
+      setClinicTimezone(meta.clinicTimezone || "America/Santo_Domingo");
     } catch (refreshError) {
       console.error(refreshError);
       const message = getErrorMessage(refreshError);
@@ -374,11 +389,11 @@ export default function AppointmentsPage() {
       appointments
         .filter((appointment) => {
           const start = safeDate(appointment.startAt);
-          return start ? format(start, "yyyy-MM-dd") === selectedDayStr : false;
+          return start ? getClinicDateKey(start, clinicTimezone) === selectedDayStr : false;
         })
         .slice()
         .sort((left, right) => left.startAt.localeCompare(right.startAt)),
-    [appointments, selectedDayStr]
+    [appointments, clinicTimezone, selectedDayStr]
   );
 
   const activeAppointments = useMemo(
@@ -567,9 +582,66 @@ export default function AppointmentsPage() {
     setDeleteOpen(true);
   }
 
-  function handleChange(event: { target: { name: string; value: string } }) {
+  async function startEncounter(appointment: AppointmentDTO) {
+    if (!canUpdateAppointments || appointment.status === "COMPLETED") return;
+    setSaving(true);
+    try {
+      await requestJson(`/api/appointments/${appointment.id}`, { method: "PUT", body: JSON.stringify({ status: "IN_PROGRESS" }) });
+      setAppointments((current) => current.map((item) => item.id === appointment.id ? { ...item, status: "IN_PROGRESS" } : item));
+      setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId });
+      showAlert("success", "Atención iniciada", "La cita está en progreso.");
+    } catch (error) {
+      showAlert("destructive", "No se pudo iniciar la atención", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function finishEncounter() {
+    if (!encounter) return;
+    const target = appointments.find((appointment) => appointment.id === encounter.appointmentId && appointment.status === "IN_PROGRESS");
+    if (target) {
+      await requestJson(`/api/appointments/${target.id}`, { method: "PUT", body: JSON.stringify({ status: "COMPLETED" }) });
+      setAppointments((current) => current.map((item) => item.id === target.id ? { ...item, status: "COMPLETED" } : item));
+    }
+    setEncounter(null);
+  }
+
+  async function cancelAppointment() {
+    if (!cancelTarget || saving) return;
+    setSaving(true);
+    try {
+      await requestJson(`/api/appointments/${cancelTarget.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "CANCELLED" }) });
+      setAppointments((current) => current.map((item) => item.id === cancelTarget.id ? { ...item, status: "CANCELLED" } : item));
+      setCancelTarget(null);
+      showAlert("success", "Cita cancelada correctamente");
+    } catch (error) {
+      showAlert("destructive", "No se pudo cancelar la cita", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rescheduleAppointment() {
+    if (!rescheduleTarget || !rescheduleDate || !rescheduleTime || saving) return;
+    setSaving(true);
+    try {
+      const nextStart = combineDateAndTime(rescheduleDate, rescheduleTime);
+      const nextEnd = addMinutes(nextStart, Math.max(DEFAULT_APPOINTMENT_DURATION_MINUTES, diffMinutes(safeDate(rescheduleTarget.startAt) ?? nextStart, safeDate(rescheduleTarget.endAt) ?? addMinutes(nextStart, DEFAULT_APPOINTMENT_DURATION_MINUTES))));
+      const updated = await requestJson<AppointmentDTO>(`/api/appointments/${rescheduleTarget.id}`, { method: "PUT", body: JSON.stringify({ startAt: nextStart.toISOString(), endAt: nextEnd.toISOString(), status: "SCHEDULED" }) });
+      setAppointments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setRescheduleTarget(null);
+      showAlert("success", "Cita reprogramada correctamente");
+    } catch (error) {
+      showAlert("destructive", "No se pudo reprogramar la cita", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleChange(event: FormFieldChangeEvent) {
     const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: value }));
+    setFormData((current) => ({ ...current, [name]: String(value) }));
   }
 
   async function submitAppointment() {
@@ -677,7 +749,7 @@ export default function AppointmentsPage() {
       setModalOpen(false);
       setEditing(null);
       resetForm();
-      await refreshAll();
+      await refreshAll(false);
     } catch (submitError) {
       console.error(submitError);
       showAlert("destructive", editing ? "No se pudo actualizar la cita" : "No se pudo crear la cita", getErrorMessage(submitError));
@@ -698,7 +770,7 @@ export default function AppointmentsPage() {
       await requestJson(`/api/appointments/${deleteTarget.id}`, { method: "DELETE" });
       setDeleteOpen(false);
       setDeleteTarget(null);
-      await refreshAll();
+      await refreshAll(false);
       showAlert("success", "Cita eliminada", "La cita se eliminó correctamente.");
     } catch (deleteError) {
       console.error(deleteError);
@@ -767,6 +839,9 @@ export default function AppointmentsPage() {
       header: "Acciones",
       cell: (row: AppointmentTableRow) => (
         <div className="flex items-center gap-2">
+          {canUpdateAppointments && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? <Button variant="outline" size="sm" onClick={() => void startEncounter(row)}>Atender</Button> : null}
+          {canUpdateAppointments && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? <Button variant="ghost" size="sm" onClick={() => { const start = safeDate(row.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(row); }}>Reprogramar</Button> : null}
+          {canUpdateAppointments && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setCancelTarget(row)}>Cancelar</Button> : null}
           {canUpdateAppointments ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
               <Edit className="h-4 w-4 text-muted-foreground" />
@@ -784,9 +859,7 @@ export default function AppointmentsPage() {
 
   if (loading) {
     return (
-      <div className="app-empty flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-      </div>
+      <DataTableSkeleton />
     );
   }
 
@@ -818,7 +891,7 @@ export default function AppointmentsPage() {
           ) : null
         }
         stats={[
-          { label: "Del día", value: dayAppointments.length, hint: "Citas registradas" },
+          { label: "Del día", value: activeDayAppointments.length, hint: "Citas visibles" },
           { label: "Activas", value: activeDayAppointments.length, hint: "Sin canceladas ni no-show" },
           { label: "Veterinarios", value: vets.length, hint: "Disponibles para asignación" },
         ]}
@@ -884,7 +957,7 @@ export default function AppointmentsPage() {
                       <p className="font-semibold capitalize text-foreground">{format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}</p>
                       <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <CalendarIcon className="h-3 w-3" />
-                        {dayAppointments.length} cita(s)
+                        {activeDayAppointments.length} cita(s)
                       </p>
                     </div>
 
@@ -983,6 +1056,7 @@ export default function AppointmentsPage() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
+                                  {canUpdateAppointments && appointment.status !== "COMPLETED" && appointment.status !== "CANCELLED" ? <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>Atender</Button> : null}
                                   {canUpdateAppointments ? (
                                     <Button
                                       variant="ghost"
@@ -1046,6 +1120,7 @@ export default function AppointmentsPage() {
             </Button>
             {(editing ? canUpdateAppointments : canCreateAppointments) ? (
               <Button onClick={() => void submitAppointment()} disabled={saving}>
+                {saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {saving ? "Guardando..." : editing ? "Guardar Cambios" : "Crear Cita"}
               </Button>
             ) : null}
@@ -1054,29 +1129,36 @@ export default function AppointmentsPage() {
       >
         <form onSubmit={(event) => { event.preventDefault(); void submitAppointment(); }} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={() => handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
+            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
 
             <div className="space-y-2">
               <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Propietario</label>
-              <div className="flex min-h-10 items-center rounded-2xl border border-border/70 bg-muted/45 px-3 text-sm text-foreground">
+              <div className="flex min-h-10 items-center rounded-lg border border-border/70 bg-muted/45 px-3 text-sm text-foreground">
                 <UserRound className="mr-2 h-4 w-4 text-muted-foreground" />
                 {selectedClient?.fullName ?? "Se asigna según la mascota"}
               </div>
             </div>
 
-            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={() => handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
-            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={() => handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
-            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={() => handleChange} required />
-            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={() => handleChange} required />
-            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={() => handleChange} />
-            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={() => handleChange} options={vetOptions} />
-            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={() => handleChange} className="sm:col-span-2" />
-            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={() => handleChange} className="sm:col-span-2" />
+            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
+            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
+            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={handleChange} required />
+            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={handleChange} required />
+            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={handleChange} />
+            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={handleChange} options={vetOptions} />
+            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={handleChange} className="sm:col-span-2" />
+            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={handleChange} className="sm:col-span-2" />
           </div>
         </form>
       </Modal>
 
       <ModalDelete open={deleteOpen} onOpenChange={setDeleteOpen} title="Eliminar cita" itemName={deleteTarget?.label} loading={deleting} onConfirm={handleDelete} />
+      <Modal open={!!encounter} onClose={(open) => { if (!open) setEncounter(null); }} title="Atención clínica" size="xl">
+        {encounter ? <EncounterWorkflow petId={encounter.petId} clientId={encounter.clientId} vets={vets} onFinish={() => void finishEncounter()} /> : null}
+      </Modal>
+      <ModalDelete open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }} title="Cancelar cita" itemName={cancelTarget?.pet?.name} description="La cita quedará marcada como cancelada." dangerText="Cancelar cita" loading={saving} onConfirm={cancelAppointment} />
+      <Dialog open={!!rescheduleTarget} onOpenChange={(open) => { if (!open) setRescheduleTarget(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Reprogramar cita</DialogTitle></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="reschedule-date">Nueva fecha</Label><Input id="reschedule-date" type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="reschedule-time">Nueva hora</Label><Input id="reschedule-time" type="time" value={rescheduleTime} onChange={(event) => setRescheduleTime(event.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={() => setRescheduleTarget(null)}>Cancelar</Button><Button onClick={() => void rescheduleAppointment()} disabled={saving || !rescheduleDate || !rescheduleTime}>{saving ? "Guardando..." : "Guardar"}</Button></DialogFooter></DialogContent>
+      </Dialog>
 
       <AppAlert
         open={alertOpen}

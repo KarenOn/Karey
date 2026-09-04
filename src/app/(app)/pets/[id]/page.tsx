@@ -23,13 +23,13 @@ import { format, parseISO, differenceInYears, differenceInMonths } from "date-fn
 import { es } from "date-fns/locale";
 import Modal from "@/components/shared/Modal";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
-import SearchableSelect from "@/components/shared/SearchableSelect";
-import { Label } from "@/components/ui/label";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
 import { useParams, useSearchParams } from "next/navigation";
 import { AppAlert } from "@/components/shared/AppAlert";
+import ClinicalVisitForm from "@/components/shared/ClinicalVisitForm";
+import VaccinationForm from "@/components/shared/VaccinationForm";
 
 type PetDTO = any; // si quieres, luego lo tipamos con Prisma types
 type VisitDTO = any;
@@ -185,25 +185,6 @@ function PatientDetailContent() {
     const months = differenceInMonths(new Date(), d);
     return `${months} mes${months > 1 ? "es" : ""}`;
   };
-
-  const vaccineOptions = useMemo(
-    () =>
-      vaccinesCatalog.map((v) => ({
-        value: String(v.id),
-        label: v.species ? `${v.name} (${v.species})` : v.name,
-      })),
-    [vaccinesCatalog]
-  );
-
-  const vetOptions = useMemo(
-    () =>
-      availableVets.map((vet) => ({
-        value: vet.id,
-        label: vet.name,
-        keywords: [vet.email],
-      })),
-    [availableVets]
-  );
 
   async function loadAll() {
     setLoading(true);
@@ -383,17 +364,21 @@ function PatientDetailContent() {
         temperatureC: "",
       });
       await loadAll();
-    } catch(e) {
-      console.log(e)
-    } finally {
+    } catch (error) {
       setAlert({
-        variant: "success",
-        title: "Visita registrada",
-        description: "La visita se registró correctamente.",
+        variant: "destructive",
+        title: "No se pudo registrar la visita",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
       });
-      
       setAlertOpen(true);
+      return;
     }
+    setAlert({
+      variant: "success",
+      title: "Visita registrada",
+      description: "La visita se registró correctamente.",
+    });
+    setAlertOpen(true);
   }
 
   async function handleCreateVaccination() {
@@ -421,9 +406,16 @@ function PatientDetailContent() {
         notes: "",
       });
       await loadAll();
-    } catch(e) {
-      console.log(e)
-    } finally {
+    } catch (error) {
+      setAlert({
+        variant: "destructive",
+        title: "No se pudo registrar la vacuna",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+      });
+      setAlertOpen(true);
+      return;
+    }
+    {
       setAlert({
         variant: "success",
         title: "Vacuna registrada",
@@ -741,54 +733,18 @@ function PatientDetailContent() {
           </div>
         }
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            label="Fecha"
-            name="visitAt"
-            type="date"
-            value={visitForm.visitAt}
-            onChange={(e: FormFieldChangeEvent) => setVisitForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            required
-          />
-          <FormField
-            label="Peso en visita (kg)"
-            name="weightKg"
-            type="number"
-            value={visitForm.weightKg}
-            onChange={(e: FormFieldChangeEvent) => setVisitForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-          />
-          <FormField
-            label="Temperatura (°C)"
-            name="temperatureC"
-            type="number"
-            value={visitForm.temperatureC}
-            onChange={(e: FormFieldChangeEvent) => setVisitForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-          />
-          <FormField
-            label="Diagnóstico"
-            name="diagnosis"
-            type="textarea"
-            value={visitForm.diagnosis}
-            onChange={(e: FormFieldChangeEvent) => setVisitForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            className="sm:col-span-2"
-          />
-          <FormField
-            label="Tratamiento"
-            name="treatment"
-            type="textarea"
-            value={visitForm.treatment}
-            onChange={(e: FormFieldChangeEvent) => setVisitForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            className="sm:col-span-2"
-          />
-          <FormField
-            label="Notas"
-            name="notes"
-            type="textarea"
-            value={visitForm.notes}
-            onChange={(e: FormFieldChangeEvent) => setVisitForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            className="sm:col-span-2"
-          />
-        </div>
+        <ClinicalVisitForm
+          petId={petId!}
+          vets={availableVets}
+          initialValues={visitForm}
+          onCancel={() => setVisitModalOpen(false)}
+          onSaved={async () => {
+            setVisitModalOpen(false);
+            await loadAll();
+            setAlert({ variant: "success", title: "Visita registrada", description: "La visita se registró correctamente." });
+            setAlertOpen(true);
+          }}
+        />
       </Modal>
 
       {/* Modal: Nueva Vacuna */}
@@ -805,46 +761,17 @@ function PatientDetailContent() {
           </div>
         }
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            label="Vacuna"
-            name="vaccineId"
-            type="select"
-            value={vaccineForm.vaccineId}
-            options={vaccineOptions}
-            onChange={(e: FormFieldChangeEvent) => setVaccineForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            required
-          />
-          <FormField
-            label="Fecha de Aplicación"
-            name="appliedAt"
-            type="date"
-            value={vaccineForm.appliedAt}
-            onChange={(e: FormFieldChangeEvent) => setVaccineForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            required
-          />
-          <FormField
-            label="Próxima Dosis"
-            name="nextDueAt"
-            type="date"
-            value={vaccineForm.nextDueAt}
-            onChange={(e: FormFieldChangeEvent) => setVaccineForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-          />
-          <FormField
-            label="Número de Lote"
-            name="batchNumber"
-            value={vaccineForm.batchNumber}
-            onChange={(e: FormFieldChangeEvent) => setVaccineForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-          />
-          <FormField
-            label="Notas"
-            name="notes"
-            type="textarea"
-            value={vaccineForm.notes}
-            onChange={(e: FormFieldChangeEvent) => setVaccineForm((p: any) => ({ ...p, [e.target.name]: e.target.value }))}
-            className="sm:col-span-2"
-          />
-        </div>
+        <VaccinationForm
+          petId={petId!}
+          vaccines={vaccinesCatalog}
+          onCancel={() => setVaccineModalOpen(false)}
+          onSaved={async () => {
+            setVaccineModalOpen(false);
+            await loadAll();
+            setAlert({ variant: "success", title: "Vacuna registrada", description: "La vacuna se registró correctamente." });
+            setAlertOpen(true);
+          }}
+        />
       </Modal>
 
       {/* Modal: Adjuntar archivo */}

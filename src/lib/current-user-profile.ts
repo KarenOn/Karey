@@ -1,6 +1,6 @@
+import "server-only";
 import { headers } from "next/headers";
 import { auth, getActiveClinicMembershipForUser } from "@/lib/auth";
-import { activatePendingEmployeeInviteForUser } from "@/lib/employee-invites";
 import { prisma } from "@/lib/prisma";
 import {
   buildClinicAccess,
@@ -20,6 +20,7 @@ type UserProfileRow = Awaited<ReturnType<typeof loadCurrentUserProfileRow>>;
 export type CurrentUserProfile = {
   userId: string;
   emailVerified: boolean;
+  mustChangePassword: boolean;
   clinicId: number | null;
   clinicName: string | null;
   clinicLogoUrl: string | null;
@@ -91,11 +92,30 @@ async function getSessionUserOrThrow() {
 
 async function loadCurrentUserProfileRow() {
   const sessionUser = await getSessionUserOrThrow();
-  let membership = await getActiveClinicMembershipForUser(sessionUser.id);
+  const userState = await prisma.user.findUnique({
+    where: { id: sessionUser.id },
+    select: { banned: true, mustChangePassword: true },
+  });
 
-  if (!membership) {
-    await activatePendingEmployeeInviteForUser(sessionUser.id, sessionUser.email);
-    membership = await getActiveClinicMembershipForUser(sessionUser.id);
+  if (userState?.banned) {
+    throw new Error("ACCESS_REVOKED");
+  }
+
+  const membership = await getActiveClinicMembershipForUser(sessionUser.id);
+  const pendingInvite = await prisma.employeeInvite.findFirst({
+    where: { userId: sessionUser.id, email: sessionUser.email.toLowerCase(), acceptedAt: null },
+    select: { id: true },
+  });
+
+  if (!membership && !pendingInvite && !userState?.mustChangePassword) {
+    const inactiveMembership = await prisma.clinicMember.findFirst({
+      where: { userId: sessionUser.id, isActive: false },
+      select: { id: true },
+    });
+
+    if (inactiveMembership) {
+      throw new Error("ACCESS_REVOKED");
+    }
   }
 
   const clinicId = membership?.clinicId ?? null;
@@ -146,6 +166,7 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
   return {
     userId: row.user.id,
     emailVerified: row.user.emailVerified,
+    mustChangePassword: row.user.mustChangePassword,
     clinicId: row.clinicId,
     clinicName: row.membership?.clinic.name ?? null,
     clinicLogoUrl: await resolveStoredFileUrl(row.membership?.clinic.logoUrl, {

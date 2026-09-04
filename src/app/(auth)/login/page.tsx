@@ -1,22 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Eye, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { Mail, PawPrint, Sparkles, MoonStar } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { getFriendlyVerificationMessage } from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isViewActive, setIsViewActive] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("error");
+    if (reason === "access-revoked") {
+      setErr("Tu acceso a esta clínica ha sido desactivado. Contacta al administrador de la clínica.");
+    } else if (reason === "no-clinic") {
+      setErr("Tu usuario no tiene una clínica activa asignada.");
+    }
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +33,8 @@ export default function LoginPage() {
     setIsLoading(true);
 
     const normalizedEmail = email.trim().toLowerCase();
+    const requestedCallback = new URLSearchParams(window.location.search).get("callbackUrl");
+    const destination = requestedCallback?.startsWith("/") && !requestedCallback.startsWith("//") ? requestedCallback : "/";
 
     const { data, error } = await authClient.signIn.email(
       {
@@ -41,11 +52,23 @@ export default function LoginPage() {
       return;
     }
 
+    const accessResponse = await fetch("/api/profile", { cache: "no-store" });
+    if (accessResponse.status === 403) {
+      await authClient.signOut();
+      setErr("Tu acceso a esta clínica ha sido desactivado. Contacta al administrador de la clínica.");
+      setIsLoading(false);
+      return;
+    }
+
+    const accessProfile = accessResponse.ok
+      ? (await accessResponse.json().catch(() => null)) as { mustChangePassword?: boolean } | null
+      : null;
+
     if (!data?.user.emailVerified) {
       try {
         const response = await fetch("/api/auth/send-verification-email", {
           body: JSON.stringify({
-            callbackURL: "/",
+            callbackURL: destination,
             email: normalizedEmail,
           }),
           headers: { "Content-Type": "application/json" },
@@ -71,7 +94,12 @@ export default function LoginPage() {
     }
 
     setIsLoading(false);
-    router.push("/");
+    if (accessProfile?.mustChangePassword) {
+      router.push(`/onboarding/change-password?callbackUrl=${encodeURIComponent(destination)}`);
+      return;
+    }
+
+    router.push(destination);
   };
 
   const onGoogle = async () => {
@@ -151,13 +179,7 @@ export default function LoginPage() {
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-foreground/88">Contraseña</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={isViewActive ? "text" : "password"} placeholder="Escribe tu contraseña" autoComplete="current-password" className="h-12 pl-11 pr-12 font-semibold" required />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setIsViewActive(!isViewActive)} aria-label="Mostrar contraseña">
-                  <Eye className="w-4 h-4" />
-                </button>
-              </div>
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Escribe tu contraseña" autoComplete="current-password" className="h-12 font-semibold" leadingIcon required />
             </div>
 
             <Button disabled={isLoading} className="h-12 w-full text-md disabled:opacity-60">

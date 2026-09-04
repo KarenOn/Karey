@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processQueuedNotifications } from "@/lib/reminders";
+import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 
 function isAuthorized(req: Request) {
   const cronHeader = req.headers.get("x-vercel-cron");
@@ -24,8 +25,10 @@ async function handle(req: Request) {
   }
 
   const processed = await processQueuedNotifications(100);
+  const reconciled = await reconcileOverdueAppointments();
   return NextResponse.json({
     ok: true,
+    noShowUpdated: reconciled.count,
     ...processed,
   });
 }

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { syncAppointmentReminderNotifications } from "@/lib/reminders";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentCreateSchema } from "@/lib/validators/appointments";
+import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -206,10 +207,12 @@ async function validateAppointmentRelations(params: {
 }
 
 export async function GET(req: Request) {
-  const { clinicId } = await requireClinicPermission("appointments.read");
+  const { clinicId, member, session } = await requireClinicPermission("appointments.read");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
+
+  await reconcileOverdueAppointments();
 
   const url = new URL(req.url);
   const parsedQuery = ListQuerySchema.safeParse(Object.fromEntries(url.searchParams.entries()));
@@ -223,6 +226,10 @@ export async function GET(req: Request) {
 
   const query = parsedQuery.data;
   const where: Record<string, unknown> = { clinicId };
+
+  if (member?.role.key === "vet") {
+    where.OR = [{ vetId: session.user.id }, { vetId: null }];
+  }
 
   if (query.status) where.status = query.status;
   if (query.type) where.type = query.type;

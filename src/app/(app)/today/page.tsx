@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 
-import { endOfDay, startOfDay } from "date-fns";
+import { getClinicDayRange } from "@/lib/appointment-time";
 import { AppointmentStatus, TodayTurnStatus } from "@/generated/prisma/client";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
+import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 import { prisma } from "@/lib/prisma";
 import TodayWorkspace, {
   type TodayAppointmentItem,
@@ -10,15 +11,16 @@ import TodayWorkspace, {
 } from "./TodayWorkspace";
 
 export default async function TodayPage() {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId, member, session } = await requireClinicPermission("appointments.read");
+  await reconcileOverdueAppointments();
   const today = new Date();
-  const from = startOfDay(today);
-  const to = endOfDay(today);
+  const { start: from, end: to } = getClinicDayRange(today, member.clinic.timezone);
 
   const [appointments, turns] = await Promise.all([
     prisma.appointment.findMany({
       where: {
         clinicId,
+        ...(member?.role.key === "vet" ? { OR: [{ vetId: session.user.id }, { vetId: null }] } : {}),
         startAt: { gte: from, lte: to },
         status: {
           notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
@@ -32,6 +34,7 @@ export default async function TodayPage() {
         type: true,
         startAt: true,
         status: true,
+        vetId: true,
         client: {
           select: {
             id: true,
@@ -83,6 +86,7 @@ export default async function TodayPage() {
       petName: appointment.pet.name,
       startAt: appointment.startAt.toISOString(),
       status: appointment.status as TodayAppointmentItem["status"],
+      vetId: appointment.vetId,
       type: appointment.type,
     })
   );

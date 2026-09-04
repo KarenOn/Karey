@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, Eye, KeyRound, Lock, PawPrint } from "lucide-react";
+import { ArrowLeft, KeyRound, Lock, PawPrint } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 type ResetPasswordClientProps = {
   token: string;
@@ -13,8 +13,6 @@ type ResetPasswordClientProps = {
 export default function ResetPasswordClient({ token }: ResetPasswordClientProps) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [show, setShow] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -117,24 +115,15 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
           </label>
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+            <PasswordInput
               className="h-12 pl-11 pr-12 font-semibold"
               minLength={8}
-              type={show ? "text" : "password"}
               placeholder="Escribe tu nueva contraseña"
               autoComplete="new-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <button
-              type="button"
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-              onClick={() => setShow((value) => !value)}
-              aria-label="Mostrar contraseña"
-            >
-              <Eye className="size-4" />
-            </button>
           </div>
         </div>
 
@@ -144,24 +133,15 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
           </label>
           <div className="relative">
             <KeyRound className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+            <PasswordInput
               className="h-12 pl-11 pr-12 font-semibold"
               minLength={8}
-              type={showConfirm ? "text" : "password"}
               placeholder="Vuelve a escribir la nueva contraseña"
               autoComplete="new-password"
               required
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
-            <button
-              type="button"
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-              onClick={() => setShowConfirm((value) => !value)}
-              aria-label="Mostrar confirmación de contraseña"
-            >
-              <Eye className="size-4" />
-            </button>
           </div>
         </div>
 

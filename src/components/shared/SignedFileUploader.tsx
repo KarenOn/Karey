@@ -12,6 +12,7 @@ type SignedFileUploaderProps = {
   className?: string;
   disabled?: boolean;
   onError?: (message: string) => void;
+  onUploadingChange?: (uploading: boolean) => void;
   onUploaded: (file: {
     fileName: string;
     fileType: string;
@@ -34,6 +35,7 @@ export default function SignedFileUploader({
   className,
   disabled = false,
   onError,
+  onUploadingChange,
   onUploaded,
   scope,
   visitId,
@@ -44,6 +46,7 @@ export default function SignedFileUploader({
 
   async function handleFileSelection(file: File) {
     setUploading(true);
+    onUploadingChange?.(true);
 
     try {
       const signRes = await fetch("/api/uploads/sign", {
@@ -87,6 +90,7 @@ export default function SignedFileUploader({
       );
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
       if (inputRef.current) {
         inputRef.current.value = "";
       }

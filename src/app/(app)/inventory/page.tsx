@@ -8,20 +8,16 @@ import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
-  Boxes,
-  DollarSign,
   Edit,
   FileText,
   Package,
   Plus,
-  RefreshCcw,
-  Search,
   ShieldAlert,
   Trash2,
   Waypoints,
@@ -195,6 +191,8 @@ export default function InventoryPage() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [movements, setMovements] = useState<StockMovementRow[]>([]);
   const [productSearch, setProductSearch] = useState("");
+    const [productStatusFilter, setProductStatusFilter] = useState("ALL");
+    const [productCategoryFilter, setProductCategoryFilter] = useState("ALL");
   const [movementSearch, setMovementSearch] = useState("");
   const [movementTypeFilter, setMovementTypeFilter] = useState("ALL");
   const [movementProductFilter, setMovementProductFilter] = useState("ALL");
@@ -214,8 +212,8 @@ export default function InventoryPage() {
   const canUpdateInventory = !!access?.actions.inventory.update;
   const canDeleteInventory = !!access?.actions.inventory.delete;
 
-  async function loadInventory() {
-    setLoading(true);
+  async function loadInventory(showLoading = true) {
+    if (showLoading) setLoading(true);
     try {
       const [productRows, movementRows] = await Promise.all([
         apiListProducts(),
@@ -262,34 +260,22 @@ export default function InventoryPage() {
   }, [movements]);
 
   const filteredProducts = useMemo(() => {
-    const query = productSearch.trim().toLowerCase();
-    if (!query) return products;
-    return products.filter((product) =>
-      [product.name, product.sku, product.category, product.description]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query))
-    );
-  }, [products, productSearch]);
+    return products.filter((product) => {
+      const statusMatches = productStatusFilter === "ALL" || (productStatusFilter === "ACTIVE" ? product.isActive : !product.isActive);
+      const categoryMatches = productCategoryFilter === "ALL" || (product.category || "Otro") === productCategoryFilter;
+      return statusMatches && categoryMatches;
+    });
+  }, [products, productStatusFilter, productCategoryFilter]);
 
   const filteredMovements = useMemo(() => {
-    const query = movementSearch.trim().toLowerCase();
     return movements.filter((movement) => {
       if (movementTypeFilter !== "ALL" && movement.type !== movementTypeFilter) return false;
       if (movementProductFilter !== "ALL" && String(movement.productId) !== movementProductFilter) return false;
-      if (!query) return true;
-      return [
-        movement.product.name,
-        movement.product.sku,
-        movement.reason,
-        movement.referenceType,
-        movement.referenceId,
-        movement.createdBy?.name,
-        movement.createdBy?.email,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
+      return true;
     });
-  }, [movements, movementSearch, movementTypeFilter, movementProductFilter]);
+  }, [movements, movementTypeFilter, movementProductFilter]);
+
+  const productCategories = useMemo(() => Array.from(new Set(products.map((product) => product.category || "Otro"))).sort((a, b) => a.localeCompare(b, "es")), [products]);
 
   const productOptions = useMemo(() => {
     return [...products]
@@ -391,7 +377,7 @@ export default function InventoryPage() {
       if (editingProduct) await apiUpdateProduct(editingProduct.id, payload);
       else await apiCreateProduct(payload);
       setProductModalOpen(false);
-      await loadInventory();
+      await loadInventory(false);
       setAlert({ variant: "success", title: editingProduct ? "Producto actualizado" : "Producto creado" });
       setAlertOpen(true);
     } catch (error) {
@@ -437,7 +423,7 @@ export default function InventoryPage() {
         referenceId: movementForm.referenceId.trim() || null,
       });
       setMovementModalOpen(false);
-      await loadInventory();
+      await loadInventory(false);
       setAlert({ variant: "success", title: "Movimiento registrado" });
       setAlertOpen(true);
     } catch (error) {
@@ -463,7 +449,7 @@ export default function InventoryPage() {
     try {
       await apiDeleteProduct(selectedDelete.id);
       setDeleteOpen(false);
-      await loadInventory();
+      await loadInventory(false);
       setAlert({ variant: "success", title: "Producto eliminado" });
       setAlertOpen(true);
     } catch (error) {
@@ -483,7 +469,7 @@ export default function InventoryPage() {
       header: "Producto",
       cell: (row: ProductRow) => (
         <div className="flex items-start gap-3">
-          <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${categoryColors[row.category ?? "Otro"] || categoryColors.Otro}`}>
+          <div className={`flex h-11 w-11 items-center justify-center rounded-lg border ${categoryColors[row.category ?? "Otro"] || categoryColors.Otro}`}>
             <Package className="h-5 w-5" />
           </div>
           <div className="min-w-0">
@@ -627,26 +613,6 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      {/* <div className="app-page-hero text-foreground">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <Badge className="app-kicker border-0">Control de inventario</Badge>
-            <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-foreground">Inventario y movimientos</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Gestiona productos y registra entradas, salidas y ajustes desde el mismo modulo.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={() => openMovementModal()}>
-              <Waypoints className="mr-2 h-4 w-4" />
-              Registrar movimiento
-            </Button>
-            <Button onClick={openCreateProduct}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo producto
-            </Button>
-          </div>
-        </div>
-      </div> */}
-
       <AppPageHero
         badgeIcon={<Package className="size-3.5" />}
         badgeLabel="Inventario"
@@ -676,111 +642,64 @@ export default function InventoryPage() {
         ]}
       />
 
-      {/* <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-        <div className="app-stat-card">
-          <div className="flex items-center justify-between">
-            <div className="app-stat-icon"><Boxes className="h-5 w-5" /></div>
-            <Badge variant="outline">{products.length} items</Badge>
-          </div>
-          <p className="mt-4 text-sm text-muted-foreground">Productos cargados</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{products.length}</p>
-        </div>
-        <div className="app-stat-card">
-          <div className="flex items-center justify-between">
-            <div className="app-stat-icon text-[var(--brand-gold)]"><AlertTriangle className="h-5 w-5" /></div>
-            <Badge className="bg-amber-50 text-amber-700 border border-amber-200">Alerta</Badge>
-          </div>
-          <p className="mt-4 text-sm text-muted-foreground">Stock bajo</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{lowStockProducts.length}</p>
-        </div>
-        <div className="app-stat-card">
-          <div className="flex items-center justify-between">
-            <div className="app-stat-icon"><RefreshCcw className="h-5 w-5" /></div>
-            <Badge className="bg-sky-50 text-sky-700 border border-sky-200">7 dias</Badge>
-          </div>
-          <p className="mt-4 text-sm text-muted-foreground">Movimientos recientes</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{movementStats.recent}</p>
-        </div>
-        <div className="app-stat-card">
-          <div className="flex items-center justify-between">
-            <div className="app-stat-icon"><DollarSign className="h-5 w-5" /></div>
-            <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">Valor</Badge>
-          </div>
-          <p className="mt-4 text-sm text-muted-foreground">Stock valorizado</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{money(totalValue)}</p>
-        </div>
-      </div> */}
-
-      <Tabs defaultValue="products" className="space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="h-auto rounded-2xl p-1">
-            <TabsTrigger value="products" className="rounded-xl px-4 py-2">Productos</TabsTrigger>
-            <TabsTrigger value="movements" className="rounded-xl px-4 py-2">Movimientos</TabsTrigger>
-          </TabsList>
-          <Button variant="outline" className="rounded-xl" onClick={loadInventory}>
-            <RefreshCcw className="mr-2 h-4 w-4" />
-            Actualizar
-          </Button>
-        </div>
+      <Tabs defaultValue="products" className="space-y-5">
+        <TabsList className="h-10 rounded-lg p-1">
+          <TabsTrigger value="products" className="rounded-md px-4 py-2">Productos</TabsTrigger>
+          <TabsTrigger value="movements" className="rounded-md px-4 py-2">Movimientos</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="products" className="space-y-4">
-          <div className="app-toolbar">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h3 className="font-display text-2xl font-semibold text-foreground">Catalogo de productos</h3>
-                <p className="text-sm text-muted-foreground">Edita precios, stock, receta y datos generales.</p>
-              </div>
-              <div className="relative w-full lg:max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Buscar por nombre, SKU o categoria" className="pl-10" />
-              </div>
-            </div>
+          <div>
+            <h2 className="app-heading text-[2rem] text-foreground sm:text-[2.35rem]">Catalogo de productos</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Edita precios, stock, receta y datos generales.</p>
           </div>
-          <DataTable columns={productColumns} data={filteredProducts} searchKey={undefined} emptyMessage="No hay productos para mostrar" />
+          <DataTable
+            title="Productos"
+            columns={productColumns}
+            data={filteredProducts}
+            searchKeys={["name", "sku", "category", "description"]}
+            searchValue={productSearch}
+            onSearchChange={setProductSearch}
+            searchPlaceholder="Buscar por nombre, SKU o categoria..."
+            emptyMessage="No hay productos que coincidan con los filtros."
+            actions={
+              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]">
+                <Select value={productStatusFilter} onValueChange={setProductStatusFilter}>
+                  <SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos los estados</SelectItem>
+                    <SelectItem value="ACTIVE">Activo</SelectItem>
+                    <SelectItem value="INACTIVE">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={productCategoryFilter} onValueChange={setProductCategoryFilter}>
+                  <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todas las categorias</SelectItem>
+                    {productCategories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            }
+          />
         </TabsContent>
 
         <TabsContent value="movements" className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="app-panel-strong p-5">
-              <h3 className="font-display text-2xl font-semibold text-foreground">Bitacora de movimientos</h3>
-              <p className="text-sm text-muted-foreground">Consulta entradas, salidas, compras, ventas y ajustes.</p>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-emerald-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-emerald-700">Entradas</p>
-                  <p className="mt-2 text-2xl font-bold text-emerald-900">{movementStats.entries}</p>
-                </div>
-                <div className="rounded-2xl bg-rose-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-rose-700">Salidas</p>
-                  <p className="mt-2 text-2xl font-bold text-rose-900">{movementStats.exits}</p>
-                </div>
-              </div>
-            </div>
-            <div className="app-panel-strong p-5">
-              <p className="text-sm text-muted-foreground">Vista previa del movimiento</p>
-              <div className="mt-3 flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-foreground">{movementTone[movementForm.type].label}</h4>
-                <Badge className={movementTone[movementForm.type].badge}>{movementTone[movementForm.type].label}</Badge>
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                <div className="app-panel-muted p-4"><p className="text-xs text-muted-foreground">Actual</p><p className="mt-2 text-xl font-semibold text-foreground">{selectedMovementProduct?.stockOnHand ?? "-"}</p></div>
-                <div className="app-panel-muted p-4"><p className="text-xs text-muted-foreground">Cambio</p><p className={`mt-2 text-xl font-semibold ${movementDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{movementForm.quantity.trim() ? signed(movementDelta) : "-"}</p></div>
-                <div className="app-panel-muted p-4"><p className="text-xs text-muted-foreground">Final</p><p className={`mt-2 text-xl font-semibold ${invalidMovement ? "text-rose-700" : "text-foreground"}`}>{selectedMovementProduct ? movementNextStock : "-"}</p></div>
-              </div>
-              <p className="mt-4 text-sm text-muted-foreground">{selectedMovementProduct ? `Producto: ${selectedMovementProduct.name}` : "Selecciona un producto con control de stock."}</p>
-            </div>
+          <div>
+            <h2 className="app-heading text-[2rem] text-foreground sm:text-[2.35rem]">Movimientos de inventario</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Consulta las entradas, salidas, compras, ventas y ajustes registrados.</p>
           </div>
-
-            <div className="app-panel-strong p-5">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px_280px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={movementSearch} onChange={(event) => setMovementSearch(event.target.value)} placeholder="Buscar por producto, referencia o usuario" className="rounded-xl bg-input/60 pl-10" />
-              </div>
-              <FormField label="Tipo" name="movementTypeFilter" type="select" value={movementTypeFilter} onChange={(event: { target: { name: string; value: string | number | boolean } }) => setMovementTypeFilter(String(event.target.value))} options={[{ value: "ALL", label: "Todos" }, ...movementTypeOptions]} />
-              <FormField label="Producto" name="movementProductFilter" type="select" value={movementProductFilter} onChange={(event: { target: { name: string; value: string | number | boolean } }) => setMovementProductFilter(String(event.target.value))} options={[{ value: "ALL", label: "Todos" }, ...productOptions]} />
-            </div>
-          </div>
-          <DataTable columns={movementColumns} data={filteredMovements} searchKey={undefined} emptyMessage="No hay movimientos registrados" />
+          <DataTable
+            title="Movimientos"
+            columns={movementColumns}
+            data={filteredMovements}
+            searchValue={movementSearch}
+            onSearchChange={setMovementSearch}
+            searchPredicate={(movement, query) => !query || [movement.product.name, movement.product.sku, movement.reason, movement.referenceType, movement.referenceId, movement.createdBy?.name, movement.createdBy?.email].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))}
+            searchPlaceholder="Buscar por producto, referencia o usuario..."
+            emptyMessage="No hay movimientos que coincidan con los filtros."
+            actions={<div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]"><Select value={movementTypeFilter} onValueChange={setMovementTypeFilter}><SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los movimientos</SelectItem>{movementTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select><Select value={movementProductFilter} onValueChange={setMovementProductFilter}><SelectTrigger><SelectValue placeholder="Producto" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los productos</SelectItem>{productOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></div>}
+          />
         </TabsContent>
       </Tabs>
 
@@ -823,13 +742,13 @@ export default function InventoryPage() {
               <Badge className={movementTone[movementForm.type].badge}>{movementTone[movementForm.type].label}</Badge>
             </div>
             <div className="mt-4 space-y-3">
-              <div className="rounded-2xl bg-background/80 p-4"><p className="text-xs text-muted-foreground">Producto</p><p className="mt-2 font-semibold text-foreground">{selectedMovementProduct?.name || "Selecciona un producto"}</p></div>
+              <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Producto</p><p className="mt-2 font-semibold text-foreground">{selectedMovementProduct?.name || "Selecciona un producto"}</p></div>
               <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-2xl bg-background/80 p-4"><p className="text-xs text-muted-foreground">Actual</p><p className="mt-2 text-xl font-semibold text-foreground">{selectedMovementProduct?.stockOnHand ?? "-"}</p></div>
-                <div className="rounded-2xl bg-background/80 p-4"><p className="text-xs text-muted-foreground">Delta</p><p className={`mt-2 text-xl font-semibold ${movementDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{movementForm.quantity.trim() ? signed(movementDelta) : "-"}</p></div>
-                <div className="rounded-2xl bg-background/80 p-4"><p className="text-xs text-muted-foreground">Final</p><p className={`mt-2 text-xl font-semibold ${invalidMovement ? "text-rose-700" : "text-foreground"}`}>{selectedMovementProduct ? movementNextStock : "-"}</p></div>
+                <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Actual</p><p className="mt-2 text-xl font-semibold text-foreground">{selectedMovementProduct?.stockOnHand ?? "-"}</p></div>
+                <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Delta</p><p className={`mt-2 text-xl font-semibold ${movementDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{movementForm.quantity.trim() ? signed(movementDelta) : "-"}</p></div>
+                <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Final</p><p className={`mt-2 text-xl font-semibold ${invalidMovement ? "text-rose-700" : "text-foreground"}`}>{selectedMovementProduct ? movementNextStock : "-"}</p></div>
               </div>
-              <div className={`rounded-2xl border p-4 text-sm ${invalidMovement ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{invalidMovement ? "El movimiento no es valido porque deja el stock en negativo." : "La vista previa te muestra el stock resultante antes de guardar."}</div>
+              <div className={`rounded-lg border p-4 text-sm ${invalidMovement ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{invalidMovement ? "El movimiento no es valido porque deja el stock en negativo." : "La vista previa te muestra el stock resultante antes de guardar."}</div>
             </div>
           </div>
         </form>

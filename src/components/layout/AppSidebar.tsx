@@ -24,8 +24,6 @@ import {
   Sun,
   Users,
   User,
-  Receipt,
-  Text,
   Monitor,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -47,6 +45,7 @@ import ClinicOnboardingModal from "@/components/layout/ClinicOnboardingModal";
 import { CurrentUserProvider } from "@/components/layout/current-user-context";
 import EmailVerificationBanner from "@/components/layout/EmailVerificationBanner";
 import GlobalSearch from "@/components/layout/GlobalSearch";
+import AppointmentNowAlert from "@/components/layout/AppointmentNowAlert";
 
 type ModuleKey =
   | "dashboard"
@@ -90,7 +89,7 @@ const routeModuleMap: Array<{ prefix: string; moduleKey: ModuleKey }> = [
 ];
 
 export default function AppShell({ children, initialUser = null }: AppSidebarProps) {
-  const { setTheme, resolvedTheme } = useTheme();
+  const { setTheme } = useTheme();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -409,6 +408,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
             collapsed ? "lg:pl-[6.5rem]" : "lg:pl-[16rem]"
           )}
         >
+          <AppointmentNowAlert />
           <header className="sticky top-0 z-20 border-b border-border/70 bg-header/95 backdrop-blur">
             <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 lg:px-6">
               <div className="flex min-w-0 items-center gap-3">
@@ -462,9 +462,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     <Button variant="outline" size="icon">
                       <Sun className="h-[1.1rem] w-[1.1rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
                       <Moon className="absolute h-[1.1rem] w-[1.1rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-                      <span className="sr-only">
-                        Cambiar tema {resolvedTheme === "dark" ? "oscuro" : "claro"}
-                      </span>
+                      <span className="sr-only">Cambiar tema</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -483,7 +481,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-3 rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:bg-secondary">
-                      <span className="relative flex h-5 w-9 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-primary">
+                      <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-primary">
                         {currentUser?.avatarUrl ? (
                           <Image
                             alt={currentUser.name}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Mail, Lock, Eye, PawPrint, ShieldCheck } from "lucide-react";
+import { User, Mail, PawPrint, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import PasswordInput from "@/components/shared/PasswordInput";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,8 +21,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,32 +172,21 @@ export default function RegisterPage() {
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-foreground/88">Contraseña</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Crea una contraseña de al menos 8 caracteres" autoComplete="new-password" className="h-12 pl-11 pr-12 font-semibold" required minLength={8} />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword((v) => !v)} aria-label="Mostrar contraseña">
-                  <Eye className="w-4 h-4" />
-                </button>
-              </div>
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Crea una contraseña de al menos 8 caracteres" autoComplete="new-password" className="h-12 font-semibold" leadingIcon required minLength={8} />
             </div>
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-foreground/88">Confirmar contraseña</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
+              <div>
+                <PasswordInput
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  type={showConfirmPassword ? "text" : "password"}
                   placeholder="Vuelve a escribir la contraseña"
                   autoComplete="new-password"
-                  className="h-12 pl-11 pr-12 font-semibold"
+                  className="h-12 font-semibold"
                   required
                   minLength={8}
                 />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowConfirmPassword((v) => !v)} aria-label="Mostrar confirmación de contraseña">
-                  <Eye className="w-4 h-4" />
-                </button>
               </div>
             </div>
 

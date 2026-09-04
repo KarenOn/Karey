@@ -17,6 +17,7 @@ import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import PrintSettingsCard from "@/components/printing/PrintSettingsCard";
   
 import options from '@/components/shared/PhoneMask';
+import { toast } from "sonner";
 
 const dayNames: Record<string, string> = {
   monday: "Lunes",
@@ -189,10 +190,13 @@ export default function ProfilePage() {
       setSnapshot(updated);
       setIsEditing(true);
       setSaved(true);
+      const tabMessages = { general: "Información general actualizada correctamente.", fiscal: "Información fiscal actualizada correctamente.", schedule: "Horarios actualizados correctamente.", invoice: "Configuración de facturación actualizada correctamente." };
+      toast.success(tabMessages[activeTab]);
       window.dispatchEvent(new Event("user-profile-updated"));
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
       setErr(e?.message ?? "Error guardando");
+      toast.error(e?.message ?? "No se pudo actualizar la información de la clínica.");
     } finally {
       setSaving(false);
     }
@@ -279,7 +283,7 @@ export default function ProfilePage() {
 
           {/* Info */}
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-foreground">{profile.name}</h1>
+            <h1 className="app-heading text-3xl text-foreground sm:text-4xl">{profile.name}</h1>
             {profile.slogan && <p className="text-muted-foreground mt-1 italic">"{profile.slogan}"</p>}
             <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">

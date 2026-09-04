@@ -1,6 +1,8 @@
-﻿import { betterAuth } from "better-auth";
+﻿import "server-only";
+import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
+import { toNextJsHandler } from "better-auth/next-js";
 import { headers } from "next/headers";
 import {
   getAppBaseUrl,
@@ -72,6 +74,8 @@ export const auth = betterAuth({
   plugins: [nextCookies()],
 });
 
+export const authHandler = toNextJsHandler(auth);
+
 export async function getSessionUserOrNull() {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -101,6 +105,7 @@ export async function getActiveClinicMembershipForUser(userId: string) {
           subscriptionStatus: true,
           subscriptionEndDate: true,
           plan: true,
+          timezone: true,
         },
       },
       role: {
@@ -132,12 +137,23 @@ export const getClinicIdOrFail = async () => {
     throw new Error("UNAUTHORIZED");
   }
 
+  if (user.banned) {
+    throw new Error("ACCESS_REVOKED");
+  }
+
   const membership = await getActiveClinicMembershipForUser(user.id);
   if (membership?.clinicId) {
     if (!membership.clinic.isActive) {
       throw new Error("CLINIC_INACTIVE");
     }
     return membership.clinicId;
+  }
+
+  const inactiveMembership = await prisma.clinicMember.findFirst({ where: { userId: user.id, isActive: false }, select: { id: true } });
+  const pendingInvite = await prisma.employeeInvite.findFirst({ where: { userId: user.id, email: user.email.toLowerCase(), acceptedAt: null }, select: { id: true } });
+
+  if (inactiveMembership && !pendingInvite) {
+    throw new Error("ACCESS_REVOKED");
   }
 
   throw new Error("NO_CLINIC");
