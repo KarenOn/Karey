@@ -105,7 +105,7 @@ function isLocalUrl(value: string | null) {
   }
 }
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -216,7 +216,7 @@ async function sendEmail({ html, subject, text, to }: EmailMessage) {
   });
 }
 
-function buildEmailShell(input: {
+export function buildEmailShell(input: {
   bodyHtml: string;
   ctaHref: string;
   ctaLabel: string;

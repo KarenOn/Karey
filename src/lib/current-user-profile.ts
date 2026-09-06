@@ -21,6 +21,8 @@ export type CurrentUserProfile = {
   userId: string;
   emailVerified: boolean;
   mustChangePassword: boolean;
+  onboardingCompletedAt: string | null;
+  welcomeSeenAt: string | null;
   clinicId: number | null;
   clinicName: string | null;
   clinicLogoUrl: string | null;
@@ -94,7 +96,7 @@ async function loadCurrentUserProfileRow() {
   const sessionUser = await getSessionUserOrThrow();
   const userState = await prisma.user.findUnique({
     where: { id: sessionUser.id },
-    select: { banned: true, mustChangePassword: true },
+    select: { banned: true, mustChangePassword: true, onboardingCompletedAt: true, welcomeSeenAt: true },
   });
 
   if (userState?.banned) {
@@ -167,6 +169,8 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
     userId: row.user.id,
     emailVerified: row.user.emailVerified,
     mustChangePassword: row.user.mustChangePassword,
+    onboardingCompletedAt: row.user.onboardingCompletedAt?.toISOString() ?? null,
+    welcomeSeenAt: row.user.welcomeSeenAt?.toISOString() ?? null,
     clinicId: row.clinicId,
     clinicName: row.membership?.clinic.name ?? null,
     clinicLogoUrl: await resolveStoredFileUrl(row.membership?.clinic.logoUrl, {

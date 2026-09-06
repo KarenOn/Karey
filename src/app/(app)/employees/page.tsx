@@ -53,14 +53,21 @@ type Capabilities = {
 };
 
 const permissionCatalog = [
-  { module: "clinic", label: "Clinica", actions: ["update"] },
-  { module: "employees", label: "Empleados", actions: ["read", "invite", "update"] },
-  { module: "roles", label: "Roles", actions: ["read", "manage"] },
-  { module: "appointments", label: "Citas", actions: ["read", "create", "update", "delete"] },
+  { module: "dashboard", label: "Resumen", actions: ["read"] },
+  { module: "clinic", label: "Clinica", actions: ["read", "update"] },
+  { module: "employees", label: "Empleados", actions: ["read", "invite", "update", "delete", "activate", "deactivate", "resendInvite"] },
+  { module: "roles", label: "Roles", actions: ["read", "manage", "create", "update", "delete", "managePermissions"] },
+  { module: "appointments", label: "Citas", actions: ["read", "create", "update", "attend", "cancel", "reschedule", "delete"] },
   { module: "clients", label: "Clientes", actions: ["read", "create", "update", "delete"] },
+  { module: "pets", label: "Pacientes", actions: ["read", "create", "update", "delete", "viewClinicalHistory", "manageVisits", "manageVaccines"] },
+  { module: "today", label: "Hoy", actions: ["read", "create", "update", "manageWalkIns", "manageEncounter"] },
+  { module: "todayTurn", label: "Turnos sin cita", actions: ["read", "create", "update", "delete"] },
+  { module: "visits", label: "Visitas clínicas", actions: ["read", "create", "update", "attachDocuments"] },
+  { module: "vaccines", label: "Vacunas", actions: ["read", "create", "update", "delete"] },
   { module: "services", label: "Servicios", actions: ["read", "create", "update", "delete"] },
-  { module: "inventory", label: "Inventario", actions: ["read", "create", "update", "delete"] },
-  { module: "invoices", label: "Facturas", actions: ["read", "create", "update", "delete"] },
+  { module: "inventory", label: "Inventario", actions: ["read", "create", "update", "delete", "movements"] },
+  { module: "invoices", label: "Facturas", actions: ["read", "create", "update", "delete", "annul", "download", "print"] },
+  { module: "payments", label: "Pagos", actions: ["read", "create"] },
 ] as const;
 
 const emptyInvite = { name: "", email: "", roleId: "" };
@@ -138,10 +145,6 @@ export default function EmployeesPage() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState(emptyInvite);
-  const [inviteResult, setInviteResult] = useState<{
-    inviteUrl: string;
-    tempPassword: string | null;
-  } | null>(null);
 
   const [roleOpen, setRoleOpen] = useState(false);
   const [roleForm, setRoleForm] = useState(emptyRole);
@@ -211,7 +214,8 @@ export default function EmployeesPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Error creando empleado");
-      setInviteResult({ inviteUrl: data.inviteUrl, tempPassword: data.tempPassword ?? null });
+      setInviteForm(emptyInvite);
+      setInviteOpen(false);
       toast.success("Empleado creado");
       await loadAll(false);
     } catch (err: unknown) {
@@ -311,14 +315,6 @@ export default function EmployeesPage() {
     }
   }
 
-  async function copyText(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success("Copiado");
-    } catch {
-      toast.error("No se pudo copiar");
-    }
-  }
 
   const activeMembers = members.filter((member) => member.isActive).length;
   const activeRoles = roles.filter((role) => role.isActive).length;
@@ -356,7 +352,6 @@ export default function EmployeesPage() {
                 className="gap-2"
                 onClick={() => {
                   setInviteForm(emptyInvite);
-                  setInviteResult(null);
                   setInviteOpen(true);
                 }}
               >
@@ -704,7 +699,7 @@ export default function EmployeesPage() {
                 buttonClassName="rounded-lg bg-input/60"
               />
             </div>
-            {inviteResult ? (
+            {/* {inviteResult ? (
               <Card className="app-panel-muted space-y-3 p-4 text-sm shadow-none">
                 <div className="break-all">
                   <span className="text-muted-foreground">Link:</span> {inviteResult.inviteUrl}
@@ -734,7 +729,7 @@ export default function EmployeesPage() {
                   ) : null}
                 </div>
               </Card>
-            ) : null}
+            ) : null} */}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>

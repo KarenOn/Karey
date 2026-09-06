@@ -127,13 +127,38 @@ export default function NewInvoicePOSPage() {
   const prefilledPetId = searchParams.get("petId");
   const prefilledAppointmentId = searchParams.get("appointmentId");
   const prefilledTodayTurnId = searchParams.get("todayTurnId");
+  const prefilledEncounterId = searchParams.get("encounterId") ?? prefilledAppointmentId;
   const prefilledPetName = searchParams.get("petName");
   const prefilledOwnerName = searchParams.get("ownerName");
   const prefilledServiceName = searchParams.get("serviceName");
   const returnTo = searchParams.get("returnTo");
   const servicePrefillAppliedRef = useRef(false);
+  const encounterPrefillAppliedRef = useRef(false);
 
   // Load base catalog
+  useEffect(() => {
+    if (encounterPrefillAppliedRef.current || (!prefilledAppointmentId && !prefilledTodayTurnId) || loading || services.length === 0 || products.length === 0) return;
+    encounterPrefillAppliedRef.current = true;
+    void (async () => {
+      const link = prefilledTodayTurnId ? `todayTurnId=${encodeURIComponent(prefilledTodayTurnId)}` : `appointmentId=${encodeURIComponent(prefilledAppointmentId ?? prefilledEncounterId ?? "")}`;
+      const response = await fetch(`/api/encounter-items?${link}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const draftItems = (await response.json()) as Array<{ id: number; type: ItemType; serviceId: number | null; productId: number | null; description: string; quantity: string; unitPrice: string }>;
+      setItems(draftItems.map((item) => ({
+        key: `ENCOUNTER-${item.id}`,
+        type: item.type,
+        serviceId: item.serviceId ?? undefined,
+        productId: item.productId ?? undefined,
+        name: item.description,
+        description: item.description,
+        quantity: num(item.quantity),
+        unitPrice: num(item.unitPrice),
+        taxRate: 0,
+        lineTotal: num(item.quantity) * num(item.unitPrice),
+      })));
+    })().catch(() => undefined);
+  }, [loading, prefilledAppointmentId, prefilledEncounterId, prefilledTodayTurnId, products.length, services.length]);
+
   useEffect(() => {
     let mounted = true;
     (async () => {

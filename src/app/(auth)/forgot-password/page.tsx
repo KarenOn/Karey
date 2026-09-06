@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowLeft, Mail, PawPrint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { z } from "zod";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -14,14 +15,21 @@ export default function ForgotPasswordPage() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!z.string().email().safeParse(normalizedEmail).success) {
+      setError("Escribe un correo electrónico válido.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch("/api/auth/request-password-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
       if (!response.ok) {

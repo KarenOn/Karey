@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, addMinutes, format, isToday, isTomorrow, parse, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
+import { useRouter } from "next/navigation";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -33,6 +34,10 @@ import { cn } from "@/lib/utils";
 import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
 import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
 import { getClinicDateKey } from "@/lib/appointment-time";
+import {
+  filterAppointmentsByClinicDay,
+  canPerformAction,
+} from "@/lib/appointment-helpers";
 
 type PetDTO = { id: number; name: string; species: string; clientId: number };
 type ClientDTO = { id: number; fullName: string; phone?: string | null };
@@ -253,9 +258,11 @@ function LegendItem({ colorClass, label }: { colorClass: string; label: string }
 }
 
 export default function AppointmentsPage() {
+  const router = useRouter();
   const access = useCurrentUserAccess();
   const [view, setView] = useState<"agenda" | "list">("agenda");
   const [selectedDay, setSelectedDay] = useState<Date>(startOfDay(new Date()));
+  const [listViewSelectedDay, setListViewSelectedDay] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -268,6 +275,8 @@ export default function AppointmentsPage() {
   const [appointmentTypes, setAppointmentTypes] = useState<string[]>([]);
   const [appointmentStatuses, setAppointmentStatuses] = useState<string[]>([]);
   const [clinicTimezone, setClinicTimezone] = useState("America/Santo_Domingo");
+  const [slotVetId, setSlotVetId] = useState("__NONE__");
+  // const [listViewSearchText, setListViewSearchText] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AppointmentDTO | null>(null);
@@ -291,6 +300,7 @@ export default function AppointmentsPage() {
   const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentDTO | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleEndTime, setRescheduleEndTime] = useState("");
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: "success" | "info" | "warning" | "destructive";
@@ -342,7 +352,25 @@ export default function AppointmentsPage() {
     void refreshAll();
   }, [refreshAll]);
 
-  const selectedDayStr = useMemo(() => format(selectedDay, "yyyy-MM-dd"), [selectedDay]);
+  useEffect(() => {
+    const handleInvalidation = () => void refreshAll(false);
+    window.addEventListener("karey:appointments-invalidated", handleInvalidation);
+    return () => window.removeEventListener("karey:appointments-invalidated", handleInvalidation);
+  }, [refreshAll]);
+
+  // Initialize list view selected day when clinic timezone is set
+  useEffect(() => {
+    if (!listViewSelectedDay && clinicTimezone) {
+      const today = new Date();
+      const clinicDateKey = getClinicDateKey(today, clinicTimezone);
+      setListViewSelectedDay(clinicDateKey);
+    }
+  }, [clinicTimezone, listViewSelectedDay]);
+
+  // Compute selectedDayStr using clinic timezone instead of browser timezone
+  const selectedDayStr = useMemo(() => {
+    return getClinicDateKey(selectedDay, clinicTimezone);
+  }, [selectedDay, clinicTimezone]);
   const scheduleByDay = useMemo(() => new Map(schedules.map((schedule) => [schedule.day, schedule])), [schedules]);
   const selectedSchedule = useMemo(
     () => scheduleByDay.get(getWeekdayKey(selectedDay)) ?? DEFAULT_SCHEDULE,
@@ -433,7 +461,7 @@ export default function AppointmentsPage() {
     for (const appointment of activeDayAppointments) {
       const start = safeDate(appointment.startAt);
       const end = getAppointmentEnd(appointment);
-      if (!start || !end) continue;
+      if (!start || !end || appointment.vetId !== (slotVetId === "__NONE__" ? null : slotVetId)) continue;
 
       for (const slot of timeSlots) {
         const slotStart = combineDateAndTime(selectedDayStr, slot);
@@ -445,13 +473,15 @@ export default function AppointmentsPage() {
     }
 
     return occupied;
-  }, [activeDayAppointments, selectedDayStr, timeSlots]);
+  }, [activeDayAppointments, selectedDayStr, slotVetId, timeSlots]);
+
+  const isPastSlot = (slot: string) => combineDateAndTime(selectedDayStr, slot) <= new Date();
 
   const appointmentLayouts = useMemo(() => {
     const timelineStart = timeSlots[0] ? combineDateAndTime(selectedDayStr, timeSlots[0]) : null;
     if (!timelineStart) return [];
 
-    return activeDayAppointments
+    const entries = activeDayAppointments
       .map((appointment) => {
         const start = safeDate(appointment.startAt);
         const end = getAppointmentEnd(appointment);
@@ -465,11 +495,37 @@ export default function AppointmentsPage() {
 
         return {
           appointment,
+          start,
+          end,
           top,
           height,
         };
       })
-      .filter((item): item is { appointment: AppointmentDTO; top: number; height: number } => Boolean(item));
+      .filter((item): item is { appointment: AppointmentDTO; start: Date; end: Date; top: number; height: number } => Boolean(item))
+      .sort((left, right) => left.start.getTime() - right.start.getTime());
+
+    const layouts: Array<typeof entries[number] & { lane: number; laneCount: number }> = [];
+    let cluster: typeof entries = [];
+    let clusterEnd = 0;
+    const flushCluster = () => {
+      if (!cluster.length) return;
+      const lanes: Date[] = [];
+      const assigned = cluster.map((entry) => {
+        let lane = lanes.findIndex((end) => end.getTime() <= entry.start.getTime());
+        if (lane < 0) { lane = lanes.length; lanes.push(entry.end); } else { lanes[lane] = entry.end; }
+        return { ...entry, lane };
+      });
+      layouts.push(...assigned.map((entry) => ({ ...entry, laneCount: lanes.length })));
+      cluster = [];
+      clusterEnd = 0;
+    };
+    for (const entry of entries) {
+      if (cluster.length && entry.start.getTime() >= clusterEnd) flushCluster();
+      cluster.push(entry);
+      clusterEnd = Math.max(clusterEnd, entry.end.getTime());
+    }
+    flushCluster();
+    return layouts;
   }, [activeDayAppointments, selectedDayStr, timeSlots]);
 
   const renderCalendarDayButton = React.useCallback(
@@ -495,24 +551,48 @@ export default function AppointmentsPage() {
     },
     [calendarDotsByDay]
   );
+  // Filter appointments for list view by selected day and search text
+  const listViewAppointments = useMemo(() => {
+    const filtered = filterAppointmentsByClinicDay(
+      appointments,
+      listViewSelectedDay || getClinicDateKey(new Date(), clinicTimezone),
+      clinicTimezone
+    );
 
-  const tableRows = useMemo<AppointmentTableRow[]>(
-    () =>
-      appointments.map((appointment) => ({
-        ...appointment,
+    // if (listViewSearchText.trim()) {
+    //   const searchLower = listViewSearchText.toLowerCase();
+    //   filtered = filtered.filter((apt) => {
+    //     const searchText = [
+    //       apt.pet?.name,
+    //       apt.client?.fullName,
+    //       apt.vet?.name,
+    //       apt.reason,
+    //       formatAppointmentType(apt.type),
+    //       formatAppointmentStatus(apt.status),
+    //     ]
+    //       .filter(Boolean)
+    //       .join(" ")
+    //       .toLowerCase();
+    //     return searchText.includes(searchLower);
+    //   });
+    // }
+
+    return filtered
+      .map((apt) => ({
+        ...apt,
         searchText: [
-          appointment.pet?.name,
-          appointment.client?.fullName,
-          appointment.vet?.name,
-          appointment.reason,
-          formatAppointmentType(appointment.type),
-          formatAppointmentStatus(appointment.status),
+          apt.pet?.name,
+          apt.client?.fullName,
+          apt.vet?.name,
+          apt.reason,
+          formatAppointmentType(apt.type),
+          formatAppointmentStatus(apt.status),
         ]
           .filter(Boolean)
           .join(" "),
-      })),
-    [appointments]
-  );
+      }))
+      .sort((a, b) => a.startAt.localeCompare(b.startAt));
+  }, [appointments, listViewSelectedDay, clinicTimezone]);
 
   const legendItems = useMemo(
     () =>
@@ -527,7 +607,7 @@ export default function AppointmentsPage() {
     return scheduleByDay.get(getWeekdayKey(date)) ?? null;
   }
 
-  function resetForm(day = selectedDay, time = "09:00") {
+  function resetForm(day = selectedDay, time = "09:00", vetId = "__NONE__") {
     const defaultEndTime = format(
       addMinutes(combineDateAndTime(format(day, "yyyy-MM-dd"), time), DEFAULT_APPOINTMENT_DURATION_MINUTES),
       "HH:mm"
@@ -540,16 +620,16 @@ export default function AppointmentsPage() {
       time,
       endTime: defaultEndTime,
       status: appointmentStatuses[0] ?? "",
-      vetId: "__NONE__",
+      vetId,
       reason: "",
       notes: "",
     });
   }
 
-  function openCreateAt(day: Date, time: string) {
+  function openCreateAt(day: Date, time: string, vetId = slotVetId) {
     if (!canCreateAppointments) return;
     setEditing(null);
-    resetForm(day, time);
+    resetForm(day, time, vetId);
     setModalOpen(true);
   }
 
@@ -601,6 +681,12 @@ export default function AppointmentsPage() {
     if (!encounter) return;
     const target = appointments.find((appointment) => appointment.id === encounter.appointmentId && appointment.status === "IN_PROGRESS");
     if (target) {
+      const invoiceResponse = await fetch(`/api/invoices?appointmentId=${target.id}&take=1`, { cache: "no-store" });
+      const invoices = invoiceResponse.ok ? await invoiceResponse.json() as unknown[] : [];
+      if (invoices.length === 0) {
+        router.push(`/invoices/new?clientId=${target.clientId}&petId=${target.petId}&appointmentId=${target.id}&returnTo=/appointments`);
+        return;
+      }
       await requestJson(`/api/appointments/${target.id}`, { method: "PUT", body: JSON.stringify({ status: "COMPLETED" }) });
       setAppointments((current) => current.map((item) => item.id === target.id ? { ...item, status: "COMPLETED" } : item));
     }
@@ -627,10 +713,44 @@ export default function AppointmentsPage() {
     setSaving(true);
     try {
       const nextStart = combineDateAndTime(rescheduleDate, rescheduleTime);
-      const nextEnd = addMinutes(nextStart, Math.max(DEFAULT_APPOINTMENT_DURATION_MINUTES, diffMinutes(safeDate(rescheduleTarget.startAt) ?? nextStart, safeDate(rescheduleTarget.endAt) ?? addMinutes(nextStart, DEFAULT_APPOINTMENT_DURATION_MINUTES))));
-      const updated = await requestJson<AppointmentDTO>(`/api/appointments/${rescheduleTarget.id}`, { method: "PUT", body: JSON.stringify({ startAt: nextStart.toISOString(), endAt: nextEnd.toISOString(), status: "SCHEDULED" }) });
-      setAppointments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      
+      // If user provided explicit end time, use it; otherwise preserve duration
+      let nextEnd: Date;
+      if (rescheduleEndTime) {
+        nextEnd = combineDateAndTime(rescheduleDate, rescheduleEndTime);
+      } else {
+        // Preserve the original appointment duration
+        const originalStart = safeDate(rescheduleTarget.startAt);
+        const originalEnd = safeDate(rescheduleTarget.endAt);
+        let durationMinutes = DEFAULT_APPOINTMENT_DURATION_MINUTES;
+        
+        if (originalStart && originalEnd) {
+          durationMinutes = diffMinutes(originalStart, originalEnd);
+        }
+        nextEnd = addMinutes(nextStart, durationMinutes);
+      }
+      
+      // Validate end time
+      if (nextEnd <= nextStart) {
+        showAlert("warning", "Rango inválido", "La hora final debe ser posterior a la hora inicial.");
+        setSaving(false);
+        return;
+      }
+      
+      const updated = await requestJson<AppointmentDTO>(`/api/appointments/${rescheduleTarget.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          startAt: nextStart.toISOString(),
+          endAt: nextEnd.toISOString(),
+          status: "SCHEDULED",
+        }),
+      });
+      
+      setAppointments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setRescheduleTarget(null);
+      setRescheduleDate("");
+      setRescheduleTime("");
+      setRescheduleEndTime("");
       showAlert("success", "Cita reprogramada correctamente");
     } catch (error) {
       showAlert("destructive", "No se pudo reprogramar la cita", getErrorMessage(error));
@@ -668,6 +788,11 @@ export default function AppointmentsPage() {
       return;
     }
 
+    if (startAt <= new Date()) {
+      showAlert("warning", "Horario pasado", "No puedes agendar una cita en un horario que ya pasó.");
+      return;
+    }
+
     const endDate = formData.endTime
       ? combineDateAndTime(formData.date, formData.endTime)
       : addMinutes(startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
@@ -699,23 +824,55 @@ export default function AppointmentsPage() {
       return;
     }
 
-    const conflictingAppointment = activeAppointments.find((appointment) => {
-      if (editing && appointment.id === editing.id) return false;
+    // Validate scheduling conflicts
+    // Only check against active (non-cancelled, non-no-show) appointments
+    const selectedVetId = formData.vetId === "__NONE__" ? null : formData.vetId;
+    
+    let conflictingAppointment: AppointmentDTO | undefined;
+    
+    if (selectedVetId) {
+      // For assigned vet: check only against same vet's appointments
+      conflictingAppointment = activeAppointments.find((appointment) => {
+        if (editing && appointment.id === editing.id) return false;
+        if (appointment.vetId !== selectedVetId) return false; // Different vet, no conflict
 
-      const appointmentStart = safeDate(appointment.startAt);
-      const appointmentEnd = getAppointmentEnd(appointment);
-      if (!appointmentStart || !appointmentEnd) return false;
+        const appointmentStart = safeDate(appointment.startAt);
+        const appointmentEnd = getAppointmentEnd(appointment);
+        if (!appointmentStart || !appointmentEnd) return false;
 
-      return rangesOverlap(startAt, endDate, appointmentStart, appointmentEnd);
-    });
+        return rangesOverlap(startAt, endDate, appointmentStart, appointmentEnd);
+      });
+      
+      if (conflictingAppointment) {
+        showAlert(
+          "warning",
+          "Horario ocupado",
+          `${formData.vetId} ya tiene una cita en ese horario.`
+        );
+        return;
+      }
+    } else {
+      // For unassigned appointment: only allow one unassigned per time slot
+      // But don't block assigned vets
+      conflictingAppointment = activeAppointments.find((appointment) => {
+        if (editing && appointment.id === editing.id) return false;
+        if (appointment.vetId !== null) return false; // Assigned vet, no conflict with unassigned
 
-    if (conflictingAppointment) {
-      showAlert(
-        "warning",
-        "Horario ocupado",
-        `La cita se solapa con ${conflictingAppointment.pet?.name ?? "otra cita"} de ${conflictingAppointment.client?.fullName ?? "otro cliente"}.`
-      );
-      return;
+        const appointmentStart = safeDate(appointment.startAt);
+        const appointmentEnd = getAppointmentEnd(appointment);
+        if (!appointmentStart || !appointmentEnd) return false;
+
+        return rangesOverlap(startAt, endDate, appointmentStart, appointmentEnd);
+      });
+      
+      if (conflictingAppointment) {
+        showAlert(
+          "warning",
+          "Horario ocupado",
+          "Ya existe una cita sin asignar que se solapa con ese horario."
+        );
+        return;
+      }
     }
 
     const payload = {
@@ -839,15 +996,16 @@ export default function AppointmentsPage() {
       header: "Acciones",
       cell: (row: AppointmentTableRow) => (
         <div className="flex items-center gap-2">
-          {canUpdateAppointments && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? <Button variant="outline" size="sm" onClick={() => void startEncounter(row)}>Atender</Button> : null}
-          {canUpdateAppointments && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? <Button variant="ghost" size="sm" onClick={() => { const start = safeDate(row.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(row); }}>Reprogramar</Button> : null}
-          {canUpdateAppointments && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setCancelTarget(row)}>Cancelar</Button> : null}
-          {canUpdateAppointments ? (
+          {canUpdateAppointments && canPerformAction(row.status, "attend") ? <Button variant="outline" size="sm" onClick={() => void startEncounter(row)}>Atender</Button> : null}
+          {canUpdateAppointments && row.status === "IN_PROGRESS" ? <Button variant="outline" size="sm" onClick={() => setEncounter({ appointmentId: row.id, petId: row.petId, clientId: row.clientId })}>Gestionar atención</Button> : null}
+          {canUpdateAppointments && canPerformAction(row.status, "reschedule") ? <Button variant="ghost" size="sm" onClick={() => { const start = safeDate(row.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(row); }}>Reprogramar</Button> : null}
+          {canUpdateAppointments && canPerformAction(row.status, "cancel") ? <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setCancelTarget(row)}>Cancelar</Button> : null}
+          {canUpdateAppointments && canPerformAction(row.status, "reschedule") ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
               <Edit className="h-4 w-4 text-muted-foreground" />
             </Button>
           ) : null}
-          {canDeleteAppointments ? (
+          {canDeleteAppointments && canPerformAction(row.status, "reschedule") ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => askDelete(row)}>
               <Trash2 className="h-4 w-4 text-red-500" />
             </Button>
@@ -971,6 +1129,14 @@ export default function AppointmentsPage() {
                   </Button>
                 </div>
 
+                <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
+                  <label htmlFor="agenda-vet-lane" className="text-sm font-medium text-muted-foreground">Disponibilidad de:</label>
+                  <select id="agenda-vet-lane" value={slotVetId} onChange={(event) => setSlotVetId(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-sm">
+                    <option value="__NONE__">Sin asignar</option>
+                    {vets.map((vet) => <option key={vet.id} value={vet.id}>{vet.name}</option>)}
+                  </select>
+                </div>
+
                 {isClosedDay ? (
                   <div className="p-8 text-center text-muted-foreground">No hay agenda disponible porque la clínica está cerrada este día.</div>
                 ) : (
@@ -998,7 +1164,7 @@ export default function AppointmentsPage() {
                             className="border-b border-border/70 px-3 py-3"
                             style={{ height: `${TIMELINE_SLOT_HEIGHT}px` }}
                           >
-                            {!occupiedSlots.has(slot) && canCreateAppointments ? (
+                            {!isPastSlot(slot) && !occupiedSlots.has(slot) && canCreateAppointments ? (
                               <button
                                 type="button"
                                 onClick={() => openCreateAt(selectedDay, slot)}
@@ -1007,25 +1173,27 @@ export default function AppointmentsPage() {
                                 <Plus className="h-4 w-4" />
                                 Agendar cita
                               </button>
-                            ) : null}
+                            ) : <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/30 text-xs text-muted-foreground">{isPastSlot(slot) ? "Horario pasado" : "Horario ocupado"}</div>}
                           </div>
                         ))}
                       </div>
 
                       <div className="pointer-events-none absolute inset-0 px-3 py-3">
-                        {appointmentLayouts.map(({ appointment, top }) => {
+                        {appointmentLayouts.map(({ appointment, top, lane, laneCount }) => {
                           const styles = TYPE_STYLES[appointment.type] ?? TYPE_STYLES.OTHER;
                           const reminderBadge = getReminderBadge(appointment);
+                          const canOpenEditor = ["SCHEDULED", "CONFIRMED", "WAITING"].includes(appointment.status);
 
                           return (
                             <div
                               key={appointment.id}
-                              className="pointer-events-auto absolute left-3 right-3 cursor-pointer overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition hover:-translate-y-0.5"
+                              className={`pointer-events-auto absolute overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition ${canOpenEditor ? "cursor-pointer hover:-translate-y-0.5" : ""}`}
                               style={{
                                 top: `${top + 4}px`,
-                                // height: `${height}px`,
+                                left: `calc(${lane * (100 / laneCount)}% + 0.25rem)`,
+                                width: `calc(${100 / laneCount}% - 0.5rem)`,
                               }}
-                              onClick={() => openEdit(appointment)}
+                              onClick={canOpenEditor ? () => openEdit(appointment) : undefined}
                             >
                               <div className={`absolute left-0 top-0 h-full w-1.5 ${styles.bar}`} />
 
@@ -1056,8 +1224,9 @@ export default function AppointmentsPage() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  {canUpdateAppointments && appointment.status !== "COMPLETED" && appointment.status !== "CANCELLED" ? <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>Atender</Button> : null}
-                                  {canUpdateAppointments ? (
+                                  {canUpdateAppointments && canPerformAction(appointment.status, "attend") ? <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>Atender</Button> : null}
+                                  {canUpdateAppointments && appointment.status === "IN_PROGRESS" ? <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}>Gestionar atención</Button> : null}
+                                  {canUpdateAppointments && canPerformAction(appointment.status, "reschedule") ? (
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -1070,7 +1239,7 @@ export default function AppointmentsPage() {
                                       <Edit className="h-4 w-4 text-muted-foreground" />
                                     </Button>
                                   ) : null}
-                                  {canDeleteAppointments ? (
+                                  {canDeleteAppointments && canPerformAction(appointment.status, "reschedule") ? (
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -1098,13 +1267,41 @@ export default function AppointmentsPage() {
         </TabsContent>
 
         <TabsContent value="list" className="mt-6">
-          <DataTable
-            columns={columns}
-            data={tableRows}
-            searchKey="searchText"
-            searchPlaceholder="Buscar por mascota, cliente, veterinario o motivo..."
-            emptyMessage="No hay citas registradas"
-          />
+          <div className="app-panel-strong">
+            {/* <div className="border-b border-border/70 p-4">
+              <p className="mb-3 text-sm font-semibold text-foreground">
+                {listViewAppointments.length} registros encontrados
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Buscar por mascota, cliente, veterinario o motivo..."
+                    value={listViewSearchText}
+                    onChange={(e) => setListViewSearchText(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                
+              </div>
+            </div> */}
+            <DataTable
+              columns={columns}
+              data={listViewAppointments}
+              searchKey="searchText"
+              searchPlaceholder="Buscar por mascota, cliente o veterinario..."
+              emptyMessage="No hay citas para esta fecha"
+              actions={
+                <div>
+                  <Input
+                    type="date"
+                    value={listViewSelectedDay}
+                    onChange={(e) => setListViewSelectedDay(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+              }
+            />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -1153,11 +1350,37 @@ export default function AppointmentsPage() {
 
       <ModalDelete open={deleteOpen} onOpenChange={setDeleteOpen} title="Eliminar cita" itemName={deleteTarget?.label} loading={deleting} onConfirm={handleDelete} />
       <Modal open={!!encounter} onClose={(open) => { if (!open) setEncounter(null); }} title="Atención clínica" size="xl">
-        {encounter ? <EncounterWorkflow petId={encounter.petId} clientId={encounter.clientId} vets={vets} onFinish={() => void finishEncounter()} /> : null}
+        {encounter ? <EncounterWorkflow petId={encounter.petId} clientId={encounter.clientId} appointmentId={encounter.appointmentId} assignedVetId={appointments.find((appointment) => appointment.id === encounter.appointmentId)?.vetId} vets={vets} onFinish={() => void finishEncounter()} onBilling={() => router.push(`/invoices/new?clientId=${encounter.clientId}&petId=${encounter.petId}&appointmentId=${encounter.appointmentId}`)} /> : null}
       </Modal>
       <ModalDelete open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }} title="Cancelar cita" itemName={cancelTarget?.pet?.name} description="La cita quedará marcada como cancelada." dangerText="Cancelar cita" loading={saving} onConfirm={cancelAppointment} />
-      <Dialog open={!!rescheduleTarget} onOpenChange={(open) => { if (!open) setRescheduleTarget(null); }}>
-        <DialogContent><DialogHeader><DialogTitle>Reprogramar cita</DialogTitle></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="reschedule-date">Nueva fecha</Label><Input id="reschedule-date" type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="reschedule-time">Nueva hora</Label><Input id="reschedule-time" type="time" value={rescheduleTime} onChange={(event) => setRescheduleTime(event.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={() => setRescheduleTarget(null)}>Cancelar</Button><Button onClick={() => void rescheduleAppointment()} disabled={saving || !rescheduleDate || !rescheduleTime}>{saving ? "Guardando..." : "Guardar"}</Button></DialogFooter></DialogContent>
+      <Dialog open={!!rescheduleTarget} onOpenChange={(open) => { if (!open) { setRescheduleTarget(null); setRescheduleDate(""); setRescheduleTime(""); setRescheduleEndTime(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reprogramar cita</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-date">Nueva fecha</Label>
+              <Input id="reschedule-date" type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-time">Hora inicial</Label>
+              <Input id="reschedule-time" type="time" value={rescheduleTime} onChange={(event) => setRescheduleTime(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-end-time">Hora final (opcional)</Label>
+              <Input id="reschedule-end-time" type="time" value={rescheduleEndTime} onChange={(event) => setRescheduleEndTime(event.target.value)} placeholder="Se preservará la duración original" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRescheduleTarget(null); setRescheduleDate(""); setRescheduleTime(""); setRescheduleEndTime(""); }}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void rescheduleAppointment()} disabled={saving || !rescheduleDate || !rescheduleTime}>
+              {saving ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       <AppAlert

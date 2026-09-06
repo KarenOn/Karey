@@ -60,6 +60,9 @@ export const auth = betterAuth({
         resetUrl: getAppUrl(`/reset-password?token=${encodeURIComponent(token)}`),
       });
     },
+    async onPasswordReset({ user }) {
+      await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: false } });
+    },
   },
   emailVerification: {
     expiresIn: 60 * 60 * 24,

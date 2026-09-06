@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarClock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { APPOINTMENT_GRACE_PERIOD_MS, getAppointmentGraceDeadline } from "@/lib/appointment-time";
+import { APPOINTMENT_GRACE_PERIOD_MS, formatAppointmentCountdown, getAppointmentGraceDeadline } from "@/lib/appointment-time";
+import { isAppointmentEligibleForNowAlert } from "@/lib/appointment-helpers";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,18 +18,25 @@ type AppointmentNow = {
   id: number;
   petId: number;
   startAt: string;
-  status: "SCHEDULED" | "CONFIRMED";
+  endAt?: string | null;
+  status: string;
   type: string;
   pet: { name: string };
   client: { id: number; fullName: string };
 };
 
 function isEligible(appointment: AppointmentNow, now: number) {
+  // Only show alert for pre-attention statuses
+  if (!isAppointmentEligibleForNowAlert(appointment.status)) {
+    return false;
+  }
+  
   const start = new Date(appointment.startAt).getTime();
   return start <= now && now < getAppointmentGraceDeadline(new Date(appointment.startAt)).getTime();
 }
 
 export default function AppointmentNowAlert() {
+  const router = useRouter();
   const [appointments, setAppointments] = useState<AppointmentNow[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
@@ -35,8 +44,16 @@ export default function AppointmentNowAlert() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleEndTime, setRescheduleEndTime] = useState("");
   const [encounter, setEncounter] = useState<AppointmentNow | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+  const [frozenRemaining, setFrozenRemaining] = useState<Map<number, number>>(new Map());
+  const [reconciledIds, setReconciledIds] = useState<Set<number>>(new Set());
   const reconcilingId = useRef<number | null>(null);
+  function invalidateAppointmentSurfaces() {
+    window.dispatchEvent(new Event("karey:appointments-invalidated"));
+  }
 
   async function load() {
     const response = await fetch("/api/appointments", { cache: "no-store" });
@@ -62,25 +79,43 @@ export default function AppointmentNowAlert() {
     () => appointments.filter((appointment) => isEligible(appointment, now)).sort((a, b) => a.startAt.localeCompare(b.startAt)),
     [appointments, now]
   );
-  const current = queue[0];
-  const remaining = current ? Math.max(0, getAppointmentGraceDeadline(new Date(current.startAt)).getTime() - now) : 0;
-  const seconds = Math.ceil(remaining / 1000);
+  useEffect(() => {
+    if (selectedId && queue.some((appointment) => appointment.id === selectedId)) return;
+    setSelectedId(queue[0]?.id ?? null);
+  }, [queue, selectedId]);
+
+  const current = queue.find((appointment) => appointment.id === selectedId) ?? queue[0];
+  const currentProcessing = current ? processingIds.has(current.id) : false;
+  const remaining = current
+    ? currentProcessing
+      ? frozenRemaining.get(current.id) ?? 0
+      : Math.max(0, getAppointmentGraceDeadline(new Date(current.startAt)).getTime() - now)
+    : 0;
+  const countdown = formatAppointmentCountdown(remaining);
   const progress = Math.max(0, Math.min(1, remaining / APPOINTMENT_GRACE_PERIOD_MS));
 
   useEffect(() => {
-    if (!current || remaining > 0 || reconcilingId.current === current.id) return;
-    reconcilingId.current = current.id;
+    const expired = appointments.filter((appointment) => {
+      const deadline = getAppointmentGraceDeadline(new Date(appointment.startAt)).getTime();
+      return isAppointmentEligibleForNowAlert(appointment.status) && new Date(appointment.startAt).getTime() <= now && deadline <= now && !reconciledIds.has(appointment.id);
+    });
+    if (!expired.length || reconcilingId.current !== null) return;
+    const appointment = expired[0];
+    reconcilingId.current = appointment.id;
+    setReconciledIds((ids) => new Set(ids).add(appointment.id));
     void (async () => {
-      const response = await fetch(`/api/appointments/${current.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "NO_SHOW" }) });
-      if (response.ok) toast.info("La cita se estableció como No asistió.");
-      setAppointments((items) => items.filter((item) => item.id !== current.id));
+      const response = await fetch(`/api/appointments/${appointment.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "NO_SHOW" }) });
+      if (response.ok) toast.info(`La cita de ${appointment.pet.name} se estableció como No asistió.`);
+      setAppointments((items) => items.filter((item) => item.id !== appointment.id));
+      if (response.ok) invalidateAppointmentSurfaces();
     })().catch(() => undefined).finally(() => { reconcilingId.current = null; });
-  }, [current, remaining]);
+  }, [appointments, now, reconciledIds]);
 
   if (!current) return null;
 
   async function attend() {
-    if (busy) return;
+    if (busy || !current) return;
+    freeze(current.id);
     setBusy(true);
     try {
       const response = await fetch(`/api/appointments/${current.id}/status`, {
@@ -88,40 +123,72 @@ export default function AppointmentNowAlert() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
-      if (!response.ok) return;
+      if (!response.ok) throw new Error();
       setAppointments((items) => items.filter((item) => item.id !== current.id));
+      clearProcessing(current.id);
       setEncounter(current);
+      invalidateAppointmentSurfaces();
       toast.success("Cita puesta en atención.");
+    } catch {
+      clearProcessing(current.id);
+      toast.error("No se pudo poner la cita en atención.");
     } finally {
       setBusy(false);
     }
   }
 
   async function cancel() {
-    if (busy) return;
+    if (busy || !current) return;
     setBusy(true);
     try {
       const response = await fetch(`/api/appointments/${current.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "CANCELLED" }) });
       if (!response.ok) throw new Error();
       setAppointments((items) => items.filter((item) => item.id !== current.id));
+      invalidateAppointmentSurfaces();
+      clearProcessing(current.id);
       setCancelOpen(false);
       toast.success("Cita cancelada correctamente.");
-    } catch { toast.error("No se pudo cancelar la cita."); }
+    } catch { clearProcessing(current.id); toast.error("No se pudo cancelar la cita."); }
     finally { setBusy(false); }
   }
 
   async function reschedule() {
-    if (busy || !rescheduleDate || !rescheduleTime) return;
+    if (busy || !current || !rescheduleDate || !rescheduleTime) return;
     setBusy(true);
     try {
       const startAt = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
-      const response = await fetch(`/api/appointments/${current.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startAt: startAt.toISOString(), status: "SCHEDULED" }) });
+      const endAt = new Date(`${rescheduleDate}T${rescheduleEndTime}:00`);
+      if (!(endAt > startAt)) throw new Error("La hora final debe ser posterior a la hora inicial.");
+      const response = await fetch(`/api/appointments/${current.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startAt: startAt.toISOString(), endAt: endAt.toISOString(), status: "SCHEDULED" }) });
       if (!response.ok) throw new Error();
       setAppointments((items) => items.filter((item) => item.id !== current.id));
+      invalidateAppointmentSurfaces();
+      clearProcessing(current.id);
       setRescheduleOpen(false);
       toast.success("Cita reprogramada correctamente.");
-    } catch { toast.error("No se pudo reprogramar la cita."); }
+    } catch { clearProcessing(current.id); toast.error("No se pudo reprogramar la cita."); }
     finally { setBusy(false); }
+  }
+
+  function freeze(id: number) {
+    const appointment = appointments.find((item) => item.id === id);
+    if (!appointment) return;
+    const deadline = getAppointmentGraceDeadline(new Date(appointment.startAt)).getTime();
+    setFrozenRemaining((values) => new Map(values).set(id, Math.max(0, deadline - Date.now())));
+    setProcessingIds((values) => new Set(values).add(id));
+  }
+
+  function clearProcessing(id: number) {
+    setProcessingIds((values) => {
+      const next = new Set(values);
+      next.delete(id);
+      return next;
+    });
+    setFrozenRemaining((values) => {
+      const next = new Map(values);
+      next.delete(id);
+      return next;
+    });
   }
 
   const radius = 34;
@@ -139,25 +206,26 @@ export default function AppointmentNowAlert() {
         <span className="text-xs text-muted-foreground">{queue.length > 1 ? `1 de ${queue.length}` : ""}</span>
       </div>
       <div className="mt-4 flex items-center gap-4">
-        <button type="button" className="relative h-24 w-24 shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => void attend()} disabled={busy} aria-label="Atender cita">
+        <button type="button" className="relative h-24 w-24 shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer hover:bg-accent disabled:cursor-wait" onClick={() => void attend()} disabled={busy || currentProcessing} aria-label="Atender cita">
           <svg className="h-full w-full overflow-visible" viewBox="0 0 80 80" aria-hidden="true">
             <circle cx="40" cy="40" r={radius} fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/70" />
             <circle cx="40" cy="40" r={radius} fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" className="text-primary transition-[stroke-dashoffset] duration-500" strokeDasharray={circumference} strokeDashoffset={dashOffset} transform="rotate(-90 40 40)" />
           </svg>
-          <span className="absolute inset-0 flex flex-col items-center justify-center rounded-full text-xs font-semibold text-foreground"><span>{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</span><span className="text-[10px] text-primary">Atender</span></span>
+          <span className="absolute inset-0 flex flex-col items-center justify-center rounded-full text-xs font-semibold text-foreground"><span>{countdown.minutes}:{String(countdown.seconds).padStart(2, "0")}</span><span className="text-[10px] text-primary">Atender</span></span>
         </button>
         <div className="min-w-0">
           <p className="truncate font-semibold text-foreground">{current.pet.name}</p>
           <p className="truncate text-sm text-muted-foreground">{current.client.fullName}</p>
-          <p className="mt-2 text-xs text-muted-foreground">{busy ? "Actualizando cita..." : "Selecciona el círculo para iniciar la atención."}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{currentProcessing ? "Procesando acción..." : "Se establecerá como No asistió si no se atiende a tiempo."}</p>
         </div>
       </div>
-      <div className="mt-4 flex gap-2 border-t border-border pt-3"><Button variant="outline" size="sm" className="flex-1" onClick={() => setCancelOpen(true)} disabled={busy}>Cancelar cita</Button><Button variant="outline" size="sm" className="flex-1" onClick={() => { const date = new Date(current.startAt); setRescheduleDate(date.toISOString().slice(0, 10)); setRescheduleTime(date.toTimeString().slice(0, 5)); setRescheduleOpen(true); }} disabled={busy}>Reprogramar</Button></div>
+      {queue.length > 1 ? <div className="mt-4 space-y-1 border-t border-border pt-3">{queue.filter((appointment) => appointment.id !== current.id).map((appointment) => { const appointmentRemaining = Math.max(0, getAppointmentGraceDeadline(new Date(appointment.startAt)).getTime() - now); return <button type="button" key={appointment.id} className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-xs hover:bg-accent" onClick={() => setSelectedId(appointment.id)}><span className="truncate font-medium">{appointment.pet.name}</span><span className="shrink-0 text-muted-foreground">{Math.ceil(appointmentRemaining / 1000 / 60)}:{String(Math.ceil(appointmentRemaining / 1000) % 60).padStart(2, "0")}</span></button>; })}</div> : null}
+      <div className="mt-4 flex gap-2 border-t border-border pt-3"><Button variant="outline" size="sm" className="flex-1" onClick={() => { freeze(current.id); setCancelOpen(true); }} disabled={busy || currentProcessing}>Cancelar cita</Button><Button variant="outline" size="sm" className="flex-1" onClick={() => { freeze(current.id); const date = new Date(current.startAt); const end = current.endAt ? new Date(current.endAt) : new Date(date.getTime() + 30 * 60 * 1000); setRescheduleDate(date.toISOString().slice(0, 10)); setRescheduleTime(date.toTimeString().slice(0, 5)); setRescheduleEndTime(end.toTimeString().slice(0, 5)); setRescheduleOpen(true); }} disabled={busy || currentProcessing}>Reprogramar</Button></div>
       <button type="button" className={cn("absolute right-2 top-2 text-muted-foreground hover:text-foreground")} aria-label="Cerrar aviso temporalmente" onClick={() => setAppointments((items) => items.filter((item) => item.id !== current.id))}><X className="h-4 w-4" /></button>
     </aside>
-    <ModalDelete open={cancelOpen} onOpenChange={setCancelOpen} title="Cancelar cita" itemName={current.pet.name} description="¿Estás seguro de que deseas cancelar esta cita?" dangerText="Cancelar cita" loading={busy} onConfirm={cancel} />
-    <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}><DialogContent><DialogHeader><DialogTitle>Reprogramar cita</DialogTitle></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="alert-reschedule-date">Nueva fecha</Label><Input id="alert-reschedule-date" type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="alert-reschedule-time">Nueva hora</Label><Input id="alert-reschedule-time" type="time" value={rescheduleTime} onChange={(event) => setRescheduleTime(event.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancelar</Button><Button onClick={() => void reschedule()} disabled={busy || !rescheduleDate || !rescheduleTime}>{busy ? "Guardando..." : "Guardar"}</Button></DialogFooter></DialogContent></Dialog>
-    <Dialog open={!!encounter} onOpenChange={(open) => { if (!open) setEncounter(null); }}><DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>Atención clínica</DialogTitle></DialogHeader>{encounter ? <EncounterWorkflow petId={encounter.petId} clientId={Number(encounter.client.id)} onFinish={async () => { await fetch(`/api/appointments/${encounter.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "COMPLETED" }) }); setEncounter(null); toast.success("Cita marcada como atendida."); }} /> : null}</DialogContent></Dialog>
+    <ModalDelete open={cancelOpen} onOpenChange={(open) => { setCancelOpen(open); if (!open && current && !busy) clearProcessing(current.id); }} title="Cancelar cita" itemName={current.pet.name} description="¿Estás seguro de que deseas cancelar esta cita?" dangerText="Cancelar cita" loading={busy} onConfirm={cancel} />
+    <Dialog open={rescheduleOpen} onOpenChange={(open) => { setRescheduleOpen(open); if (!open && current && !busy) clearProcessing(current.id); }}><DialogContent><DialogHeader><DialogTitle>Reprogramar cita</DialogTitle></DialogHeader><div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label htmlFor="alert-reschedule-date">Nueva fecha</Label><Input id="alert-reschedule-date" type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="alert-reschedule-time">Hora inicial</Label><Input id="alert-reschedule-time" type="time" value={rescheduleTime} onChange={(event) => setRescheduleTime(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="alert-reschedule-end-time">Hora final</Label><Input id="alert-reschedule-end-time" type="time" value={rescheduleEndTime} onChange={(event) => setRescheduleEndTime(event.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancelar</Button><Button onClick={() => void reschedule()} disabled={busy || !rescheduleDate || !rescheduleTime || !rescheduleEndTime}>{busy ? "Guardando..." : "Guardar"}</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={!!encounter} onOpenChange={(open) => { if (!open) setEncounter(null); }}><DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>Atención clínica</DialogTitle></DialogHeader>{encounter ? <EncounterWorkflow petId={encounter.petId} clientId={Number(encounter.client.id)} appointmentId={encounter.id} onFinish={async () => { await fetch(`/api/appointments/${encounter.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "COMPLETED" }) }); setEncounter(null); toast.success("Cita marcada como atendida."); }} onBilling={() => router.push(`/invoices/new?clientId=${encounter.client.id}&petId=${encounter.petId}&appointmentId=${encounter.id}`)} /> : null}</DialogContent></Dialog>
     </>
   );
 }

@@ -64,9 +64,10 @@ async function findOverlappingAppointment(params: {
   clinicId: number;
   startAt: Date;
   endAt: Date;
+  vetId?: string | null;
   ignoreId?: number;
 }) {
-  const { clinicId, startAt, endAt, ignoreId } = params;
+  const { clinicId, startAt, endAt, vetId, ignoreId } = params;
   const searchFrom = addMinutes(startAt, -1440);
   const searchTo = addMinutes(endAt, 1440);
 
@@ -85,14 +86,25 @@ async function findOverlappingAppointment(params: {
       startAt: true,
       endAt: true,
       type: true,
+      vetId: true,
       pet: { select: { name: true } },
       client: { select: { fullName: true } },
+      vet: { select: { name: true } },
     },
     orderBy: { startAt: "asc" },
   });
 
   return (
     candidates.find((appointment) => {
+      // Check based on vet assignment
+      if (vetId) {
+        // For assigned vet: only conflict with same vet
+        if (appointment.vetId !== vetId) return false;
+      } else {
+        // For unassigned: only conflict with other unassigned appointments
+        if (appointment.vetId !== null) return false;
+      }
+
       const appointmentEnd = appointment.endAt ?? addMinutes(appointment.startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
       return rangesOverlap(startAt, endAt, appointment.startAt, appointmentEnd);
     }) ?? null
@@ -273,6 +285,9 @@ export async function POST(req: Request) {
   }
 
   const input = parsed.data;
+  if (input.startAt <= new Date()) {
+    return NextResponse.json({ error: "No puedes agendar una cita en un horario que ya pasó." }, { status: 422 });
+  }
   const effectiveEndAt = input.endAt ?? addMinutes(input.startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
 
   const scheduleError = await validateAppointmentSchedule({
@@ -299,6 +314,7 @@ export async function POST(req: Request) {
     clinicId,
     startAt: input.startAt,
     endAt: effectiveEndAt,
+    vetId: input.vetId,
   });
 
   if (overlap) {

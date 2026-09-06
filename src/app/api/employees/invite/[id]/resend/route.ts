@@ -1,9 +1,9 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { getAppBaseUrl, sendEmployeeInviteEmail } from "@/lib/email";
+import { setTemporaryPasswordForUser } from "@/lib/temporary-password";
 
 export const runtime = "nodejs";
 
@@ -26,16 +26,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const userId = invite.invitedUser?.id;
     if (!userId) return NextResponse.json({ error: "La cuenta invitada no está disponible" }, { status: 409 });
 
-    const temporaryPassword = crypto.randomBytes(10).toString("hex");
-    const password = await hashPassword(temporaryPassword);
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 3);
 
-    await prisma.$transaction(async (tx) => {
-      await tx.account.updateMany({ where: { userId, providerId: "credential" }, data: { password } });
-      await tx.user.update({ where: { id: userId }, data: { mustChangePassword: true } });
+    const temporaryPassword = await prisma.$transaction(async (tx) => {
+      const generatedPassword = await setTemporaryPasswordForUser(tx, userId);
       await tx.employeeInvite.update({ where: { id: invite.id }, data: { tokenHash, expiresAt, createdById: session.user.id } });
+      return generatedPassword;
     });
 
     await sendEmployeeInviteEmail({

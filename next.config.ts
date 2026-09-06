@@ -5,13 +5,13 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '*.amazonaws.com',
+        hostname: 'karey-vet.s3.us-east-1.amazonaws.com',
         pathname: '/**',
       },
     ],
   },
   reactCompiler: true,
-  serverExternalPackages: ["better-auth", "@better-auth/core"],
+  // serverExternalPackages: ["better-auth", "@better-auth/core"],
   async headers() {
     return [
       {

@@ -6,7 +6,7 @@ export type PermissionAction =
   | "invite"
   | "manage";
 
-export type PermissionKey = `${string}.${PermissionAction}`;
+export type PermissionKey = `${string}.${string}`;
 export type PermissionMap = Record<string, string[]>;
 
 export type ClinicAccess = {
@@ -22,6 +22,9 @@ export type ClinicAccess = {
     services: boolean;
     employees: boolean;
     clinicProfile: boolean;
+    visits: boolean;
+    vaccines: boolean;
+    inventoryMovements: boolean;
   };
   actions: {
     clinic: { read: boolean; update: boolean };
@@ -41,6 +44,9 @@ export type ClinicAccess = {
     services: { read: boolean; create: boolean; update: boolean; delete: boolean };
     inventory: { read: boolean; create: boolean; update: boolean; delete: boolean };
     invoices: { read: boolean; create: boolean; update: boolean; delete: boolean };
+    visits: { read: boolean; create: boolean; update: boolean; delete: boolean };
+    vaccines: { read: boolean; create: boolean; update: boolean; delete: boolean };
+    inventoryMovements: { read: boolean; create: boolean; update: boolean; delete: boolean };
   };
 };
 
@@ -76,7 +82,8 @@ export function hasPermission(perms: unknown, key: string) {
 
   if (obj["*"]?.includes("*")) return true;
 
-  const [module, action] = key.split(".");
+  const [module, ...actionParts] = key.split(".");
+  const action = actionParts.join(".");
   const actions = obj[module] ?? [];
   return actions.includes(action) || actions.includes("*");
 }
@@ -98,6 +105,7 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   const allow = (key: string, fallbacks: string[] = []) =>
     elevated || hasAnyPermission(perms, [key, ...fallbacks]);
 
+  const dashboardRead = allow("dashboard.read", ["today.read"]);
   const clinicRead = allow("clinic.read");
   const clinicUpdate = allow("clinic.update");
 
@@ -147,9 +155,21 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   const servicesCreate = allow("services.create");
   const servicesUpdate = allow("services.update");
   const servicesDelete = allow("services.delete");
+  const visitsRead = allow("visits.read", ["pets.read"]);
+  const visitsCreate = allow("visits.create");
+  const visitsUpdate = allow("visits.update");
+  const visitsDelete = allow("visits.delete");
+  const vaccinesRead = allow("vaccines.read", ["pets.read"]);
+  const vaccinesCreate = allow("vaccines.create", ["pets.update"]);
+  const vaccinesUpdate = allow("vaccines.update", ["pets.update"]);
+  const vaccinesDelete = allow("vaccines.delete", ["pets.update"]);
+  const inventoryMovementsRead = allow("inventory.movements", ["inventory.read"]);
+  const inventoryMovementsCreate = allow("inventory.movements.create", ["inventory.create"]);
+  const inventoryMovementsUpdate = allow("inventory.movements.update", ["inventory.update"]);
+  const inventoryMovementsDelete = allow("inventory.movements.delete", ["inventory.delete"]);
 
   const modules = {
-    dashboard: true,
+    dashboard: dashboardRead,
     clients: clientsRead || clientsCreate || clientsUpdate || clientsDelete,
     pets: petsRead || petsCreate || petsUpdate || petsDelete,
     today: todayRead || todayCreate || todayUpdate || todayDelete,
@@ -167,6 +187,9 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
       rolesRead ||
       rolesManage,
     clinicProfile: clinicRead || clinicUpdate,
+    visits: visitsRead || visitsCreate || visitsUpdate || visitsDelete,
+    vaccines: vaccinesRead || vaccinesCreate || vaccinesUpdate || vaccinesDelete,
+    inventoryMovements: inventoryMovementsRead || inventoryMovementsCreate || inventoryMovementsUpdate || inventoryMovementsDelete,
   };
 
   return {
@@ -229,6 +252,9 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
         update: invoicesUpdate,
         delete: invoicesDelete,
       },
+      visits: { read: visitsRead, create: visitsCreate, update: visitsUpdate, delete: visitsDelete },
+      vaccines: { read: vaccinesRead, create: vaccinesCreate, update: vaccinesUpdate, delete: vaccinesDelete },
+      inventoryMovements: { read: inventoryMovementsRead, create: inventoryMovementsCreate, update: inventoryMovementsUpdate, delete: inventoryMovementsDelete },
     },
   };
 }

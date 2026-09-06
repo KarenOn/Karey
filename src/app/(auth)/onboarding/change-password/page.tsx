@@ -27,7 +27,7 @@ export default function ChangeTemporaryPasswordPage() {
     event.preventDefault();
     if (saving || submittingRef.current) return;
     submittingRef.current = true;
-    if (newPassword !== confirmPassword) { setError("Las contraseñas no coinciden."); return; }
+    if (newPassword !== confirmPassword) { setError("Las contraseñas no coinciden."); submittingRef.current = false; return; }
     setSaving(true); setError(null);
     try {
       const response = await fetch("/api/onboarding/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });

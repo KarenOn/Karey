@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         where: { id: invite.id },
         data: { acceptedAt: new Date(), userId: session.user.id },
       });
-      await tx.user.update({ where: { id: session.user.id }, data: { role: invite.role.key } });
+      await tx.user.update({ where: { id: session.user.id }, data: { role: invite.role.key, onboardingCompletedAt: new Date() } });
     });
 
     await syncUserRoleFromMembership(session.user.id, invite.clinicId);

@@ -597,7 +597,7 @@ export default function InventoryPage() {
       cell: (row: StockMovementRow) => (
         <div>
           <div className="text-sm text-muted-foreground">{row.reason || "Sin motivo"}</div>
-          {(row.referenceType || row.referenceId) && <div className="text-xs text-muted-foreground">Ref: {[row.referenceType, row.referenceId].filter(Boolean).join(" / ")}</div>}
+          {(row.referenceType || row.referenceId) && <div className="text-xs text-muted-foreground">Ref: {row.referenceType ? `${row.referenceType} / ` : ""}{row.invoiceId ? <a className="text-primary hover:underline" href={`/invoices/${row.invoiceId}`}>{row.referenceId}</a> : row.referenceId}</div>}
         </div>
       ),
     },

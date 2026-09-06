@@ -4,6 +4,14 @@ export function getAppointmentGraceDeadline(startAt: Date) {
   return new Date(startAt.getTime() + APPOINTMENT_GRACE_PERIOD_MS);
 }
 
+export function formatAppointmentCountdown(remainingMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  return {
+    minutes: Math.floor(totalSeconds / 60),
+    seconds: totalSeconds % 60,
+  };
+}
+
 export function getClinicDateKey(value: Date | string, timeZone = "America/Santo_Domingo") {
   const date = value instanceof Date ? value : new Date(value);
   return new Intl.DateTimeFormat("en-CA", {

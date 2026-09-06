@@ -74,6 +74,7 @@ export async function GET(req: Request) {
       reason: true,
       referenceType: true,
       referenceId: true,
+      invoiceId: true,
       createdById: true,
       createdAt: true,
       product: {
@@ -168,6 +169,7 @@ export async function POST(req: Request) {
         reason: true,
         referenceType: true,
         referenceId: true,
+        invoiceId: true,
         createdById: true,
         createdAt: true,
         product: {

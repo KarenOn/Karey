@@ -129,7 +129,7 @@ function buildStorageKey(params: CreateUploadUrlParams) {
       ? `clinic/${params.clinicId}/branding`
       : params.scope === "user-avatar"
         ? `clinic/${params.clinicId}/users/avatars`
-      : `clinic/${params.clinicId}/visits/${params.visitId}/attachments`;
+      : `clinic/${params.clinicId}/visits/${params.visitId ?? "pending"}/attachments`;
 
   return `${prefix}/${randomUUID()}-${safeFileName}`;
 }

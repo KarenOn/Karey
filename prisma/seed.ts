@@ -2209,6 +2209,7 @@ async function upsertSeedUser(tx: Prisma.TransactionClient, user: SeedUser) {
     data: {
       id: `acct_${dbUser.id}_credential`,
       accountId: dbUser.id,
+      issuer: "local:credential",
       providerId: "credential",
       userId: dbUser.id,
       password: passwordHash,
@@ -2273,6 +2274,7 @@ async function upsertPendingInviteUser(
     data: {
       id: `acct_${dbUser.id}_credential`,
       accountId: dbUser.id,
+      issuer: "local:credential",
       providerId: "credential",
       userId: dbUser.id,
       password: passwordHash,

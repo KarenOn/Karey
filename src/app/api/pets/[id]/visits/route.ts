@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { serializeAttachment } from "@/lib/storage";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
@@ -8,7 +8,7 @@ export async function GET(
   _: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.read");
   if (!clinicId) {
     return NextResponse.json(
       { message: "No se pudo identificar la clínica activa" },
@@ -43,7 +43,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.create");
   const petId = Number((await params).id);
   if (!Number.isFinite(petId)) {
     return NextResponse.json({ message: "ID inválido" }, { status: 400 });
@@ -84,5 +84,17 @@ export async function POST(
     },
   });
 
-  return NextResponse.json(visit, { status: 201 });
+  if (data.attachment) {
+    await prisma.medicalAttachment.create({
+      data: {
+        clinicId,
+        visitId: visit.id,
+        fileName: data.attachment.fileName,
+        fileType: data.attachment.fileType || null,
+        url: data.attachment.storageRef ?? data.attachment.url ?? "",
+      },
+    });
+  }
+
+  return NextResponse.json(await prisma.clinicalVisit.findUnique({ where: { id: visit.id }, include: { attachments: true } }), { status: 201 });
 }

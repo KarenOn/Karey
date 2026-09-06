@@ -18,6 +18,7 @@ import {
   Paperclip,
   Eye,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { format, parseISO, differenceInYears, differenceInMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -109,6 +110,7 @@ function PatientDetailContent() {
 
   // modales
   const [visitModalOpen, setVisitModalOpen] = useState(false);
+  const [editingVisit, setEditingVisit] = useState<VisitDTO | null>(null);
   const [vaccineModalOpen, setVaccineModalOpen] = useState(false);
 
   const [alertOpen, setAlertOpen] = useState(false);
@@ -592,11 +594,12 @@ function PatientDetailContent() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setAttachModal({ open: true, visitId: v.id })}
+                                onClick={() => setEditingVisit(v)}
                               >
-                                <Paperclip className="w-4 h-4 mr-1" />
-                                Adjuntar
+                                <Pencil className="w-4 h-4 mr-1" />
+                                Editar
                               </Button>
+                              <Button size="sm" variant="outline" onClick={() => setAttachModal({ open: true, visitId: v.id })}><Paperclip className="w-4 h-4 mr-1" />Adjuntar</Button>
                             </div>
 
                             {v.diagnosis && <p className="mt-2 font-medium text-foreground">{v.diagnosis}</p>}
@@ -720,26 +723,25 @@ function PatientDetailContent() {
 
       {/* Modal: Nueva Visita */}
       <Modal
-        open={visitModalOpen}
-        onClose={() => setVisitModalOpen(false)}
-        title="Nueva Visita Clínica"
+        open={visitModalOpen || Boolean(editingVisit)}
+        onClose={() => { setVisitModalOpen(false); setEditingVisit(null); }}
+        title={editingVisit ? "Editar Visita Clínica" : "Nueva Visita Clínica"}
         size="lg"
         footer={
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setVisitModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreateVisit}>
-              Guardar
-            </Button>
+            <Button variant="outline" onClick={() => { setVisitModalOpen(false); setEditingVisit(null); }}>Cancelar</Button>
           </div>
         }
       >
         <ClinicalVisitForm
           petId={petId!}
+          visitId={editingVisit?.id}
           vets={availableVets}
-          initialValues={visitForm}
-          onCancel={() => setVisitModalOpen(false)}
+          initialValues={editingVisit ? { visitAt: format(parseISO(editingVisit.visitAt), "yyyy-MM-dd"), vetId: editingVisit.vetId ?? "", diagnosis: editingVisit.diagnosis ?? "", treatment: editingVisit.treatment ?? "", notes: editingVisit.notes ?? "", weightKg: editingVisit.weightKg ?? "", temperatureC: editingVisit.temperatureC ?? "" } : visitForm}
+          onCancel={() => { setVisitModalOpen(false); setEditingVisit(null); }}
           onSaved={async () => {
             setVisitModalOpen(false);
+            setEditingVisit(null);
             await loadAll();
             setAlert({ variant: "success", title: "Visita registrada", description: "La visita se registró correctamente." });
             setAlertOpen(true);

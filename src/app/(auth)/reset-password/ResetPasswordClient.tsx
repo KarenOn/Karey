@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, KeyRound, Lock, PawPrint } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import PasswordInput from "@/components/shared/PasswordInput";
 
@@ -19,6 +20,7 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
 
     if (!token) {
       setError("Este enlace ya no es válido o venció.");
@@ -41,10 +43,15 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
       });
 
       if (!response.ok) {
-        throw new Error("No pudimos restablecer la contraseña.");
+        const payload = (await response.json().catch(() => null)) as { code?: string; message?: string } | null;
+        if (payload?.code === "INVALID_TOKEN") {
+          throw new Error("Este enlace no es válido o ya fue utilizado.");
+        }
+        throw new Error(payload?.message ?? "No pudimos restablecer la contraseña.");
       }
 
       setSuccess(true);
+      toast.success("Contraseña actualizada correctamente.");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "No pudimos restablecer la contraseña."

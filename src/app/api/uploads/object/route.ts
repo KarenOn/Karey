@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { deleteStoredFile, storageRefBelongsToClinic } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ const DeleteUploadObjectSchema = z.object({
 });
 
 export async function DELETE(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.attachDocuments");
   const body = await req.json().catch(() => null);
   const parsed = DeleteUploadObjectSchema.safeParse(body);
 

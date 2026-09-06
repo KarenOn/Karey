@@ -83,12 +83,16 @@ export async function GET(req: Request) {
 
   const q = searchParams.get("q")?.trim() || "";
   const status = searchParams.get("status")?.trim() || "";
+  const appointmentId = Number(searchParams.get("appointmentId")) || null;
+  const todayTurnId = Number(searchParams.get("todayTurnId")) || null;
   const take = Math.min(Number(searchParams.get("take") || 200), 500);
   const statusFilter = Object.values(InvoiceStatus).find((value) => value === status);
 
   const where: Prisma.InvoiceWhereInput = {
     clinicId,
     ...(statusFilter ? { status: statusFilter } : {}),
+    ...(appointmentId ? { appointmentId } : {}),
+    ...(todayTurnId ? { todayTurnId } : {}),
     ...(q
       ? {
           OR: [
@@ -172,8 +176,6 @@ export async function POST(req: Request) {
 
   const dueDate = data.dueDate ? new Date(data.dueDate) : null;
 
-  const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
-
   if (data.appointmentId) {
     const appointment = await prisma.appointment.findFirst({
       where: { id: data.appointmentId, clinicId },
@@ -188,13 +190,19 @@ export async function POST(req: Request) {
   if (data.todayTurnId) {
     const todayTurn = await prisma.todayTurn.findFirst({
       where: { id: data.todayTurnId, clinicId },
-      select: { id: true },
+      select: { id: true, clientId: true, petId: true },
     });
 
     if (!todayTurn) {
       return NextResponse.json({ error: "El turno no existe en esta clínica." }, { status: 404 });
     }
+    if (data.clientId === undefined && todayTurn.clientId) data.clientId = todayTurn.clientId;
+    if (data.petId === undefined) data.petId = todayTurn.petId;
+    const existing = await prisma.invoice.findFirst({ where: { clinicId, todayTurnId: data.todayTurnId, status: { not: InvoiceStatus.VOID } }, select: { id: true } });
+    if (existing) return NextResponse.json({ error: "Este turno ya tiene una factura." }, { status: 409 });
   }
+
+  const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
 
   const result = await prisma.$transaction(async (tx) => {
     // Crea invoice + items
@@ -206,6 +214,7 @@ export async function POST(req: Request) {
         clientId: resolvedClientId,
         petId: data.petId ?? null,
         appointmentId: data.appointmentId ?? null,
+        todayTurnId: data.todayTurnId ?? null,
 
         number: (await nextInvoiceNumber(clinicId!, new Date())).toString(),
         status: data.payNow
@@ -282,6 +291,7 @@ export async function POST(req: Request) {
             reason: "Venta / Factura",
             referenceType: "INVOICE",
             referenceId: invoice.number,
+            invoiceId: invoice.id,
             createdById: null,
           },
         });
@@ -301,6 +311,14 @@ export async function POST(req: Request) {
         data: { status: TodayTurnStatus.DELIVERED },
       });
     }
+
+    await tx.encounterItem.deleteMany({
+      where: {
+        clinicId,
+        ...(data.appointmentId ? { appointmentId: data.appointmentId } : {}),
+        ...(data.todayTurnId ? { todayTurnId: data.todayTurnId } : {}),
+      },
+    });
 
     return invoice;
   });

@@ -56,7 +56,7 @@ export default function AcceptInvitePage() {
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) throw new Error(data?.error ?? "No se pudo aceptar la invitación.");
       toast.success("Invitación aceptada correctamente.");
-      router.push("/dashboard");
+      router.push("/");
     } catch (acceptError) { setError(acceptError instanceof Error ? acceptError.message : "No se pudo aceptar la invitación."); setAccepting(false); }
   }
 

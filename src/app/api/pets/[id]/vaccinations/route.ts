@@ -8,7 +8,7 @@ function getFirstIssueMessage(error: { issues: Array<{ message: string }> }) {
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("pets.read");
+  const { clinicId } = await requireClinicPermission("vaccines.read");
   const petId = Number((await params).id);
 
   if (!Number.isFinite(petId)) {
@@ -25,7 +25,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("pets.update");
+  const { clinicId } = await requireClinicPermission("vaccines.create");
   const petId = Number((await params).id);
 
   if (!Number.isFinite(petId)) {

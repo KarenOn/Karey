@@ -316,7 +316,7 @@ export async function getDashboardData(clinicId: number) {
 
     prisma.payment.aggregate({
       where: {
-        invoice: { clinicId: clinic.id },
+        invoice: { clinicId: clinic.id, status: { not: "VOID" } },
         paidAt: { gte: monthStart, lte: monthEnd },
       },
       _sum: { amount: true },

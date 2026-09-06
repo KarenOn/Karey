@@ -182,7 +182,15 @@ export default function InvoicesPage() {
         <DropdownMenuItem className="gap-2" onSelect={(event) => { event.preventDefault(); handlePrintReceipt(invoice.id); }}><Receipt className="h-4 w-4" /> Imprimir recibo</DropdownMenuItem>
         <DropdownMenuItem className="gap-2" onSelect={(event) => { event.preventDefault(); handlePrintInvoice(invoice.id); }}><ReceiptText className="h-4 w-4" /> Imprimir factura</DropdownMenuItem>
         <DropdownMenuItem className="gap-2" onSelect={(event) => { event.preventDefault(); void handleDownloadPdf(invoice.id); }}><Download className="h-4 w-4" /> Descargar PDF</DropdownMenuItem>
-        {canUpdateInvoices && invoice.status !== "VOID" ? <DropdownMenuItem className="gap-2 text-rose-600" onSelect={() => void handleVoid(invoice.id)}><Ban className="h-4 w-4" /> Anular factura</DropdownMenuItem> : null}
+        {canUpdateInvoices && invoice.status !== "VOID" ? (
+          invoice.paymentsCount > 0 ? (
+            <DropdownMenuItem disabled className="gap-2 text-muted-foreground" title="Esta factura tiene pagos registrados. Debes revertir o devolver los pagos antes de poder anularla.">
+              <Ban className="h-4 w-4" /> Anular factura (requiere reverso)
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem className="gap-2 text-rose-600" onSelect={() => void handleVoid(invoice.id)}><Ban className="h-4 w-4" /> Anular factura</DropdownMenuItem>
+          )
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -56,6 +56,9 @@ export const AppointmentCreateSchema = AppointmentWritableSchema.extend({
   startAt: DateLike,
   type: AppointmentTypeSchema.default(AppointmentType.CONSULTATION),
 }).superRefine((data, ctx) => {
+  if (data.startAt <= new Date()) {
+    ctx.addIssue({ code: "custom", message: "No puedes agendar una cita en un horario que ya pasó.", path: ["startAt"] });
+  }
   if (data.endAt && data.endAt < data.startAt) {
     ctx.addIssue({
       code: "custom",
@@ -81,6 +84,9 @@ export const AppointmentUpdateSchema = AppointmentWritableSchema.superRefine((da
       message: "endAt no puede ser menor que startAt",
       path: ["endAt"],
     });
+  }
+  if (data.startAt && data.startAt <= new Date()) {
+    ctx.addIssue({ code: "custom", message: "No puedes reprogramar una cita a un horario que ya pasó.", path: ["startAt"] });
   }
 });
 

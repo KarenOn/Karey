@@ -12,11 +12,10 @@ import {
   Camera, Save, Facebook, Instagram, MessageCircle, Pencil, Check, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {useMaskito} from '@maskito/react';
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import PrintSettingsCard from "@/components/printing/PrintSettingsCard";
   
-import options from '@/components/shared/PhoneMask';
+import PhoneInput from "@/components/shared/PhoneInput";
 import { toast } from "sonner";
 
 const dayNames: Record<string, string> = {
@@ -92,7 +91,6 @@ export default function ProfilePage() {
   const [err, setErr] = useState<string | null>(null);
   const canUpdateClinic = !!access?.actions.clinic.update;
 
-  const maskedInputRef = useMaskito({options});
 
   const tabs = useMemo(() => ([
     { id: "general", label: "General", icon: Building2 },
@@ -422,11 +420,11 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Teléfono Fijo</Label>
-                <Input value={profile.phone ?? ""} ref={maskedInputRef} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} disabled={!isEditing} />
+                <PhoneInput value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} disabled={!isEditing} />
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Teléfono Móvil</Label>
-                <Input value={profile.mobile ?? ""} ref={maskedInputRef} onChange={(e) => setProfile({ ...profile, mobile: e.target.value })} disabled={!isEditing} />
+                <PhoneInput value={profile.mobile ?? ""} onChange={(e) => setProfile({ ...profile, mobile: e.target.value })} disabled={!isEditing} />
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Sitio Web</Label>

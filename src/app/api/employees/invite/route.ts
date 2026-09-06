@@ -1,10 +1,10 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
 import { getAppBaseUrl, sendEmployeeInviteEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
+import { setTemporaryPasswordForUser } from "@/lib/temporary-password";
 
 const InviteSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -56,9 +56,6 @@ export async function POST(req: Request) {
     let tempPassword: string | null = null;
 
     if (!user) {
-      tempPassword = crypto.randomBytes(10).toString("hex");
-      const passwordHash = await hashPassword(tempPassword);
-
       user = await prisma.$transaction(async (tx) => {
         const createdUser = await tx.user.create({
           data: {
@@ -71,15 +68,7 @@ export async function POST(req: Request) {
           },
         });
 
-        await tx.account.create({
-          data: {
-            accountId: createdUser.id,
-            id: crypto.randomBytes(16).toString("hex"),
-            password: passwordHash,
-            providerId: "credential",
-            userId: createdUser.id,
-          },
-        });
+        tempPassword = await setTemporaryPasswordForUser(tx, createdUser.id);
 
         return createdUser;
       });

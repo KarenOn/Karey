@@ -20,10 +20,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "status inválido" }, { status: 422 });
 
-  const invoice = await prisma.invoice.findFirst({ where: { id, clinicId }, select: { id: true } });
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, clinicId },
+    select: { id: true, status: true, _count: { select: { payments: true } } },
+  });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
-  // Nota: aquí tú decides reglas: si está pagada, ¿permitir anular? etc.
+  if (parsed.data.status === InvoiceStatus.VOID && invoice._count.payments > 0) {
+    return NextResponse.json(
+      { error: "Esta factura tiene pagos registrados. Debes revertir o devolver los pagos antes de poder anularla." },
+      { status: 409 }
+    );
+  }
+
+  if (invoice.status === InvoiceStatus.VOID && parsed.data.status !== InvoiceStatus.VOID) {
+    return NextResponse.json({ error: "Una factura anulada no puede reactivarse." }, { status: 409 });
+  }
+
   const updated = await prisma.invoice.update({
     where: { id },
     data: {

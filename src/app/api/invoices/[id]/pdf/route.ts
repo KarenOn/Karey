@@ -48,7 +48,7 @@
 // }
 import { NextResponse } from "next/server";
 import puppeteer from "puppeteer";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { getInvoicePrintData } from "@/lib/print/getInvoicePrintData";
 import { renderInvoiceA4Html } from "@/lib/print/renderInvoiceA4Html";
 
@@ -58,7 +58,7 @@ export async function GET(
   _: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("invoices.download");
   const invoiceId = Number((await params).id);
 
   const data = await getInvoicePrintData({ clinicId, invoiceId });

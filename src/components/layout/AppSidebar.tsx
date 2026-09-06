@@ -13,6 +13,7 @@ import {
   FileText,
   IdCardLanyard,
   LayoutDashboard,
+  LoaderCircle,
   LogOut,
   Menu,
   Moon,
@@ -38,12 +39,14 @@ import {
 import { useTheme } from "next-themes";
 import { Button } from "../ui/button";
 import { authClient } from "@/lib/auth-client";
+import { toast } from "sonner";
 import ClinicAvatar from "@/components/shared/ClinicAvatar";
 import { cn } from "@/lib/utils";
 import type { CurrentUserProfile } from "@/lib/current-user-profile";
 import ClinicOnboardingModal from "@/components/layout/ClinicOnboardingModal";
 import { CurrentUserProvider } from "@/components/layout/current-user-context";
 import EmailVerificationBanner from "@/components/layout/EmailVerificationBanner";
+import OnboardingWelcome from "@/components/layout/OnboardingWelcome";
 import GlobalSearch from "@/components/layout/GlobalSearch";
 import AppointmentNowAlert from "@/components/layout/AppointmentNowAlert";
 
@@ -93,6 +96,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUserProfile | null>(initialUser);
   const router = useRouter();
 
@@ -219,13 +223,16 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   }, [initialUser]);
 
   const handleSignOut = async () => {
-    await authClient.signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          router.push("/login");
-        },
-      },
-    });
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const result = await authClient.signOut();
+      if (result.error) throw new Error(result.error.message);
+      router.push("/login");
+    } catch {
+      setSigningOut(false);
+      toast.error("No se pudo cerrar la sesión. Inténtalo nuevamente.");
+    }
   };
 
   const availableNavigation = useMemo(() => {
@@ -260,6 +267,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
   return (
     <CurrentUserProvider value={currentUser}>
+      {currentUser ? <OnboardingWelcome user={currentUser} /> : null}
       <div className="app-shell-bg min-h-screen">
         <div className="app-grid pointer-events-none fixed inset-0 opacity-70" />
 
@@ -556,6 +564,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         </main>
         <ClinicOnboardingModal />
       </div>
+      {signingOut ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true"><div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 text-center shadow-lg"><LoaderCircle className="mx-auto h-8 w-8 animate-spin text-primary" /><p className="mt-4 text-lg font-semibold text-foreground">Cerrando sesión...</p><p className="mt-2 text-sm text-muted-foreground">Espera un momento mientras cerramos tu sesión de forma segura.</p></div></div> : null}
     </CurrentUserProvider>
   );
 }

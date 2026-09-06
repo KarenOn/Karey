@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMaskito } from "@maskito/react";
 import {
   BadgeCheck,
   IdCard,
@@ -23,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import options from "@/components/shared/PhoneMask";
+import PhoneInput from "@/components/shared/PhoneInput";
 
 type ProfileData = {
   userId: string;
@@ -77,7 +76,6 @@ async function deleteTemporaryUpload(storageRef?: string | null) {
 }
 
 export default function UserProfilePage() {
-  const phoneMaskRef = useMaskito({ options });
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [snapshot, setSnapshot] = useState<ProfileData | null>(null);
   const [passwordForm, setPasswordForm] = useState<PasswordForm>(emptyPasswordForm);
@@ -433,11 +431,10 @@ export default function UserProfilePage() {
 
             <div className="space-y-2">
               <Label htmlFor="profile-phone">Teléfono</Label>
-              <Input
+              <PhoneInput
                 disabled={!editing}
                 id="profile-phone"
                 onChange={(event) => setProfile({ ...profile, phone: event.target.value })}
-                ref={phoneMaskRef}
                 value={profile.phone ?? ""}
               />
             </div>

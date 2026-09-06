@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { LoaderCircle, Mail, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { z } from "zod";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { getFriendlyVerificationMessage } from "@/lib/auth-feedback";
@@ -33,6 +34,11 @@ export default function LoginPage() {
     setIsLoading(true);
 
     const normalizedEmail = email.trim().toLowerCase();
+    if (!z.string().email().safeParse(normalizedEmail).success) {
+      setErr("Escribe un correo electrónico válido.");
+      setIsLoading(false);
+      return;
+    }
     const requestedCallback = new URLSearchParams(window.location.search).get("callbackUrl");
     const destination = requestedCallback?.startsWith("/") && !requestedCallback.startsWith("//") ? requestedCallback : "/";
 
@@ -52,6 +58,7 @@ export default function LoginPage() {
       return;
     }
 
+    setIsLoading(false);
     const accessResponse = await fetch("/api/profile", { cache: "no-store" });
     if (accessResponse.status === 403) {
       await authClient.signOut();
@@ -93,7 +100,6 @@ export default function LoginPage() {
       }
     }
 
-    setIsLoading(false);
     if (accessProfile?.mustChangePassword) {
       router.push(`/onboarding/change-password?callbackUrl=${encodeURIComponent(destination)}`);
       return;
@@ -183,7 +189,7 @@ export default function LoginPage() {
             </div>
 
             <Button disabled={isLoading} className="h-12 w-full text-md disabled:opacity-60">
-              {isLoading ? "Ingresando..." : "Entrar al sistema"}
+              {isLoading ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Iniciando...</> : "Entrar al sistema"}
             </Button>
           </form>
 

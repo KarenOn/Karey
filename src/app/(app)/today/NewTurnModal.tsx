@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
 import type { PetSpecies } from "@/types/common";
 import SearchableSelect from "@/components/shared/SearchableSelect";
+import PhoneInput from "@/components/shared/PhoneInput";
 
 type TodayTurnStatus =
   | "WAITING"
@@ -192,7 +193,7 @@ export default function NewTurnModal({
   const [submitting, setSubmitting] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [mode, setMode] = useState<"search" | "create">("search");
+  const [mode, setMode] = useState<"search" | "walkin">("search");
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [pets, setPets] = useState<PetRecord[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
@@ -311,7 +312,6 @@ export default function NewTurnModal({
     (mode === "search"
       ? !!selectedResult
       : !!createForm.clientName.trim() &&
-        !!createForm.phone.trim() &&
         !!createForm.petName.trim());
 
   async function handleSubmit() {
@@ -328,13 +328,9 @@ export default function NewTurnModal({
       return;
     }
 
-    if (mode === "create") {
+    if (mode === "walkin") {
       if (!createForm.clientName.trim()) {
         onShowError("Nombre del cliente requerido");
-        return;
-      }
-      if (!createForm.phone.trim()) {
-        onShowError("Telefono requerido");
         return;
       }
       if (!createForm.petName.trim()) {
@@ -346,42 +342,19 @@ export default function NewTurnModal({
     setSubmitting(true);
 
     try {
-      let clientId: number;
-      let petId: number;
-
-      if (mode === "search" && selectedResult) {
-        clientId = selectedResult.clientId;
-        petId = selectedResult.petId;
-      } else {
-        const createdClient = await requestJson<{ id: number }>("/api/clients", {
-          method: "POST",
-          body: JSON.stringify({
-            fullName: createForm.clientName.trim(),
-            phone: createForm.phone.trim(),
-          }),
-        });
-
-        const createdPet = await requestJson<{ id: number }>("/api/pets", {
-          method: "POST",
-          body: JSON.stringify({
-            clientId: createdClient.id,
-            name: createForm.petName.trim(),
-            species: createForm.species,
-            sex: "UNKNOWN",
-          }),
-        });
-
-        clientId = createdClient.id;
-        petId = createdPet.id;
-      }
-
       const createdTurn = await requestJson<TodayTurnItem>("/api/today-turns", {
         method: "POST",
         body: JSON.stringify({
-          clientId,
+          ...(mode === "search" && selectedResult
+            ? { clientId: selectedResult.clientId, petId: selectedResult.petId }
+            : {
+                ownerName: createForm.clientName.trim(),
+                ownerPhone: createForm.phone.trim() || null,
+                petName: createForm.petName.trim(),
+                species: createForm.species,
+              }),
           estimatedDuration: selectedService.durationMins ?? 60,
           notes: notes.trim() || null,
-          petId,
           service: mapServiceToTurnType(selectedService),
           serviceName: selectedService.name,
         }),
@@ -450,15 +423,15 @@ export default function NewTurnModal({
 
               <Button
                 type="button"
-                variant={mode === "create" ? "default" : "outline"}
-                className={cn("rounded-xl", mode !== "create" && "bg-transparent")}
+                variant={mode === "walkin" ? "default" : "outline"}
+                className={cn("rounded-xl", mode !== "walkin" && "bg-transparent")}
                 onClick={() => {
-                  setMode("create");
+                  setMode("walkin");
                   setSelectedResult(null);
                 }}
               >
                 <UserPlus className="mr-2 h-4 w-4" />
-                Crear nuevo cliente
+                Registrar sin paciente
               </Button>
             </div>
 
@@ -509,7 +482,7 @@ export default function NewTurnModal({
                   })
                 ) : (
                   <div className="rounded-lg border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    No encontramos coincidencias. Puedes crear el cliente y la mascota aqui mismo.
+                    No encontramos coincidencias. Puedes registrar la llegada sin crear un cliente o paciente.
                   </div>
                 )}
               </div>
@@ -531,8 +504,8 @@ export default function NewTurnModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="clientPhone">Telefono</Label>
-                  <Input
+                  <Label htmlFor="clientPhone">Telefono (opcional)</Label>
+                  <PhoneInput
                     id="clientPhone"
                     onChange={(event) =>
                       setCreateForm((current) => ({
@@ -647,7 +620,7 @@ export default function NewTurnModal({
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge variant="secondary" className="rounded-full px-3 py-1">
-                {mode === "search" ? "Cliente existente" : "Cliente nuevo"}
+              {mode === "search" ? "Paciente registrado" : "Sin paciente registrado"}
               </Badge>
               <Badge variant="secondary" className="rounded-full px-3 py-1">
                 Estado inicial: en espera
@@ -674,7 +647,7 @@ export default function NewTurnModal({
                   <p className="text-xs text-muted-foreground">
                     {mode === "search"
                       ? selectedResult?.ownerPhone || "Sin telefono"
-                      : createForm.phone || "Telefono requerido"}
+                      : createForm.phone || "Telefono no registrado"}
                   </p>
                 </div>
               </div>

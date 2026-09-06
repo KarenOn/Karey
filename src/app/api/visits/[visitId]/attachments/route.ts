@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { serializeAttachment } from "@/lib/storage";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
@@ -26,7 +26,7 @@ export async function GET(
   _: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.read");
   if (!clinicId) {
     return NextResponse.json(
       { message: "No se pudo identificar la clínica activa" },
@@ -57,7 +57,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ visitId: string }> }
 ) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.attachDocuments");
   if (!clinicId) {
     return NextResponse.json(
       { message: "No se pudo identificar la clínica activa" },
