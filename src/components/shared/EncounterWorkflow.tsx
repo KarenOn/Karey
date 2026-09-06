@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ClinicalVisitForm from "@/components/shared/ClinicalVisitForm";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
+import FormField from "./FormField";
 
 type Vaccine = { id: number; name: string; species?: string | null };
 type CatalogItem = { id: number; name: string; price: string; sku?: string | null };
@@ -207,7 +208,29 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
               key={draft.id}
               className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2"
             >
-              <SearchableSelect
+              <FormField
+                label="Vacuna"
+                name={`vaccineId-${draft.id}`}
+                type="select"
+                value={draft.vaccineId}
+                options={catalogVaccines.map((vaccine) => ({
+                  value: String(vaccine.id),
+                  label: vaccine.species
+                    ? `${vaccine.name} (${vaccine.species})`
+                    : vaccine.name,
+                }))}
+                onChange={(event) =>
+                  setVaccineDrafts((current) =>
+                    current.map((entry) =>
+                      entry.id === draft.id
+                        ? { ...entry, vaccineId: String(event.target.value) }
+                        : entry,
+                    ),
+                  )
+                }
+                required
+              />
+              {/* <SearchableSelect
                 options={catalogVaccines.map((vaccine) => ({
                   value: String(vaccine.id),
                   label: vaccine.species
@@ -226,63 +249,71 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
                 }
                 placeholder="Seleccionar vacuna"
                 searchPlaceholder="Buscar vacuna..."
-              />
-              <input
+              /> */}
+
+              <FormField
+                label="Fecha de aplicación"
+                name={`appliedAt-${draft.id}`}
                 type="date"
                 value={draft.appliedAt}
                 onChange={(event) =>
                   setVaccineDrafts((current) =>
                     current.map((entry) =>
                       entry.id === draft.id
-                        ? { ...entry, appliedAt: event.target.value }
+                        ? { ...entry, appliedAt: String(event.target.value) }
                         : entry,
                     ),
                   )
                 }
-                className="h-10 rounded-md border bg-background px-3 text-sm"
+                required
+                // className="h-10 rounded-md border bg-background px-3 text-sm"
               />
-              <input
-                placeholder="Lote"
-                value={draft.batchNumber}
-                onChange={(event) =>
-                  setVaccineDrafts((current) =>
-                    current.map((entry) =>
-                      entry.id === draft.id
-                        ? { ...entry, batchNumber: event.target.value }
-                        : entry,
-                    ),
-                  )
-                }
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-              />
-              <input
-                placeholder="Próxima dosis"
+              <FormField
+                label="Próxima dosis"
+                name={`nextDueAt-${draft.id}`}
                 type="date"
                 value={draft.nextDueAt}
                 onChange={(event) =>
                   setVaccineDrafts((current) =>
                     current.map((entry) =>
                       entry.id === draft.id
-                        ? { ...entry, nextDueAt: event.target.value }
+                        ? { ...entry, nextDueAt: String(event.target.value) }
                         : entry,
                     ),
                   )
                 }
-                className="h-10 rounded-md border bg-background px-3 text-sm"
+                // className="h-10 rounded-md border bg-background px-3 text-sm"
               />
-              <textarea
-                placeholder="Notas"
+              <FormField
+                label="Número de lote"
+                name={`batchNumber-${draft.id}`}
+                value={draft.batchNumber}
+                onChange={(event) =>
+                  setVaccineDrafts((current) =>
+                    current.map((entry) =>
+                      entry.id === draft.id
+                        ? { ...entry, batchNumber: String(event.target.value) }
+                        : entry,
+                    ),
+                  )
+                }
+                // className="h-10 rounded-md border bg-background px-3 text-sm"
+              />
+              <FormField
+                label="Notas"
+                name={`notes-${draft.id}`}
+                type="textarea"
                 value={draft.notes}
                 onChange={(event) =>
                   setVaccineDrafts((current) =>
                     current.map((entry) =>
                       entry.id === draft.id
-                        ? { ...entry, notes: event.target.value }
+                        ? { ...entry, notes: String(event.target.value) }
                         : entry,
                     ),
                   )
                 }
-                className="min-h-20 rounded-md border bg-background p-3 text-sm sm:col-span-2"
+                className="sm:col-span-2"
               />
               <Button
                 type="button"

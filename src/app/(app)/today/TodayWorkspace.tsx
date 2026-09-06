@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import NewTurnModal from "./NewTurnModal";
 import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
+import Modal from "@/components/shared/Modal";
 
 type AppointmentStatus =
   | "SCHEDULED"
@@ -782,14 +783,18 @@ export default function TodayWorkspace({
               busy={busyKey === `appointment-${item.id}`}
               item={item}
               onCardClick={() => {
-                const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
+                const appointment = upcomingAppointments.find(
+                  (entry) => entry.id === item.id,
+                );
                 if (!appointment || !canUpdateAppointments) return;
                 void markAppointmentInProgress(appointment);
               }}
               onPrimaryAction={
                 canUpdateAppointments
                   ? () => {
-                      const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
+                      const appointment = upcomingAppointments.find(
+                        (entry) => entry.id === item.id,
+                      );
                       if (!appointment) return;
                       void markAppointmentInProgress(appointment);
                     }
@@ -819,7 +824,9 @@ export default function TodayWorkspace({
               onPrimaryAction={
                 canUpdateTurns
                   ? () => {
-                      const turn = waitingTurns.find((entry) => entry.id === item.id);
+                      const turn = waitingTurns.find(
+                        (entry) => entry.id === item.id,
+                      );
                       if (!turn) return;
                       void markTurnInProgress(turn);
                     }
@@ -846,7 +853,9 @@ export default function TodayWorkspace({
               item={item}
               onCardClick={() => {
                 if (item.source === "appointment") {
-                  const appointment = appointments.find((entry) => entry.id === item.id);
+                  const appointment = appointments.find(
+                    (entry) => entry.id === item.id,
+                  );
                   if (!appointment) return;
                   goToInvoiceFlow({
                     appointmentId: appointment.id,
@@ -872,7 +881,9 @@ export default function TodayWorkspace({
               onSecondaryAction={
                 item.source === "appointment" && canUpdateAppointments
                   ? () => {
-                      const appointment = appointments.find((entry) => entry.id === item.id);
+                      const appointment = appointments.find(
+                        (entry) => entry.id === item.id,
+                      );
                       if (!appointment) return;
                       setEncounter({
                         appointmentId: appointment.id,
@@ -882,15 +893,26 @@ export default function TodayWorkspace({
                     }
                   : item.source === "turn" && canUpdateTurns
                     ? () => {
-                        const turn = turns.find((entry) => entry.id === item.id);
+                        const turn = turns.find(
+                          (entry) => entry.id === item.id,
+                        );
                         if (!turn) return;
-                        setEncounter({ todayTurnId: turn.id, clientId: turn.clientId, petId: turn.petId, ownerName: turn.ownerName, ownerPhone: turn.ownerPhone, petName: turn.petName });
+                        setEncounter({
+                          todayTurnId: turn.id,
+                          clientId: turn.clientId,
+                          petId: turn.petId,
+                          ownerName: turn.ownerName,
+                          ownerPhone: turn.ownerPhone,
+                          petName: turn.petName,
+                        });
                       }
                     : null
               }
               onPrimaryAction={() => {
                 if (item.source === "appointment") {
-                  const appointment = appointments.find((entry) => entry.id === item.id);
+                  const appointment = appointments.find(
+                    (entry) => entry.id === item.id,
+                  );
                   if (!appointment) return;
                   goToInvoiceFlow({
                     appointmentId: appointment.id,
@@ -945,20 +967,83 @@ export default function TodayWorkspace({
         onCreated={(created) => {
           setTurns((current) =>
             [...current, created].sort((left, right) =>
-              left.arrivalAt.localeCompare(right.arrivalAt)
-            )
+              left.arrivalAt.localeCompare(right.arrivalAt),
+            ),
           );
           showAlert(
             "success",
             "Paciente agregado",
-            "El paciente quedo agregado en la columna En espera."
+            "El paciente quedo agregado en la columna En espera.",
           );
         }}
         onOpenChange={setTurnModalOpen}
         onShowError={showTurnModalError}
         open={turnModalOpen}
       />
-      {encounter ? <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/30 p-4"><div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl bg-card p-6 shadow-xl"><div className="mb-4 flex items-center justify-between"><h2 className="app-heading text-3xl text-foreground">Atención clínica</h2><Button variant="outline" onClick={() => setEncounter(null)}>Cerrar</Button></div><EncounterWorkflow petId={encounter.petId} clientId={encounter.clientId} todayTurnId={encounter.todayTurnId} walkInOwnerName={encounter.ownerName} walkInOwnerPhone={encounter.ownerPhone} walkInPetName={encounter.petName} walkInSpecies={turns.find((turn) => turn.id === encounter.todayTurnId)?.species} appointmentId={encounter.appointmentId} assignedVetId={appointments.find((appointment) => appointment.id === encounter.appointmentId)?.vetId} vets={[]} onLinked={({ clientId, petId }) => { setEncounter((current) => current ? { ...current, clientId, petId } : current); setTurns((current) => current.map((turn) => turn.id === encounter.todayTurnId ? { ...turn, clientId, petId } : turn)); }} onFinish={() => void finishEncounter()} onBilling={() => goToInvoiceFlow({ appointmentId: encounter.appointmentId, clientId: encounter.clientId, petId: encounter.petId, todayTurnId: encounter.todayTurnId, ownerName: encounter.ownerName, petName: encounter.petName })} /></div></div> : null}
+      {encounter ? (
+        // <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/30 p-4">
+        //   <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl bg-card p-6 shadow-xl">
+        //     <div className="mb-4 flex items-center justify-between">
+        //       <h2 className="app-heading text-3xl text-foreground">
+        //         Atención clínica
+        //       </h2>
+        //       <Button variant="outline" onClick={() => setEncounter(null)}>
+        //         Cerrar
+        //       </Button>
+        //     </div>
+        <Modal
+                open={!!encounter}
+                onClose={(open) => {
+                  if (!open) setEncounter(null);
+                }}
+                title="Atención clínica"
+                size="xl"
+              >
+            <EncounterWorkflow
+              petId={encounter.petId}
+              clientId={encounter.clientId}
+              todayTurnId={encounter.todayTurnId}
+              walkInOwnerName={encounter.ownerName}
+              walkInOwnerPhone={encounter.ownerPhone}
+              walkInPetName={encounter.petName}
+              walkInSpecies={
+                turns.find((turn) => turn.id === encounter.todayTurnId)?.species
+              }
+              appointmentId={encounter.appointmentId}
+              assignedVetId={
+                appointments.find(
+                  (appointment) => appointment.id === encounter.appointmentId,
+                )?.vetId
+              }
+              vets={[]}
+              onLinked={({ clientId, petId }) => {
+                setEncounter((current) =>
+                  current ? { ...current, clientId, petId } : current,
+                );
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === encounter.todayTurnId
+                      ? { ...turn, clientId, petId }
+                      : turn,
+                  ),
+                );
+              }}
+              onFinish={() => void finishEncounter()}
+              onBilling={() =>
+                goToInvoiceFlow({
+                  appointmentId: encounter.appointmentId,
+                  clientId: encounter.clientId,
+                  petId: encounter.petId,
+                  todayTurnId: encounter.todayTurnId,
+                  ownerName: encounter.ownerName,
+                  petName: encounter.petName,
+                })
+              }
+            />
+            </Modal>
+          // </div>
+        // </div>
+      ) : null}
 
       <AppAlert
         description={alert.description}

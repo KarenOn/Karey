@@ -1042,33 +1042,57 @@ export default function AppointmentsPage() {
         description="Organiza citas, horarios y disponibilidad en un solo lugar."
         actions={
           canCreateAppointments ? (
-            <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+            <Button
+              onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nueva Cita
             </Button>
           ) : null
         }
         stats={[
-          { label: "Del día", value: activeDayAppointments.length, hint: "Citas visibles" },
-          { label: "Activas", value: activeDayAppointments.length, hint: "Sin canceladas ni no-show" },
-          { label: "Veterinarios", value: vets.length, hint: "Disponibles para asignación" },
+          {
+            label: "Del día",
+            value: activeDayAppointments.length,
+            hint: "Citas visibles",
+          },
+          {
+            label: "Activas",
+            value: activeDayAppointments.length,
+            hint: "Sin canceladas ni no-show",
+          },
+          {
+            label: "Veterinarios",
+            value: vets.length,
+            hint: "Disponibles para asignación",
+          },
         ]}
       />
       <div className="hidden">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Agenda de Citas</h2>
-          <p className="text-muted-foreground">Gestiona las citas según mascotas, clientes, veterinarios y horario de la clínica</p>
+          <h2 className="text-2xl font-bold text-foreground">
+            Agenda de Citas
+          </h2>
+          <p className="text-muted-foreground">
+            Gestiona las citas según mascotas, clientes, veterinarios y horario
+            de la clínica
+          </p>
         </div>
 
         {canCreateAppointments ? (
-          <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+          <Button
+            onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nueva Cita
           </Button>
         ) : null}
       </div>
 
-      <Tabs value={view} onValueChange={(value) => setView(value as "agenda" | "list")}>
+      <Tabs
+        value={view}
+        onValueChange={(value) => setView(value as "agenda" | "list")}
+      >
         <TabsList>
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
           <TabsTrigger value="list">Lista</TabsTrigger>
@@ -1082,23 +1106,35 @@ export default function AppointmentsPage() {
                   mode="single"
                   selected={selectedDay}
                   onSelect={(day) => day && setSelectedDay(startOfDay(day))}
-                  disabled={(day) => Boolean(scheduleByDay.get(getWeekdayKey(day))?.closed)}
+                  disabled={(day) =>
+                    Boolean(scheduleByDay.get(getWeekdayKey(day))?.closed)
+                  }
                   components={{ DayButton: renderCalendarDayButton }}
                   className="rounded-xl w-full border border-border/70"
                 />
 
                 <div className="mt-4 border-t border-border/70 pt-4">
-                  <p className="mb-3 text-sm font-semibold text-foreground">Tipos de cita</p>
+                  <p className="mb-3 text-sm font-semibold text-foreground">
+                    Tipos de cita
+                  </p>
                   <div className="space-y-2">
                     {legendItems.map((item) => (
-                      <LegendItem key={item.label} colorClass={item.color} label={item.label} />
+                      <LegendItem
+                        key={item.label}
+                        colorClass={item.color}
+                        label={item.label}
+                      />
                     ))}
                   </div>
                 </div>
 
                 <div className="mt-4 rounded-xl border border-border/70 bg-muted/45 p-3 text-sm text-muted-foreground">
                   <p className="font-medium text-foreground">Horario del día</p>
-                  <p>{isClosedDay ? "La clínica está cerrada este día" : `${selectedSchedule.open ?? "09:00"} - ${selectedSchedule.close ?? "17:00"}`}</p>
+                  <p>
+                    {isClosedDay
+                      ? "La clínica está cerrada este día"
+                      : `${selectedSchedule.open ?? "09:00"} - ${selectedSchedule.close ?? "17:00"}`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1107,38 +1143,77 @@ export default function AppointmentsPage() {
               <div className="app-panel-strong overflow-hidden">
                 <div className="flex items-center justify-between gap-3 border-b border-border/70 p-4">
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => setSelectedDay((current) => addDays(current, -1))} className="rounded-xl">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() =>
+                        setSelectedDay((current) => addDays(current, -1))
+                      }
+                      className="rounded-xl"
+                    >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
 
                     <div className="px-2">
-                      <p className="font-semibold capitalize text-foreground">{format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}</p>
+                      <p className="font-semibold capitalize text-foreground">
+                        {format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", {
+                          locale: es,
+                        })}
+                      </p>
                       <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <CalendarIcon className="h-3 w-3" />
                         {activeDayAppointments.length} cita(s)
                       </p>
                     </div>
 
-                    <Button variant="outline" size="icon" onClick={() => setSelectedDay((current) => addDays(current, 1))} className="rounded-xl">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() =>
+                        setSelectedDay((current) => addDays(current, 1))
+                      }
+                      className="rounded-xl"
+                    >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
 
-                  <Button variant="outline" onClick={() => setSelectedDay(startOfDay(new Date()))} className="rounded-xl">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedDay(startOfDay(new Date()))}
+                    className="rounded-xl"
+                  >
                     Hoy
                   </Button>
                 </div>
 
                 <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
-                  <label htmlFor="agenda-vet-lane" className="text-sm font-medium text-muted-foreground">Disponibilidad de:</label>
-                  <select id="agenda-vet-lane" value={slotVetId} onChange={(event) => setSlotVetId(event.target.value)} className="h-9 rounded-lg border border-border bg-background px-3 text-sm">
+                  <label
+                    htmlFor="agenda-vet-lane"
+                    className="text-sm font-medium text-muted-foreground"
+                  >
+                    Disponibilidad de:
+                  </label>
+                  <select
+                    id="agenda-vet-lane"
+                    value={slotVetId}
+                    onChange={(event) => setSlotVetId(event.target.value)}
+                    className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
+                  >
                     <option value="__NONE__">Sin asignar</option>
-                    {vets.map((vet) => <option key={vet.id} value={vet.id}>{vet.name}</option>)}
+                    {vets.map((vet) => (
+                      <option key={vet.id} value={vet.id}>
+                        {vet.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 {isClosedDay ? (
-                  <div className="p-8 text-center text-muted-foreground">No hay agenda disponible porque la clínica está cerrada este día.</div>
+                  <div className="p-8 text-center text-muted-foreground">
+                    No hay agenda disponible porque la clínica está cerrada este
+                    día.
+                  </div>
                 ) : (
                   <div className="flex">
                     <div className="w-20 border-r border-border/70">
@@ -1155,7 +1230,9 @@ export default function AppointmentsPage() {
 
                     <div
                       className="relative flex-1"
-                      style={{ height: `${timeSlots.length * TIMELINE_SLOT_HEIGHT}px` }}
+                      style={{
+                        height: `${timeSlots.length * TIMELINE_SLOT_HEIGHT}px`,
+                      }}
                     >
                       <div className="absolute inset-0">
                         {timeSlots.map((slot) => (
@@ -1164,7 +1241,9 @@ export default function AppointmentsPage() {
                             className="border-b border-border/70 px-3 py-3"
                             style={{ height: `${TIMELINE_SLOT_HEIGHT}px` }}
                           >
-                            {!isPastSlot(slot) && !occupiedSlots.has(slot) && canCreateAppointments ? (
+                            {!isPastSlot(slot) &&
+                            !occupiedSlots.has(slot) &&
+                            canCreateAppointments ? (
                               <button
                                 type="button"
                                 onClick={() => openCreateAt(selectedDay, slot)}
@@ -1173,90 +1252,185 @@ export default function AppointmentsPage() {
                                 <Plus className="h-4 w-4" />
                                 Agendar cita
                               </button>
-                            ) : <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/30 text-xs text-muted-foreground">{isPastSlot(slot) ? "Horario pasado" : "Horario ocupado"}</div>}
+                            ) : (
+                              <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/30 text-xs text-muted-foreground">
+                                {isPastSlot(slot)
+                                  ? "Horario pasado"
+                                  : "Horario ocupado"}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
 
                       <div className="pointer-events-none absolute inset-0 px-3 py-3">
-                        {appointmentLayouts.map(({ appointment, top, lane, laneCount }) => {
-                          const styles = TYPE_STYLES[appointment.type] ?? TYPE_STYLES.OTHER;
-                          const reminderBadge = getReminderBadge(appointment);
-                          const canOpenEditor = ["SCHEDULED", "CONFIRMED", "WAITING"].includes(appointment.status);
+                        {appointmentLayouts.map(
+                          ({ appointment, top, lane, laneCount }) => {
+                            const styles =
+                              TYPE_STYLES[appointment.type] ??
+                              TYPE_STYLES.OTHER;
+                            const reminderBadge = getReminderBadge(appointment);
+                            const canOpenEditor = [
+                              "SCHEDULED",
+                              "CONFIRMED",
+                              "WAITING",
+                            ].includes(appointment.status);
 
-                          return (
-                            <div
-                              key={appointment.id}
-                              className={`pointer-events-auto absolute overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition ${canOpenEditor ? "cursor-pointer hover:-translate-y-0.5" : ""}`}
-                              style={{
-                                top: `${top + 4}px`,
-                                left: `calc(${lane * (100 / laneCount)}% + 0.25rem)`,
-                                width: `calc(${100 / laneCount}% - 0.5rem)`,
-                              }}
-                              onClick={canOpenEditor ? () => openEdit(appointment) : undefined}
-                            >
-                              <div className={`absolute left-0 top-0 h-full w-1.5 ${styles.bar}`} />
+                            return (
+                              <div
+                                key={appointment.id}
+                                className={`pointer-events-auto absolute overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition ${canOpenEditor ? "cursor-pointer hover:-translate-y-0.5" : ""}`}
+                                style={{
+                                  top: `${top + 4}px`,
+                                  left: `calc(${lane * (100 / laneCount)}% + 0.25rem)`,
+                                  width: `calc(${100 / laneCount}% - 0.5rem)`,
+                                }}
+                                onClick={
+                                  canOpenEditor
+                                    ? () => openEdit(appointment)
+                                    : undefined
+                                }
+                              >
+                                <div
+                                  className={`absolute left-0 top-0 h-full w-1.5 ${styles.bar}`}
+                                />
 
-                              <div className="flex h-full items-start justify-between gap-3 p-4 pl-5">
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="font-semibold text-foreground">{appointment.pet?.name ?? "Paciente"}</p>
-                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles.badge}`}>
-                                      {formatAppointmentType(appointment.type)}
-                                    </span>
-                                    <Badge className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
-                                      {formatAppointmentStatus(appointment.status)}
-                                    </Badge>
-                                    {reminderBadge ? (
-                                      <Badge className={`${reminderBadge.className} border`}>
-                                        {reminderBadge.label}
+                                <div className="flex h-full items-start justify-between gap-3 p-4 pl-5">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="font-semibold text-foreground">
+                                        {appointment.pet?.name ?? "Paciente"}
+                                      </p>
+                                      <span
+                                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles.badge}`}
+                                      >
+                                        {formatAppointmentType(
+                                          appointment.type,
+                                        )}
+                                      </span>
+                                      <Badge
+                                        className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}
+                                      >
+                                        {formatAppointmentStatus(
+                                          appointment.status,
+                                        )}
                                       </Badge>
-                                    ) : null}
+                                      {reminderBadge ? (
+                                        <Badge
+                                          className={`${reminderBadge.className} border`}
+                                        >
+                                          {reminderBadge.label}
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+
+                                    <p className="mt-1 truncate text-sm text-muted-foreground">
+                                      {appointment.client?.fullName ??
+                                        "Propietario"}
+                                    </p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      {appointment.reason ||
+                                        "Sin motivo registrado"}
+                                    </p>
+                                    <p className="mt-2 text-xs text-muted-foreground/80">
+                                      {format(
+                                        safeDate(appointment.startAt) ??
+                                          combineDateAndTime(
+                                            selectedDayStr,
+                                            timeSlots[0] ?? "09:00",
+                                          ),
+                                        "HH:mm",
+                                      )}{" "}
+                                      -{" "}
+                                      {format(
+                                        getAppointmentEnd(appointment) ??
+                                          combineDateAndTime(
+                                            selectedDayStr,
+                                            timeSlots[0] ?? "09:30",
+                                          ),
+                                        "HH:mm",
+                                      )}
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground/80">
+                                      Veterinario:{" "}
+                                      {appointment.vet?.name ?? "Sin asignar"}
+                                    </p>
                                   </div>
 
-                                  <p className="mt-1 truncate text-sm text-muted-foreground">{appointment.client?.fullName ?? "Propietario"}</p>
-                                  <p className="mt-1 text-sm text-muted-foreground">{appointment.reason || "Sin motivo registrado"}</p>
-                                  <p className="mt-2 text-xs text-muted-foreground/80">
-                                    {format(safeDate(appointment.startAt) ?? combineDateAndTime(selectedDayStr, timeSlots[0] ?? "09:00"), "HH:mm")} -{" "}
-                                    {format(getAppointmentEnd(appointment) ?? combineDateAndTime(selectedDayStr, timeSlots[0] ?? "09:30"), "HH:mm")}
-                                  </p>
-                                  <p className="mt-1 text-xs text-muted-foreground/80">Veterinario: {appointment.vet?.name ?? "Sin asignar"}</p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {canUpdateAppointments && canPerformAction(appointment.status, "attend") ? <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>Atender</Button> : null}
-                                  {canUpdateAppointments && appointment.status === "IN_PROGRESS" ? <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}>Gestionar atención</Button> : null}
-                                  {canUpdateAppointments && canPerformAction(appointment.status, "reschedule") ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        openEdit(appointment);
-                                      }}
-                                    >
-                                      <Edit className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                  ) : null}
-                                  {canDeleteAppointments && canPerformAction(appointment.status, "reschedule") ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        askDelete(appointment);
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-red-500" />
-                                    </Button>
-                                  ) : null}
+                                  <div className="flex items-center gap-2">
+                                    {canUpdateAppointments &&
+                                    canPerformAction(
+                                      appointment.status,
+                                      "attend",
+                                    ) ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          void startEncounter(appointment);
+                                        }}
+                                      >
+                                        Atender
+                                      </Button>
+                                    ) : null}
+                                    {canUpdateAppointments &&
+                                    appointment.status === "IN_PROGRESS" ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setEncounter({
+                                            appointmentId: appointment.id,
+                                            petId: appointment.petId,
+                                            clientId: appointment.clientId,
+                                          });
+                                        }}
+                                      >
+                                        Gestionar atención
+                                      </Button>
+                                    ) : null}
+                                    {canUpdateAppointments &&
+                                    canPerformAction(
+                                      appointment.status,
+                                      "reschedule",
+                                    ) ? (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openEdit(appointment);
+                                        }}
+                                      >
+                                        <Edit className="h-4 w-4 text-muted-foreground" />
+                                      </Button>
+                                    ) : null}
+                                    {canDeleteAppointments &&
+                                    canPerformAction(
+                                      appointment.status,
+                                      "reschedule",
+                                    ) ? (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          askDelete(appointment);
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          },
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1316,44 +1490,182 @@ export default function AppointmentsPage() {
               Cancelar
             </Button>
             {(editing ? canUpdateAppointments : canCreateAppointments) ? (
-              <Button onClick={() => void submitAppointment()} disabled={saving}>
-                {saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {saving ? "Guardando..." : editing ? "Guardar Cambios" : "Crear Cita"}
+              <Button
+                onClick={() => void submitAppointment()}
+                disabled={saving}
+              >
+                {saving ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                {saving
+                  ? "Guardando..."
+                  : editing
+                    ? "Guardar Cambios"
+                    : "Crear Cita"}
               </Button>
             ) : null}
           </div>
         }
       >
-        <form onSubmit={(event) => { event.preventDefault(); void submitAppointment(); }} className="space-y-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitAppointment();
+          }}
+          className="space-y-4"
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
+            <FormField
+              label="Paciente"
+              name="petId"
+              type="select"
+              value={formData.petId}
+              onChange={handleChange}
+              options={petOptions}
+              placeholder="Selecciona una mascota"
+              required
+            />
 
             <div className="space-y-2">
-              <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Propietario</label>
+              <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                Propietario
+              </label>
               <div className="flex min-h-10 items-center rounded-lg border border-border/70 bg-muted/45 px-3 text-sm text-foreground">
                 <UserRound className="mr-2 h-4 w-4 text-muted-foreground" />
                 {selectedClient?.fullName ?? "Se asigna según la mascota"}
               </div>
             </div>
 
-            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
-            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
-            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={handleChange} required />
-            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={handleChange} required />
-            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={handleChange} />
-            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={handleChange} options={vetOptions} />
-            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={handleChange} className="sm:col-span-2" />
-            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={handleChange} className="sm:col-span-2" />
+            <FormField
+              label="Tipo de Cita"
+              name="type"
+              type="select"
+              value={formData.type}
+              onChange={handleChange}
+              options={typeOptions}
+              placeholder="Selecciona un tipo"
+              required
+            />
+            <FormField
+              label="Estado"
+              name="status"
+              type="select"
+              value={formData.status}
+              onChange={handleChange}
+              options={statusOptions}
+              placeholder="Selecciona un estado"
+              required
+            />
+            <FormField
+              label="Fecha"
+              name="date"
+              type="date"
+              value={formData.date}
+              onChange={handleChange}
+              required
+            />
+            <FormField
+              label="Hora inicial"
+              name="time"
+              type="time"
+              value={formData.time}
+              onChange={handleChange}
+              required
+            />
+            <FormField
+              label="Hora final"
+              name="endTime"
+              type="time"
+              value={formData.endTime}
+              onChange={handleChange}
+            />
+            <FormField
+              label="Veterinario"
+              name="vetId"
+              type="select"
+              value={formData.vetId}
+              onChange={handleChange}
+              options={vetOptions}
+            />
+            <FormField
+              label="Motivo"
+              name="reason"
+              type="textarea"
+              value={formData.reason}
+              onChange={handleChange}
+              className="sm:col-span-2"
+            />
+            <FormField
+              label="Notas"
+              name="notes"
+              type="textarea"
+              value={formData.notes}
+              onChange={handleChange}
+              className="sm:col-span-2"
+            />
           </div>
         </form>
       </Modal>
 
-      <ModalDelete open={deleteOpen} onOpenChange={setDeleteOpen} title="Eliminar cita" itemName={deleteTarget?.label} loading={deleting} onConfirm={handleDelete} />
-      <Modal open={!!encounter} onClose={(open) => { if (!open) setEncounter(null); }} title="Atención clínica" size="xl">
-        {encounter ? <EncounterWorkflow petId={encounter.petId} clientId={encounter.clientId} appointmentId={encounter.appointmentId} assignedVetId={appointments.find((appointment) => appointment.id === encounter.appointmentId)?.vetId} vets={vets} onFinish={() => void finishEncounter()} onBilling={() => router.push(`/invoices/new?clientId=${encounter.clientId}&petId=${encounter.petId}&appointmentId=${encounter.appointmentId}`)} /> : null}
+      <ModalDelete
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Eliminar cita"
+        itemName={deleteTarget?.label}
+        loading={deleting}
+        onConfirm={handleDelete}
+      />
+      <Modal
+        open={!!encounter}
+        onClose={(open) => {
+          if (!open) setEncounter(null);
+        }}
+        title="Atención clínica"
+        size="xl"
+      >
+        {encounter ? (
+          <EncounterWorkflow
+            petId={encounter.petId}
+            clientId={encounter.clientId}
+            appointmentId={encounter.appointmentId}
+            assignedVetId={
+              appointments.find(
+                (appointment) => appointment.id === encounter.appointmentId,
+              )?.vetId
+            }
+            vets={vets}
+            onFinish={() => void finishEncounter()}
+            onBilling={() =>
+              router.push(
+                `/invoices/new?clientId=${encounter.clientId}&petId=${encounter.petId}&appointmentId=${encounter.appointmentId}`,
+              )
+            }
+          />
+        ) : null}
       </Modal>
-      <ModalDelete open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }} title="Cancelar cita" itemName={cancelTarget?.pet?.name} description="La cita quedará marcada como cancelada." dangerText="Cancelar cita" loading={saving} onConfirm={cancelAppointment} />
-      <Dialog open={!!rescheduleTarget} onOpenChange={(open) => { if (!open) { setRescheduleTarget(null); setRescheduleDate(""); setRescheduleTime(""); setRescheduleEndTime(""); } }}>
+      <ModalDelete
+        open={!!cancelTarget}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null);
+        }}
+        title="Cancelar cita"
+        itemName={cancelTarget?.pet?.name}
+        description="La cita quedará marcada como cancelada."
+        dangerText="Cancelar cita"
+        loading={saving}
+        onConfirm={cancelAppointment}
+      />
+      <Dialog
+        open={!!rescheduleTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRescheduleTarget(null);
+            setRescheduleDate("");
+            setRescheduleTime("");
+            setRescheduleEndTime("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reprogramar cita</DialogTitle>
@@ -1361,22 +1673,49 @@ export default function AppointmentsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="reschedule-date">Nueva fecha</Label>
-              <Input id="reschedule-date" type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} />
+              <Input
+                id="reschedule-date"
+                type="date"
+                value={rescheduleDate}
+                onChange={(event) => setRescheduleDate(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="reschedule-time">Hora inicial</Label>
-              <Input id="reschedule-time" type="time" value={rescheduleTime} onChange={(event) => setRescheduleTime(event.target.value)} />
+              <Input
+                id="reschedule-time"
+                type="time"
+                value={rescheduleTime}
+                onChange={(event) => setRescheduleTime(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="reschedule-end-time">Hora final (opcional)</Label>
-              <Input id="reschedule-end-time" type="time" value={rescheduleEndTime} onChange={(event) => setRescheduleEndTime(event.target.value)} placeholder="Se preservará la duración original" />
+              <Input
+                id="reschedule-end-time"
+                type="time"
+                value={rescheduleEndTime}
+                onChange={(event) => setRescheduleEndTime(event.target.value)}
+                placeholder="Se preservará la duración original"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRescheduleTarget(null); setRescheduleDate(""); setRescheduleTime(""); setRescheduleEndTime(""); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRescheduleTarget(null);
+                setRescheduleDate("");
+                setRescheduleTime("");
+                setRescheduleEndTime("");
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={() => void rescheduleAppointment()} disabled={saving || !rescheduleDate || !rescheduleTime}>
+            <Button
+              onClick={() => void rescheduleAppointment()}
+              disabled={saving || !rescheduleDate || !rescheduleTime}
+            >
               {saving ? "Guardando..." : "Guardar"}
             </Button>
           </DialogFooter>

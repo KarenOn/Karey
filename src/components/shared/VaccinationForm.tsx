@@ -30,5 +30,72 @@ export default function VaccinationForm({ petId, vaccines, onSaved, onCancel }: 
     } catch (submitError) { setError(submitError instanceof Error ? submitError.message : "No se pudo guardar la vacuna."); }
     finally { setSaving(false); }
   }
-  return <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2"><FormField label="Vacuna" name="vaccineId" type="select" value={values.vaccineId} options={vaccines.map((vaccine) => ({ value: String(vaccine.id), label: vaccine.species ? `${vaccine.name} (${vaccine.species})` : vaccine.name }))} onChange={change} required /><FormField label="Fecha de aplicación" name="appliedAt" type="date" value={values.appliedAt} onChange={change} required /><FormField label="Próxima dosis" name="nextDueAt" type="date" value={values.nextDueAt} onChange={change} /><FormField label="Número de lote" name="batchNumber" value={values.batchNumber} onChange={change} /><FormField label="Notas" name="notes" type="textarea" value={values.notes} onChange={change} className="sm:col-span-2" />{error ? <p className="text-sm text-destructive sm:col-span-2">{error}</p> : null}<div className="flex justify-end gap-3 sm:col-span-2">{onCancel ? <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>Cancelar</Button> : null}<Button disabled={saving}>{saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}{saving ? "Guardando..." : "Guardar vacuna"}</Button></div></form>;
+  return (
+    <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <FormField
+        label="Vacuna"
+        name="vaccineId"
+        type="select"
+        value={values.vaccineId}
+        options={vaccines.map((vaccine) => ({
+          value: String(vaccine.id),
+          label: vaccine.species
+            ? `${vaccine.name} (${vaccine.species})`
+            : vaccine.name,
+        }))}
+        onChange={change}
+        required
+      />
+      <FormField
+        label="Fecha de aplicación"
+        name="appliedAt"
+        type="date"
+        value={values.appliedAt}
+        onChange={change}
+        required
+      />
+      <FormField
+        label="Próxima dosis"
+        name="nextDueAt"
+        type="date"
+        value={values.nextDueAt}
+        onChange={change}
+      />
+      <FormField
+        label="Número de lote"
+        name="batchNumber"
+        value={values.batchNumber}
+        onChange={change}
+      />
+      <FormField
+        label="Notas"
+        name="notes"
+        type="textarea"
+        value={values.notes}
+        onChange={change}
+        className="sm:col-span-2"
+      />
+      {error ? (
+        <p className="text-sm text-destructive sm:col-span-2">{error}</p>
+      ) : null}
+      <div className="flex justify-end gap-3 sm:col-span-2">
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancelar
+          </Button>
+        ) : null}
+        <Button disabled={saving}>
+          {saving ? (
+            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+          ) : null}
+          {saving ? "Guardando..." : "Guardar vacuna"}
+        </Button>
+      </div>
+    </form>
+  );
 }
