@@ -37,6 +37,20 @@ export async function POST(req: Request) {
     );
   }
 
+  const duplicate = await prisma.client.findFirst({
+    where: {
+      clinicId,
+      OR: [
+        { phone: parsed.data.phone },
+        ...(parsed.data.email ? [{ email: parsed.data.email }] : []),
+      ],
+    },
+    select: { id: true },
+  });
+  if (duplicate) {
+    return NextResponse.json({ error: "Ya existe un cliente con ese teléfono o correo electrónico." }, { status: 409 });
+  }
+
   const client = await prisma.client.create({
     data: {
       clinicId,

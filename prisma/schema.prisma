@@ -280,6 +280,7 @@ model EmployeeInvite {
   tokenHash String @unique
   expiresAt DateTime
   acceptedAt DateTime?
+  revokedAt DateTime?
 
   createdById String?
   createdAt   DateTime @default(now())
@@ -307,6 +308,7 @@ model Clinic {
   address  String?
   currency String  @default("USD")
   timezone String  @default("America/Santo_Domingo")
+  inventoryExpiryAlertDays Int @default(5)
 
   logoUrl  String? @db.Text
   slogan   String?
@@ -613,6 +615,7 @@ model Product {
   trackStock  Boolean @default(true)
   stockOnHand Int     @default(0)
   minStock    Int     @default(0)
+  expirationDate DateTime? @db.Date
 
   isActive Boolean @default(true)
 
@@ -627,11 +630,13 @@ model Product {
   stockMovements StockMovement[]
   invoiceItems   InvoiceItem[]
   encounterItems  EncounterItem[]
+  vaccineCatalog  VaccineCatalog?
 
   @@unique([clinicId, sku])
   @@index([clinicId, isActive])
   @@index([clinicId, stockOnHand])
   @@index([clinicId, minStock])
+  @@index([clinicId, expirationDate])
   @@map("product")
 }
 
@@ -856,6 +861,7 @@ model MedicalAttachment {
 model VaccineCatalog {
   id       Int @id @default(autoincrement())
   clinicId Int
+  productId Int? @unique
 
   name    String
   species PetSpecies?
@@ -870,10 +876,12 @@ model VaccineCatalog {
   updatedAt DateTime @updatedAt
 
   clinic  Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  product Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
   records VaccinationRecord[]
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
+  @@index([clinicId, productId])
   @@map("vaccinecatalog")
 }
 
@@ -916,9 +924,12 @@ model Notification {
 
   channel NotificationChannel
   status  NotificationStatus @default(QUEUED)
+  type    String @default("SYSTEM")
+  eventKey String?
 
   title   String
   message String @db.Text
+  targetUrl String?
 
   scheduledAt DateTime?
   sentAt      DateTime?
@@ -936,6 +947,7 @@ model Notification {
 
   @@index([clinicId, createdAt])
   @@index([clinicId, status])
+  @@unique([clinicId, eventKey])
   @@index([scheduledAt])
   @@index([createdById])
   @@map("notification")
@@ -952,6 +964,7 @@ model NotificationRecipient {
   phone String?
 
   status NotificationStatus @default(QUEUED)
+  readAt DateTime?
   sentAt DateTime?
   error  String? @db.Text
 
@@ -961,6 +974,7 @@ model NotificationRecipient {
 
   @@index([notificationId])
   @@index([userId])
+  @@index([userId, readAt])
   @@index([clientId])
   @@map("notificationrecipient")
 }

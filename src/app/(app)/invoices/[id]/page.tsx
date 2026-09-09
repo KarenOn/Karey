@@ -45,6 +45,7 @@ import {
 } from "@/lib/printing/browser-printer";
 import { getManualReceiptPaper } from "@/lib/printing/settings";
 import { usePrintSettings } from "@/lib/printing/usePrintSettings";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -60,6 +61,7 @@ const statusUI: Record<
   string,
   { label: string; icon: any; badge: string; hint: string }
 > = {
+  DRAFT: { label: "Borrador", icon: Clock, badge: "bg-slate-100 text-slate-700 border-slate-200", hint: "Pendiente de emisión" },
   ISSUED: { label: "Pendiente", icon: Clock, badge: "bg-amber-100 text-amber-700 border-amber-200", hint: "Aún no está pagada" },
   PAID: { label: "Pagada", icon: CheckCircle, badge: "bg-emerald-100 text-emerald-700 border-emerald-200", hint: "Pago completado" },
   PARTIALLY_PAID: { label: "Parcialmente pagada", icon: Check, badge: "bg-blue-100 text-blue-700 border-blue-200", hint: "Pago parcial" },
@@ -90,6 +92,10 @@ export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
   const invoiceId = Number(params.id);
   const { settings: printSettings } = usePrintSettings();
+  const access = useCurrentUserAccess();
+  const canCreateInvoices = !!access?.actions.invoices.create;
+  const canAnnulInvoices = !!access?.actions.invoices.annul;
+  const canRegisterPayments = !!access?.actions.payments.register;
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,6 +125,10 @@ export default function InvoiceDetailPage() {
         setErr(null);
         const data = await apiGetInvoice(invoiceId);
         if (!mounted) return;
+        if (data.status === "DRAFT" && canCreateInvoices) {
+          router.replace(`/invoices/new?draftId=${data.id}`);
+          return;
+        }
         setInvoice(data);
         setPayAmount(String(Math.max(0, Number(data.total) - data.payments.reduce((a, p) => a + Number(p.amount), 0)).toFixed(2)));
       } catch (e: any) {
@@ -132,7 +142,7 @@ export default function InvoiceDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [invoiceId]);
+  }, [canCreateInvoices, invoiceId, router]);
 
   useEffect(() => {
     setShowPaymentActions(searchParams.get("payment") === "registered");
@@ -141,8 +151,8 @@ export default function InvoiceDetailPage() {
   const ui = invoice ? (statusUI[invoice.status] ?? { label: invoice.status, icon: Clock, badge: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20", hint: "" }) : null;
   const StatusIcon = ui?.icon ?? Clock;
 
-  const canPay = invoice && invoice.status !== "PAID" && invoice.status !== "VOID" && invoice.status !== "CANCELLED";
-  const canVoid = invoice && invoice.status !== "VOID" && invoice.status !== "CANCELLED";
+  const canPay = canRegisterPayments && invoice && invoice.status !== "PAID" && invoice.status !== "VOID" && invoice.status !== "CANCELLED";
+  const canVoid = canAnnulInvoices && invoice && invoice.status !== "VOID" && invoice.status !== "CANCELLED";
 
   const refresh = async () => {
     const data = await apiGetInvoice(invoiceId);

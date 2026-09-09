@@ -70,6 +70,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isSessionUserGlobalAdmin } from "@/lib/server-auth";
 import { readCurrentUserProfile } from "@/lib/current-user-profile";
+import { getFirstAllowedRoute } from "@/lib/allowed-routes";
 
 export const runtime = "nodejs";
 
@@ -84,18 +85,7 @@ export default async function Home() {
       redirect("/admin/clinics");
     }
     const profile = await readCurrentUserProfile();
-    const destinations: Array<[keyof typeof profile.access.modules, string]> = [
-      ["dashboard", "/dashboard"],
-      ["today", "/today"],
-      ["appointments", "/appointments"],
-      ["clients", "/clients"],
-      ["pets", "/pets"],
-      ["inventory", "/inventory"],
-      ["invoices", "/invoices"],
-      ["services", "/services"],
-      ["employees", "/employees"],
-    ];
-    redirect(destinations.find(([module]) => profile.access.modules[module])?.[1] ?? "/login?error=no-access");
+    redirect(getFirstAllowedRoute(profile.access.modules) ?? "/no-access");
   }
   redirect("/login");
 

@@ -105,7 +105,7 @@ async function loadCurrentUserProfileRow() {
 
   const membership = await getActiveClinicMembershipForUser(sessionUser.id);
   const pendingInvite = await prisma.employeeInvite.findFirst({
-    where: { userId: sessionUser.id, email: sessionUser.email.toLowerCase(), acceptedAt: null },
+    where: { userId: sessionUser.id, email: sessionUser.email.toLowerCase(), acceptedAt: null, revokedAt: null },
     select: { id: true },
   });
 

@@ -37,6 +37,7 @@ import { getClinicDateKey } from "@/lib/appointment-time";
 import {
   filterAppointmentsByClinicDay,
   canPerformAction,
+  isVetAvailableForRange,
 } from "@/lib/appointment-helpers";
 
 type PetDTO = { id: number; name: string; species: string; clientId: number };
@@ -309,6 +310,10 @@ export default function AppointmentsPage() {
   }>({ variant: "info", title: "" });
   const canCreateAppointments = !!access?.actions.appointments.create;
   const canUpdateAppointments = !!access?.actions.appointments.update;
+  const canEditAppointments = !!access?.actions.appointments.edit;
+  const canAttendAppointments = !!access?.actions.appointments.attend;
+  const canCancelAppointments = !!access?.actions.appointments.cancel;
+  const canRescheduleAppointments = !!access?.actions.appointments.reschedule;
   const canDeleteAppointments = !!access?.actions.appointments.delete;
 
   const showAlert = useCallback((
@@ -358,6 +363,11 @@ export default function AppointmentsPage() {
     return () => window.removeEventListener("karey:appointments-invalidated", handleInvalidation);
   }, [refreshAll]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => void refreshAll(false), 30_000);
+    return () => window.clearInterval(interval);
+  }, [refreshAll]);
+
   // Initialize list view selected day when clinic timezone is set
   useEffect(() => {
     if (!listViewSelectedDay && clinicTimezone) {
@@ -404,10 +414,21 @@ export default function AppointmentsPage() {
     [appointmentStatuses]
   );
 
-  const vetOptions = useMemo(
-    () => [{ value: "__NONE__", label: "Sin asignar" }, ...vets.map((vet) => ({ value: vet.id, label: vet.name }))],
-    [vets]
-  );
+  const vetOptions = useMemo(() => {
+    const start = formData.date && formData.time ? combineDateAndTime(formData.date, formData.time) : null;
+    const end = formData.date && formData.endTime ? combineDateAndTime(formData.date, formData.endTime) : start ? addMinutes(start, DEFAULT_APPOINTMENT_DURATION_MINUTES) : null;
+    if (!start || !end || end <= start) {
+      return [{ value: "__NONE__", label: "Sin asignar" }, ...vets.map((vet) => ({ value: vet.id, label: vet.name }))];
+    }
+    const daySchedule = scheduleByDay.get(getWeekdayKey(start));
+    const openAt = daySchedule?.open ? combineDateAndTime(formData.date, daySchedule.open) : null;
+    const closeAt = daySchedule?.close ? combineDateAndTime(formData.date, daySchedule.close) : null;
+    if (!daySchedule || daySchedule.closed || !openAt || !closeAt || start < openAt || end > closeAt) {
+      return [{ value: "__NONE__", label: "Sin asignar" }];
+    }
+    const available = vets.filter((vet) => isVetAvailableForRange(appointments, vet.id, start, end, editing?.id));
+    return [{ value: "__NONE__", label: "Sin asignar" }, ...available.map((vet) => ({ value: vet.id, label: vet.name }))];
+  }, [appointments, editing?.id, formData.date, formData.endTime, formData.time, scheduleByDay, vets]);
 
   const selectedPet = formData.petId ? petById.get(Number(formData.petId)) ?? null : null;
   const selectedClient = selectedPet ? clientById.get(selectedPet.clientId) ?? null : null;
@@ -663,7 +684,7 @@ export default function AppointmentsPage() {
   }
 
   async function startEncounter(appointment: AppointmentDTO) {
-    if (!canUpdateAppointments || appointment.status === "COMPLETED") return;
+    if (!canAttendAppointments || appointment.status === "COMPLETED") return;
     setSaving(true);
     try {
       await requestJson(`/api/appointments/${appointment.id}`, { method: "PUT", body: JSON.stringify({ status: "IN_PROGRESS" }) });
@@ -681,12 +702,6 @@ export default function AppointmentsPage() {
     if (!encounter) return;
     const target = appointments.find((appointment) => appointment.id === encounter.appointmentId && appointment.status === "IN_PROGRESS");
     if (target) {
-      const invoiceResponse = await fetch(`/api/invoices?appointmentId=${target.id}&take=1`, { cache: "no-store" });
-      const invoices = invoiceResponse.ok ? await invoiceResponse.json() as unknown[] : [];
-      if (invoices.length === 0) {
-        router.push(`/invoices/new?clientId=${target.clientId}&petId=${target.petId}&appointmentId=${target.id}&returnTo=/appointments`);
-        return;
-      }
       await requestJson(`/api/appointments/${target.id}`, { method: "PUT", body: JSON.stringify({ status: "COMPLETED" }) });
       setAppointments((current) => current.map((item) => item.id === target.id ? { ...item, status: "COMPLETED" } : item));
     }
@@ -765,7 +780,7 @@ export default function AppointmentsPage() {
   }
 
   async function submitAppointment() {
-    if ((editing && !canUpdateAppointments) || (!editing && !canCreateAppointments)) {
+    if ((editing && !canEditAppointments) || (!editing && !canCreateAppointments)) {
       showAlert("warning", "No tienes permisos para guardar citas");
       return;
     }
@@ -996,11 +1011,11 @@ export default function AppointmentsPage() {
       header: "Acciones",
       cell: (row: AppointmentTableRow) => (
         <div className="flex items-center gap-2">
-          {canUpdateAppointments && canPerformAction(row.status, "attend") ? <Button variant="outline" size="sm" onClick={() => void startEncounter(row)}>Atender</Button> : null}
-          {canUpdateAppointments && row.status === "IN_PROGRESS" ? <Button variant="outline" size="sm" onClick={() => setEncounter({ appointmentId: row.id, petId: row.petId, clientId: row.clientId })}>Gestionar atención</Button> : null}
-          {canUpdateAppointments && canPerformAction(row.status, "reschedule") ? <Button variant="ghost" size="sm" onClick={() => { const start = safeDate(row.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(row); }}>Reprogramar</Button> : null}
-          {canUpdateAppointments && canPerformAction(row.status, "cancel") ? <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setCancelTarget(row)}>Cancelar</Button> : null}
-          {canUpdateAppointments && canPerformAction(row.status, "reschedule") ? (
+          {canAttendAppointments && canPerformAction(row.status, "attend") ? <Button variant="outline" size="sm" onClick={() => void startEncounter(row)}>Atender</Button> : null}
+          {canAttendAppointments && row.status === "IN_PROGRESS" ? <Button variant="outline" size="sm" onClick={() => setEncounter({ appointmentId: row.id, petId: row.petId, clientId: row.clientId })}>Gestionar atención</Button> : null}
+          {canRescheduleAppointments && canPerformAction(row.status, "reschedule") ? <Button variant="ghost" size="sm" onClick={() => { const start = safeDate(row.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(row); }}>Reprogramar</Button> : null}
+          {canCancelAppointments && canPerformAction(row.status, "cancel") ? <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setCancelTarget(row)}>Cancelar</Button> : null}
+          {canRescheduleAppointments && canPerformAction(row.status, "reschedule") ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
               <Edit className="h-4 w-4 text-muted-foreground" />
             </Button>
@@ -1635,6 +1650,7 @@ export default function AppointmentsPage() {
             }
             vets={vets}
             onFinish={() => void finishEncounter()}
+            onViewInvoice={(invoiceId) => router.push(`/invoices/${invoiceId}`)}
             onBilling={() =>
               router.push(
                 `/invoices/new?clientId=${encounter.clientId}&petId=${encounter.petId}&appointmentId=${encounter.appointmentId}`,

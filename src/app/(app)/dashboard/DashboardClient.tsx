@@ -6,13 +6,15 @@ import QuickActions from "@/components/dashboard/QuickActions";
 import UpcomingAppointments from "@/components/dashboard/UpcomingAppointments";
 import VaccineReminders from "@/components/dashboard/VaccineReminders";
 import LowStockAlerts from "@/components/dashboard/LowStockAlerts";
+import ExpiringInventoryAlerts from "@/components/dashboard/ExpiringInventoryAlerts";
 import RecentInvoices from "@/components/dashboard/RecentInvoices";
 import AppMetricCard from "@/components/shared/AppMetricCard";
 import AppPageHero from "@/components/shared/AppPageHero";
+import OwnerSetupChecklist from "@/components/layout/onboarding/OwnerSetupChecklist";
 
 import type { DashboardDataDTO } from "@/types/common";
 
-export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
+export default function DashboardClient({ data, showOwnerChecklist = false }: { data: DashboardDataDTO; showOwnerChecklist?: boolean }) {
   const {
     clients,
     patients,
@@ -21,6 +23,7 @@ export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
     upcomingAppointments,
     vaccinations,
     products,
+    expiringProducts,
     invoices,
   } = data;
 
@@ -32,6 +35,8 @@ export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
         title="Panel principal"
         description="Consulta agenda, pacientes, inventario y facturación desde una misma vista operativa."
       />
+
+      {showOwnerChecklist ? <OwnerSetupChecklist state={data.setupChecklist} /> : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AppMetricCard
@@ -72,6 +77,7 @@ export default function DashboardClient({ data }: { data: DashboardDataDTO }) {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ExpiringInventoryAlerts products={expiringProducts} />
         <LowStockAlerts products={products} />
         <RecentInvoices invoices={invoices} clients={clients} />
       </div>

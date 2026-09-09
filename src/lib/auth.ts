@@ -153,7 +153,7 @@ export const getClinicIdOrFail = async () => {
   }
 
   const inactiveMembership = await prisma.clinicMember.findFirst({ where: { userId: user.id, isActive: false }, select: { id: true } });
-  const pendingInvite = await prisma.employeeInvite.findFirst({ where: { userId: user.id, email: user.email.toLowerCase(), acceptedAt: null }, select: { id: true } });
+  const pendingInvite = await prisma.employeeInvite.findFirst({ where: { userId: user.id, email: user.email.toLowerCase(), acceptedAt: null, revokedAt: null }, select: { id: true } });
 
   if (inactiveMembership && !pendingInvite) {
     throw new Error("ACCESS_REVOKED");

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import ClinicalVisitForm from "@/components/shared/ClinicalVisitForm";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 import FormField from "./FormField";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 
 type Vaccine = { id: number; name: string; species?: string | null };
 type CatalogItem = { id: number; name: string; price: string; sku?: string | null };
@@ -35,11 +36,15 @@ type EncounterWorkflowProps = {
   onLinked?: (link: { clientId: number; petId: number }) => void;
   onFinish?: () => void | Promise<void>;
   onBilling?: () => void | Promise<void>;
+  onViewInvoice?: (invoiceId: number) => void;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function EncounterWorkflow({ petId, clientId, appointmentId, todayTurnId, walkInOwnerName = "", walkInOwnerPhone = "", walkInPetName = "", walkInSpecies = "DOG", assignedVetId, vets = [], vaccines = [], products = [], services = [], onSaved, onLinked, onFinish, onBilling }: EncounterWorkflowProps) {
+export default function EncounterWorkflow({ petId, clientId, appointmentId, todayTurnId, walkInOwnerName = "", walkInOwnerPhone = "", walkInPetName = "", walkInSpecies = "DOG", assignedVetId, vets = [], vaccines = [], products = [], services = [], onSaved, onLinked, onFinish, onBilling, onViewInvoice }: EncounterWorkflowProps) {
+  const access = useCurrentUserAccess();
+  const canCreateInvoice = !!access?.actions.invoices.create;
+  const canAddConsumptions = !!access?.actions.encounters.addConsumptions;
   const link = appointmentId ? `appointmentId=${appointmentId}` : todayTurnId ? `todayTurnId=${todayTurnId}` : "";
   const [linkedPetId, setLinkedPetId] = useState<number | null>(petId);
   const [linkedClientId, setLinkedClientId] = useState<number | null>(clientId);
@@ -64,7 +69,10 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
   const [savingItem, setSavingItem] = useState(false);
   const [vaccineDrafts, setVaccineDrafts] = useState<VaccineDraft[]>([]);
   const [savingVaccines, setSavingVaccines] = useState(false);
+  const [sendingToBilling, setSendingToBilling] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
+  const [invoiceId, setInvoiceId] = useState<number | null>(null);
+  const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
   const items = itemType === "SERVICE" ? catalogServices : catalogProducts;
 
   useEffect(() => {
@@ -74,16 +82,22 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
       if (!profile?.clinicId) return;
       const responses = await Promise.all([
         link && linkedPetId && linkedClientId ? fetch(`/api/encounter-items?${link}`, { cache: "no-store" }) : Promise.resolve(null),
+        link ? fetch(`/api/encounters/draft?${link}`, { cache: "no-store" }) : Promise.resolve(null),
         fetch("/api/pos/products", { cache: "no-store" }),
         fetch("/api/pos/services", { cache: "no-store" }),
         fetch(`/api/vaccines?clinicId=${profile.clinicId}`, { cache: "no-store" }),
         fetch("/api/appointments/meta", { cache: "no-store" }),
       ]);
       if (responses[0]?.ok) setDraftItems(await responses[0].json());
-      if (!products.length && responses[1].ok) setCatalogProducts(await responses[1].json());
-      if (!services.length && responses[2].ok) setCatalogServices(await responses[2].json());
-      if (!vaccines.length && responses[3].ok) setCatalogVaccines(await responses[3].json());
-      if (!vets.length && responses[4].ok) setCatalogVets(((await responses[4].json()) as { vets?: typeof vets }).vets ?? []);
+      if (responses[1]?.ok) {
+        const invoice = await responses[1].json().catch(() => null) as { id?: number; status?: string } | null;
+        setInvoiceId(invoice?.id ?? null);
+        setInvoiceStatus(invoice?.status ?? null);
+      }
+      if (!products.length && responses[2].ok) setCatalogProducts(await responses[2].json());
+      if (!services.length && responses[3].ok) setCatalogServices(await responses[3].json());
+      if (!vaccines.length && responses[4].ok) setCatalogVaccines(await responses[4].json());
+      if (!vets.length && responses[5].ok) setCatalogVets(((await responses[5].json()) as { vets?: typeof vets }).vets ?? []);
     })().catch(() => toast.error("No se pudieron cargar los consumos.")).finally(() => setLoadingItems(false));
   }, [link, linkedClientId, linkedPetId, products.length, services.length, vaccines.length, vets.length]);
 
@@ -130,6 +144,7 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
   }
 
   async function addItem() {
+    if (!canAddConsumptions) return;
     const selected = items.find((item) => String(item.id) === selectedItem);
     if (!selected || savingItem) return;
     setSavingItem(true);
@@ -144,9 +159,31 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
   }
 
   async function removeItem(id: number) {
+    if (!canAddConsumptions) return;
     const response = await fetch(`/api/encounter-items?id=${id}`, { method: "DELETE" });
     if (!response.ok) { toast.error("No se pudo eliminar el consumo."); return; }
     setDraftItems((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function sendToBilling() {
+    if (!appointmentId && !todayTurnId) return;
+    if (sendingToBilling) return;
+    setSendingToBilling(true);
+    try {
+      const response = await fetch("/api/encounters/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointmentId: appointmentId ?? null, todayTurnId: todayTurnId ?? null }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error ?? "No se pudo enviar a facturación.");
+      toast.success("Atención enviada a facturación correctamente.");
+      await onFinish?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo enviar a facturación.");
+    } finally {
+      setSendingToBilling(false);
+    }
   }
 
   function addVaccine() {
@@ -185,10 +222,12 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
             <Syringe className="h-4 w-4" />
             Vacunas
           </TabsTrigger>
-          <TabsTrigger value="billing">
-            <FileText className="h-4 w-4" />
-            Consumos
-          </TabsTrigger>
+          {canAddConsumptions ? (
+            <TabsTrigger value="billing">
+              <FileText className="h-4 w-4" />
+              Consumos
+            </TabsTrigger>
+          ) : null}
         </TabsList>
         <TabsContent value="visit">
           <ClinicalVisitForm
@@ -343,7 +382,7 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
             </Button>
           ) : null}
         </TabsContent>
-        <TabsContent value="billing" className="space-y-4">
+        {canAddConsumptions ? <TabsContent value="billing" className="space-y-4">
           <div className="flex gap-2">
             <Button
               type="button"
@@ -424,12 +463,17 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
               No hay consumos registrados en esta atención.
             </p>
           ) : null}
-        </TabsContent>
+        </TabsContent> : null}
       </Tabs>
       <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
-        {draftItems.length > 0 || onBilling ? (
-            <Button type="button" onClick={() => void onBilling?.()} disabled={!onBilling}>
-            {registered ? "Ir a facturación" : "Gestionar venta general"}
+        {invoiceStatus !== "DRAFT" && invoiceId && onViewInvoice ? (
+          <Button type="button" onClick={() => onViewInvoice(invoiceId)}>
+            Ver factura
+          </Button>
+        ) : draftItems.length > 0 && (onBilling || onFinish) ? (
+          <Button type="button" disabled={sendingToBilling} onClick={() => void (canCreateInvoice ? onBilling?.() : sendToBilling())}>
+            {sendingToBilling ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {sendingToBilling ? "Enviando..." : canCreateInvoice ? "Continuar a facturación" : "Enviar a facturación"}
           </Button>
         ) : null}
         {onFinish ? (

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { differenceInMonths, differenceInYears, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Edit, Eye, PawPrint, Plus, Trash2, User as UserIcon } from "lucide-react";
+import { Edit, Eye, FileText, PawPrint, Plus, Trash2, User as UserIcon } from "lucide-react";
 import AppPageHero from "@/components/shared/AppPageHero";
 import DataTable from "@/components/shared/Datatable";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
@@ -25,6 +25,7 @@ import { PetCreateSchema, PetUpdateSchema } from "@/lib/validators/pet";
 import { toast } from "sonner";
 import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
 import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
+import ClinicalReportDialog from "@/components/shared/ClinicalReportDialog";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -108,6 +109,8 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [savingPatient, setSavingPatient] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
+  const [selectedPetIds, setSelectedPetIds] = useState<number[]>([]);
+  const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
 
   const [patientModalOpen, setPatientModalOpen] = useState(false);
   const [quickClientOpen, setQuickClientOpen] = useState(false);
@@ -120,8 +123,10 @@ export default function PatientsPage() {
   const [deleteTarget, setDeleteTarget] = useState<PetRow | null>(null);
 
   const canCreatePets = !!access?.actions.pets.create;
+  const canCreateClients = !!access?.actions.clients.create;
   const canUpdatePets = !!access?.actions.pets.update;
   const canDeletePets = !!access?.actions.pets.delete;
+  const canGenerateClinicalReports = !!access?.actions.pets.viewClinicalHistory;
 
   async function refreshAll() {
     setLoading(true);
@@ -195,6 +200,7 @@ export default function PatientsPage() {
   }
 
   async function submitQuickClient() {
+    if (!canCreateClients) return;
     const parsed = ClientFormSchema.safeParse(quickClientForm);
     if (!parsed.success) {
       const nextErrors: Record<string, string> = {};
@@ -299,6 +305,7 @@ export default function PatientsPage() {
         header: "Paciente",
         cell: (row: PetRow) => (
           <div className="flex items-center gap-3">
+            {canGenerateClinicalReports ? <input type="checkbox" checked={selectedPetIds.includes(row.id)} onChange={() => setSelectedPetIds((current) => current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id])} onClick={(event) => event.stopPropagation()} aria-label={`Seleccionar ${row.name} para informe clínico`} /> : null}
             <div>
               <p className="font-semibold text-foreground">{row.name}</p>
               <p className="text-sm text-muted-foreground">
@@ -424,12 +431,7 @@ export default function PatientsPage() {
         title="Pacientes"
         description="Consulta pacientes, propietarios y seguimiento clínico desde una misma vista."
         actions={
-          canCreatePets ? (
-            <Button className="gap-2" onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              Nuevo paciente
-            </Button>
-          ) : null
+          <div className="flex flex-wrap gap-2">{canGenerateClinicalReports ? <Button variant="outline" className="gap-2" onClick={() => setClinicalReportOpen(true)} disabled={!selectedPetIds.length}><FileText className="h-4 w-4" />Generar informe{selectedPetIds.length ? ` (${selectedPetIds.length})` : ""}</Button> : null}{canCreatePets ? <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" />Nuevo paciente</Button> : null}</div>
         }
         stats={[
           { label: "Pacientes", value: pets.length, hint: "Total de pacientes" },
@@ -468,6 +470,8 @@ export default function PatientsPage() {
           />
         )}
       </div>
+
+      {canGenerateClinicalReports ? <ClinicalReportDialog open={clinicalReportOpen} onClose={() => setClinicalReportOpen(false)} pets={pets} clients={clients} initialPetIds={selectedPetIds} /> : null}
 
       <Modal
         open={patientModalOpen}
@@ -518,6 +522,15 @@ export default function PatientsPage() {
                 searchPlaceholder="Buscar por nombre, teléfono o correo..."
                 value={formData.clientId}
               />
+              {canCreateClients ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">¿El cliente todavía no existe?</span>
+                  <Button type="button" size="sm" variant="outline" onClick={() => openQuickClient()}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Crear cliente
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <FormField

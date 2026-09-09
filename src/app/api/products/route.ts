@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { ProductCreateSchema } from "@/lib/validators/product";
+import { parse } from "date-fns";
+import { syncInventoryNotifications } from "@/lib/in-app-notifications";
 
 function zodDetails(err: z.ZodError) {
   const flat = err.flatten();
@@ -42,6 +44,7 @@ export async function GET(req: Request) {
       trackStock: true,
       stockOnHand: true,
       minStock: true,
+      expirationDate: true,
       isActive: true,
       description: true,
       requiresPrescription: true,
@@ -67,8 +70,9 @@ export async function POST(req: Request) {
 
   const input = parsed.data;
 
-  const created = await prisma.product.create({
-    data: {
+  const created = await prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
       clinicId,
       name: input.name,
       sku: input.sku ?? null,
@@ -79,10 +83,11 @@ export async function POST(req: Request) {
       trackStock: input.trackStock,
       stockOnHand: input.stockOnHand,
       minStock: input.minStock,
+      expirationDate: input.expirationDate ? parse(input.expirationDate, "yyyy-MM-dd", new Date()) : null,
       isActive: input.isActive,
       description: input.description ?? null,
       requiresPrescription: input.requiresPrescription,
-    },
+      },
     select: {
       id: true,
       clinicId: true,
@@ -95,13 +100,31 @@ export async function POST(req: Request) {
       trackStock: true,
       stockOnHand: true,
       minStock: true,
+      expirationDate: true,
       isActive: true,
       description: true,
       requiresPrescription: true,
       createdAt: true,
       updatedAt: true,
     },
+    });
+
+    if (input.category?.trim().toLocaleLowerCase() === "vacuna") {
+      const existingCatalog = await tx.vaccineCatalog.findFirst({
+        where: { clinicId, name: input.name },
+        select: { id: true, productId: true },
+      });
+      if (existingCatalog && !existingCatalog.productId) {
+        await tx.vaccineCatalog.update({ where: { id: existingCatalog.id }, data: { productId: product.id, isActive: product.isActive } });
+      } else if (!existingCatalog) {
+        await tx.vaccineCatalog.create({ data: { clinicId, productId: product.id, name: product.name, isActive: product.isActive } });
+      }
+    }
+
+    return product;
   });
+
+  await syncInventoryNotifications(clinicId);
 
   return NextResponse.json(created, { status: 201 });
 }

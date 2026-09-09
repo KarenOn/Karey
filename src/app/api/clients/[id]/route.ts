@@ -25,6 +25,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
   }
 
+  const duplicate = await prisma.client.findFirst({
+    where: {
+      clinicId,
+      id: { not: existing.id },
+      OR: [
+        { phone: parsed.data.phone },
+        ...(parsed.data.email ? [{ email: parsed.data.email }] : []),
+      ],
+    },
+    select: { id: true },
+  });
+  if (duplicate) {
+    return NextResponse.json({ error: "Ya existe un cliente con ese teléfono o correo electrónico." }, { status: 409 });
+  }
+
   const updated = await prisma.client.update({
     where: { id: existing.id },
     data: {

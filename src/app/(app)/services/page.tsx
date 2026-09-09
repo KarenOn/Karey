@@ -97,31 +97,310 @@ export default function ServicesPage() {
     finally { setSaving(false); }
   };
 
-  const columns = useMemo<DataTableColumn<ServiceRow>[]>(() => [
-    { header: "Servicio", accessorKey: "name", cell: (service) => <div><p className="font-medium text-foreground">{service.name}</p>{service.description ? <p className="mt-1 max-w-sm truncate text-xs text-muted-foreground">{service.description}</p> : null}</div> },
-    { header: "Categoria", accessorKey: "category", cell: (service) => <span className="text-sm text-muted-foreground">{service.category || "-"}</span> },
-    { header: "Precio", accessorKey: "price", cell: (service) => <span className="font-medium text-foreground">{money(service.price)}</span> },
-    { header: "Duracion", accessorKey: "durationMins", cell: (service) => <span className="text-sm text-muted-foreground">{service.durationMins ? `${service.durationMins} min` : "-"}</span> },
-    { header: "Estado", cell: (service) => <StatusBadge active={service.isActive} /> },
-    { header: "Acciones", cell: (service) => <div className="flex justify-end gap-1">{canUpdate ? <Button type="button" variant="ghost" size="icon-sm" onClick={() => openEdit(service)} aria-label={`Editar ${service.name}`}><Edit className="h-4 w-4" /></Button> : null}{canDelete ? <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" onClick={() => { setSelected(service); setDeleteOpen(true); }} aria-label={`Eliminar ${service.name}`}><Trash2 className="h-4 w-4" /></Button> : null}</div> },
-  ], [canDelete, canUpdate]);
+  const columns = useMemo<DataTableColumn<ServiceRow>[]>(
+    () => [
+      {
+        header: "Servicio",
+        accessorKey: "name",
+        cell: (service) => (
+          <div>
+            <p className="font-medium text-foreground">{service.name}</p>
+            {service.description ? (
+              <p className="mt-1 max-w-sm truncate text-xs text-muted-foreground">
+                {service.description}
+              </p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        header: "Categoria",
+        accessorKey: "category",
+        cell: (service) => (
+          <span className="text-sm text-muted-foreground">
+            {service.category || "-"}
+          </span>
+        ),
+      },
+      {
+        header: "Precio",
+        accessorKey: "price",
+        cell: (service) => (
+          <span className="font-medium text-foreground">
+            {money(service.price)}
+          </span>
+        ),
+      },
+      {
+        header: "Duracion",
+        accessorKey: "durationMins",
+        cell: (service) => (
+          <span className="text-sm text-muted-foreground">
+            {service.durationMins ? `${service.durationMins} min` : "-"}
+          </span>
+        ),
+      },
+      {
+        header: "Estado",
+        cell: (service) => <StatusBadge active={service.isActive} />,
+      },
+      {
+        header: "Acciones",
+        cell: (service) => (
+          <div className="flex justify-end gap-1">
+            {canUpdate ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => openEdit(service)}
+                aria-label={`Editar ${service.name}`}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            ) : null}
+            {canDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setSelected(service);
+                  setDeleteOpen(true);
+                }}
+                aria-label={`Eliminar ${service.name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
+        ),
+      },
+    ],
+    [canDelete, canUpdate],
+  );
 
-  return <div className="space-y-6">
-    <AppPageHero badgeIcon={<Sparkles className="size-3.5" />} badgeLabel="Servicios y catalogo" title="Servicios veterinarios" description="Organiza tu catalogo." actions={canCreate ? <Button onClick={openCreate}><Plus className="h-4 w-4" />Nuevo servicio</Button> : null} stats={[{ label: "Servicios", value: rows.length, hint: "Catalogo total" }, { label: "Activos", value: activeServices, hint: "Disponibles en operacion" }, { label: "Precio medio", value: money(averagePrice), hint: "Referencia rapida" }]} />
-    {error ? <Alert variant="destructive"><AlertTitle>Ocurrio un problema</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
-    {loading ? <div className="app-panel-strong space-y-4 p-5"><div className="h-10 w-full animate-pulse rounded-md bg-muted" /><div className="h-64 animate-pulse rounded-md bg-muted" /></div> : <DataTable<ServiceRow>
-      title="Servicios"
-      columns={columns}
-      data={filteredRows}
-      searchKeys={["name", "category", "description"]}
-      searchValue={search}
-      onSearchChange={setSearch}
-      searchPlaceholder="Buscar por nombre, categoria o descripcion..."
-      emptyMessage="No hay servicios que coincidan con los filtros."
-      actions={<div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]"><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los estados</SelectItem><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todas las categorias</SelectItem>{categories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent></Select></div>}
-    />}
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>{editing ? "Editar servicio" : "Nuevo servicio"}</DialogTitle></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label htmlFor="service-name">Nombre</Label><Input id="service-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></div><div className="space-y-2"><Label>Categoria</Label><Select value={form.category} onValueChange={(category) => setForm((current) => ({ ...current, category }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Array.from(new Set([...formCategories, ...categories])).map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent></Select></div><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="service-price">Precio</Label><Input id="service-price" type="number" min={0} value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: Math.max(0, Number(event.target.value) || 0) }))} /></div><div className="space-y-2"><Label htmlFor="service-duration">Duracion (min)</Label><Input id="service-duration" type="number" min={0} value={form.durationMins} onChange={(event) => setForm((current) => ({ ...current, durationMins: event.target.value === "" ? "" : Math.max(0, Number(event.target.value) || 0) }))} /></div></div><div className="space-y-2"><Label htmlFor="service-description">Descripcion</Label><Textarea id="service-description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></div><div className="app-panel-muted flex items-center justify-between p-4"><div><p className="text-sm font-medium text-foreground">Servicio activo</p><p className="text-xs text-muted-foreground">Disponible para facturacion y agenda.</p></div><Switch checked={form.isActive} onCheckedChange={(isActive) => setForm((current) => ({ ...current, isActive }))} /></div></div><DialogFooter><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button><Button type="button" onClick={() => void save()} disabled={saving}>{saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear servicio"}</Button></DialogFooter></DialogContent></Dialog>
-    <ModalDelete open={deleteOpen} onOpenChange={setDeleteOpen} title="Eliminar servicio" itemName={selected?.name} loading={saving} onConfirm={() => void confirmDelete()} />
-    <AppAlert open={alertOpen} onOpenChange={setAlertOpen} variant={alert.variant} title={alert.title} description={alert.description} />
-  </div>;
+  return (
+    <div className="space-y-6">
+      <AppPageHero
+        badgeIcon={<Sparkles className="size-3.5" />}
+        badgeLabel="Servicios y catalogo"
+        title="Servicios veterinarios"
+        description="Organiza tu catalogo."
+        actions={
+          canCreate ? (
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Nuevo servicio
+            </Button>
+          ) : null
+        }
+        stats={[
+          { label: "Servicios", value: rows.length, hint: "Catalogo total" },
+          {
+            label: "Activos",
+            value: activeServices,
+            hint: "Disponibles en operacion",
+          },
+          {
+            label: "Precio medio",
+            value: money(averagePrice),
+            hint: "Referencia rapida",
+          },
+        ]}
+      />
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Ocurrio un problema</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {loading ? (
+        <div className="app-panel-strong space-y-4 p-5">
+          <div className="h-10 w-full animate-pulse rounded-md bg-muted" />
+          <div className="h-64 animate-pulse rounded-md bg-muted" />
+        </div>
+      ) : (
+        <DataTable<ServiceRow>
+          title="Servicios"
+          columns={columns}
+          data={filteredRows}
+          searchKeys={["name", "category", "description"]}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar por nombre, categoria o descripcion..."
+          emptyMessage="No hay servicios que coincidan con los filtros."
+          actions={
+            <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los estados</SelectItem>
+                  <SelectItem value="ACTIVE">Activo</SelectItem>
+                  <SelectItem value="INACTIVE">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas las categorias</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          }
+        />
+      )}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? "Editar servicio" : "Nuevo servicio"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="service-name">Nombre</Label>
+              <Input
+                id="service-name"
+                value={form.name}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select
+                value={form.category}
+                onValueChange={(category) =>
+                  setForm((current) => ({ ...current, category }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from(new Set([...formCategories, ...categories])).map(
+                    (category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="service-price">Precio</Label>
+                <Input
+                  id="service-price"
+                  type="number"
+                  min={0}
+                  value={form.price}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      price: Math.max(0, Number(event.target.value) || 0),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="service-duration">Duracion (min)</Label>
+                <Input
+                  id="service-duration"
+                  type="number"
+                  min={0}
+                  value={form.durationMins}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      durationMins:
+                        event.target.value === ""
+                          ? ""
+                          : Math.max(0, Number(event.target.value) || 0),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="service-description">Descripcion</Label>
+              <Textarea
+                id="service-description"
+                value={form.description}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="app-panel-muted flex items-center justify-between p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Servicio activo
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Disponible para facturacion y agenda.
+                </p>
+              </div>
+              <Switch
+                checked={form.isActive}
+                onCheckedChange={(isActive) =>
+                  setForm((current) => ({ ...current, isActive }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void save()} disabled={saving}>
+              {saving
+                ? "Guardando..."
+                : editing
+                  ? "Guardar cambios"
+                  : "Crear servicio"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ModalDelete
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Eliminar servicio"
+        itemName={selected?.name}
+        loading={saving}
+        onConfirm={() => void confirmDelete()}
+      />
+      <AppAlert
+        open={alertOpen}
+        onOpenChange={setAlertOpen}
+        variant={alert.variant}
+        title={alert.title}
+        description={alert.description}
+      />
+    </div>
+  );
 }

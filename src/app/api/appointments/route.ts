@@ -6,6 +6,7 @@ import { syncAppointmentReminderNotifications } from "@/lib/reminders";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentCreateSchema } from "@/lib/validators/appointments";
 import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
+import { hasPermission, isElevatedClinicRole } from "@/lib/permissions";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -257,6 +258,11 @@ export async function GET(req: Request) {
     if (query.to) {
       (where.startAt as { lte?: Date }).lte = new Date(query.to);
     }
+  }
+
+  if (url.searchParams.get("surface") === "now-alert" && !isElevatedClinicRole(member?.role.key) && !hasPermission(member?.role.permissions, "appointments.receiveUnassignedNowAlerts")) {
+    where.vetId = member?.role.key === "vet" ? session.user.id : { not: null };
+    delete where.OR;
   }
 
   const appointments = await prisma.appointment.findMany({

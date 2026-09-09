@@ -6,7 +6,11 @@ export async function GET() {
   const { clinicId } = await requireClinicPermission("vaccines.read");
 
   const vaccines = await prisma.vaccineCatalog.findMany({
-    where: { clinicId, isActive: true },
+    where: {
+      clinicId,
+      isActive: true,
+      // OR: [{ product: { is: null } }, { product: { isActive: true } }],
+    },
     orderBy: { name: "asc" },
   });
 

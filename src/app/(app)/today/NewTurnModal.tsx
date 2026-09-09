@@ -376,7 +376,7 @@ export default function NewTurnModal({
     <Modal
       onClose={onOpenChange}
       open={open}
-      size="full"
+      size="lg"
       title="Nuevo turno"
       footer={
         <div className="flex gap-3">

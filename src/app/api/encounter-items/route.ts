@@ -26,7 +26,7 @@ async function resolveOwner(link: z.infer<typeof LinkSchema>, clinicId: number) 
 }
 
 export async function GET(req: Request) {
-  const { clinicId } = await requireClinicPermission("pets.read");
+  const { clinicId } = await requireClinicPermission("visits.read");
   const parsed = LinkSchema.safeParse({
     appointmentId: req.url ? Number(new URL(req.url).searchParams.get("appointmentId")) || null : null,
     todayTurnId: req.url ? Number(new URL(req.url).searchParams.get("todayTurnId")) || null : null,
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("pets.update");
+  const { clinicId } = await requireClinicPermission("encounters.addConsumptions");
   const parsed = CreateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message }, { status: 422 });
   const owner = await resolveOwner(parsed.data, clinicId);
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const { clinicId } = await requireClinicPermission("pets.update");
+  const { clinicId } = await requireClinicPermission("encounters.addConsumptions");
   const id = Number(new URL(req.url).searchParams.get("id"));
   if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "ID inválido" }, { status: 422 });
   const deleted = await prisma.encounterItem.deleteMany({ where: { id, clinicId } });

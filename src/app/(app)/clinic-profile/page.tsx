@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import SignedFileUploader from "@/components/shared/SignedFileUploader";
+import SignedFileUploader, { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
-  Building2, Mail, Phone, Globe, MapPin, FileText, CreditCard, Clock,
+  Building2, Mail, Phone, Globe, MapPin, FileText, CreditCard, Clock, Bell,
   Camera, Save, Facebook, Instagram, MessageCircle, Pencil, Check, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ type ClinicProfile = {
   address: string | null;
   currency: string;
   timezone: string;
+  inventoryExpiryAlertDays: number;
 
   logoUrl: string | null;
   logoStorageRef: string | null;
@@ -89,6 +90,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<"general" | "fiscal" | "schedule" | "invoice">("general");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<LocalFile | null>(null);
   const canUpdateClinic = !!access?.actions.clinic.update;
 
 
@@ -128,12 +130,15 @@ export default function ProfilePage() {
   };
 
   const cancelEdit = () => {
+    if (logoFile) URL.revokeObjectURL(logoFile.previewUrl);
+    setLogoFile(null);
     if (snapshot) setProfile(snapshot);
     setIsEditing(true);
     setErr(null);
   };
 
   const handleSave = async () => {
+    if (saving) return;
     if (!canUpdateClinic) {
       setErr("No tienes permisos para actualizar la clinica.");
       return;
@@ -145,7 +150,7 @@ export default function ProfilePage() {
 
       const payload = {
         name: profile.name,
-        logoStorageRef: profile.logoStorageRef ?? "",
+        logoStorageRef: logoFile ? "" : profile.logoStorageRef ?? "",
         slogan: profile.slogan ?? "",
         owner: profile.owner ?? "",
         email: profile.email ?? "",
@@ -154,6 +159,7 @@ export default function ProfilePage() {
         website: profile.website ?? "",
 
         address: profile.address ?? "",
+        inventoryExpiryAlertDays: profile.inventoryExpiryAlertDays,
         // city: profile.city ?? "",
         // state: profile.state ?? "",
         // zipCode: profile.zipCode ?? "",
@@ -178,14 +184,22 @@ export default function ProfilePage() {
         schedule: profile.schedule,
       };
 
-      const updated = await fetchJson<ClinicProfile>("/api/clinic-profile", {
+      const uploaded = logoFile ? await uploadFileToStorage(logoFile, UPLOAD_SCOPES.clinicLogo) : null;
+      let updated: ClinicProfile;
+      try {
+        updated = await fetchJson<ClinicProfile>("/api/clinic-profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+          body: JSON.stringify({ ...payload, ...(uploaded ? { logoStorageRef: uploaded.storageRef } : {}) }),
+        });
+      } catch (error) {
+        if (uploaded) await fetch("/api/uploads/object", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storageRef: uploaded.storageRef }) }).catch(() => undefined);
+        throw error;
+      }
 
       setProfile(updated);
       setSnapshot(updated);
+      if (logoFile) { URL.revokeObjectURL(logoFile.previewUrl); setLogoFile(null); }
       setIsEditing(true);
       setSaved(true);
       const tabMessages = { general: "Información general actualizada correctamente.", fiscal: "Información fiscal actualizada correctamente.", schedule: "Horarios actualizados correctamente.", invoice: "Configuración de facturación actualizada correctamente." };
@@ -205,19 +219,11 @@ export default function ProfilePage() {
     return JSON.stringify(profile) !== JSON.stringify(snapshot);
   }, [profile, snapshot]);
 
-  const handleLogoUploaded = (file: {
-    fileName: string;
-    fileType: string;
-    previewUrl: string;
-    storageRef: string;
-  }) => {
+  const handleLogoSelected = (file: LocalFile) => {
+    if (logoFile) URL.revokeObjectURL(logoFile.previewUrl);
+    setLogoFile(file);
     if (!profile) return;
-
-    setProfile({
-      ...profile,
-      logoStorageRef: file.storageRef,
-      logoUrl: file.previewUrl,
-    });
+    setProfile({ ...profile, logoUrl: file.previewUrl });
     setErr(null);
   };
 
@@ -264,16 +270,17 @@ export default function ProfilePage() {
                 <Building2 className="w-12 h-12 text-primary" />
               )}
             </div>
+
             {isEditing && (
               <div className="absolute -bottom-2 -right-2">
                 <SignedFileUploader
                   accept="image/*"
                   buttonLabel=""
                   className="h-8 w-8 rounded-full bg-primary p-0 text-primary-foreground"
-                  disabled={!isEditing}
+                  disabled={!isEditing || saving}
+                  maxSizeBytes={2 * 1024 * 1024}
                   onError={(message) => setErr(message)}
-                  onUploaded={handleLogoUploaded}
-                  scope="clinic-logo"
+                  onFileSelected={handleLogoSelected}
                 />
               </div>
             )}
@@ -379,9 +386,10 @@ export default function ProfilePage() {
                         <SignedFileUploader
                           accept="image/*"
                           buttonLabel="Subir logo"
+                          disabled={saving}
+                          maxSizeBytes={2 * 1024 * 1024}
                           onError={(message) => setErr(message)}
-                          onUploaded={handleLogoUploaded}
-                          scope="clinic-logo"
+                          onFileSelected={handleLogoSelected}
                         />
                         <Button
                           type="button"
@@ -429,6 +437,15 @@ export default function ProfilePage() {
               <div className="space-y-2">
                 <Label className="font-semibold">Sitio Web</Label>
                 <Input value={profile.website ?? ""} onChange={(e) => setProfile({ ...profile, website: e.target.value })} disabled={!isEditing} />
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-6">
+              <h3 className="mb-1 flex items-center gap-2 font-semibold text-foreground"><Bell className="h-5 w-5 text-primary" /> Alertas de inventario</h3>
+              <p className="mb-4 text-sm text-muted-foreground">Define con cuánta anticipación avisar sobre productos próximos a vencer.</p>
+              <div className="max-w-xs space-y-2">
+                <Label htmlFor="inventory-expiry-alert-days">Avisarme productos próximos a vencer (días antes)</Label>
+                <Input id="inventory-expiry-alert-days" type="number" min={1} max={365} value={profile.inventoryExpiryAlertDays} onChange={(e) => setProfile({ ...profile, inventoryExpiryAlertDays: Number(e.target.value) || 1 })} disabled={!isEditing} />
               </div>
             </div>
 

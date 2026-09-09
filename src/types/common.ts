@@ -524,6 +524,13 @@ export interface DashboardVaccinationDTO {
   applied_at: string | null; // yyyy-MM-dd
 }
 
+export interface DashboardExpiringProductDTO {
+  id: ID;
+  name: string;
+  expirationDate: string;
+  daysUntilExpiration: number;
+}
+
 export interface DashboardDataDTO {
   clinicName: string;
   clients: DashboardClientDTO[];
@@ -532,7 +539,15 @@ export interface DashboardDataDTO {
   upcomingAppointments: DashboardAppointmentDTO[];
   invoices: DashboardInvoiceDTO[];
   products: DashboardLowStockProductDTO[];
+  expiringProducts: DashboardExpiringProductDTO[];
   vaccinations: DashboardVaccinationDTO[];
   todayAppointmentsCount: number;
   monthlyRevenue: Money;
+  setupChecklist: {
+    clinic: boolean;
+    schedule: boolean;
+    services: boolean;
+    team: boolean;
+    appointment: boolean;
+  };
 }

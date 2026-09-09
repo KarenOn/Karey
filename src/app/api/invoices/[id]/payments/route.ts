@@ -4,9 +4,10 @@ import { requireClinicPermission } from "@/lib/server-auth";
 import { PaymentCreateSchema } from "@/lib/validators/payment";
 import { InvoiceStatus, Prisma } from "@/generated/prisma/client";
 import { zodDetails } from "@/lib/zodDetails";
+import { notifyInvoiceEvent } from "@/lib/in-app-notifications";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("invoices.read");
+  const { clinicId } = await requireClinicPermission("payments.read");
   const invoiceId = Number((await params).id);
 
   const inv = await prisma.invoice.findFirst({
@@ -31,7 +32,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("payments.create");
+  const { clinicId } = await requireClinicPermission("payments.register");
   const invoiceId = Number((await params).id);
 
   const body = await req.json().catch(() => null);
@@ -80,8 +81,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
 
-    return { paymentId: created.id, isFullyPaid };
+    return { paymentId: created.id, isFullyPaid, previousStatus: inv.status, nextStatus: isFullyPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID };
   });
+
+  if (result.nextStatus !== result.previousStatus) {
+    await notifyInvoiceEvent(invoiceId, result.isFullyPaid ? "PAID" : "PARTIAL_PAYMENT");
+  }
 
   return NextResponse.json(result, { status: 201 });
 }

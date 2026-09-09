@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrentUserProfile } from "@/components/layout/current-user-context";
+import { PERMISSION_CATALOG } from "@/lib/permissions";
 
 type PermissionMap = Record<string, string[]>;
 type Role = {
@@ -49,26 +50,14 @@ type Invite = { id: number; email: string; expiresAt: string; role: { name: stri
 type Capabilities = {
   canInviteEmployees: boolean;
   canUpdateEmployees: boolean;
+  canChangeRole: boolean;
+  canActivate: boolean;
+  canDeactivate: boolean;
+  canResendInvite: boolean;
   canManageRoles: boolean;
 };
 
-const permissionCatalog = [
-  { module: "dashboard", label: "Resumen", actions: ["read"] },
-  { module: "clinic", label: "Clinica", actions: ["read", "update"] },
-  { module: "employees", label: "Empleados", actions: ["read", "invite", "update", "delete", "activate", "deactivate", "resendInvite"] },
-  { module: "roles", label: "Roles", actions: ["read", "manage", "create", "update", "delete", "managePermissions"] },
-  { module: "appointments", label: "Citas", actions: ["read", "create", "update", "attend", "cancel", "reschedule", "delete"] },
-  { module: "clients", label: "Clientes", actions: ["read", "create", "update", "delete"] },
-  { module: "pets", label: "Pacientes", actions: ["read", "create", "update", "delete", "viewClinicalHistory", "manageVisits", "manageVaccines"] },
-  { module: "today", label: "Hoy", actions: ["read", "create", "update", "manageWalkIns", "manageEncounter"] },
-  { module: "todayTurn", label: "Turnos sin cita", actions: ["read", "create", "update", "delete"] },
-  { module: "visits", label: "Visitas clínicas", actions: ["read", "create", "update", "attachDocuments"] },
-  { module: "vaccines", label: "Vacunas", actions: ["read", "create", "update", "delete"] },
-  { module: "services", label: "Servicios", actions: ["read", "create", "update", "delete"] },
-  { module: "inventory", label: "Inventario", actions: ["read", "create", "update", "delete", "movements"] },
-  { module: "invoices", label: "Facturas", actions: ["read", "create", "update", "delete", "annul", "download", "print"] },
-  { module: "payments", label: "Pagos", actions: ["read", "create"] },
-] as const;
+const permissionCatalog = PERMISSION_CATALOG;
 
 const emptyInvite = { name: "", email: "", roleId: "" };
 const emptyRole = {
@@ -116,6 +105,15 @@ function togglePermission(perms: PermissionMap, moduleKey: string, action: strin
   return { ...perms, [moduleKey]: next.sort() };
 }
 
+function setGroupPermissions(perms: PermissionMap, moduleKey: string, actions: readonly string[], enabled: boolean) {
+  if (!enabled) {
+    const next = { ...perms };
+    delete next[moduleKey];
+    return next;
+  }
+  return { ...perms, [moduleKey]: [...actions] };
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -136,10 +134,16 @@ export default function EmployeesPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<Member | null>(null);
   const [resendTarget, setResendTarget] = useState<Invite | null>(null);
   const [resendingInvite, setResendingInvite] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<Invite | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities>({
     canInviteEmployees: false,
     canUpdateEmployees: false,
+    canChangeRole: false,
+    canActivate: false,
+    canDeactivate: false,
+    canResendInvite: false,
     canManageRoles: false,
   });
 
@@ -149,6 +153,8 @@ export default function EmployeesPage() {
   const [roleOpen, setRoleOpen] = useState(false);
   const [roleForm, setRoleForm] = useState(emptyRole);
   const [roleKeyTouched, setRoleKeyTouched] = useState(false);
+  const [roleSubmitting, setRoleSubmitting] = useState(false);
+  const editingOwner = roleForm.key === "owner";
 
   const roleOptions = useMemo(
     () => roles.filter((role) => role.id && role.isActive),
@@ -184,6 +190,10 @@ export default function EmployeesPage() {
       setCapabilities({
         canInviteEmployees: !!employeesData.capabilities?.canInviteEmployees,
         canUpdateEmployees: !!employeesData.capabilities?.canUpdateEmployees,
+        canChangeRole: !!employeesData.capabilities?.canChangeRole,
+        canActivate: !!employeesData.capabilities?.canActivate,
+        canDeactivate: !!employeesData.capabilities?.canDeactivate,
+        canResendInvite: !!employeesData.capabilities?.canResendInvite,
         canManageRoles:
           !!employeesData.capabilities?.canManageRoles ||
           !!rolesData.capabilities?.canManageRoles,
@@ -201,6 +211,11 @@ export default function EmployeesPage() {
 
   async function submitInvite() {
     if (inviteSubmitting) return;
+    const email = inviteForm.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Ingresa un correo electrónico válido.");
+      return;
+    }
     setInviteSubmitting(true);
     try {
       const res = await fetch("/api/employees/invite", {
@@ -208,7 +223,7 @@ export default function EmployeesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: inviteForm.name.trim(),
-          email: inviteForm.email.trim(),
+          email,
           roleId: Number(inviteForm.roleId),
         }),
       });
@@ -239,6 +254,23 @@ export default function EmployeesPage() {
       toast.error(errorMessage(resendError, "No se pudo reenviar la invitación"));
     } finally {
       setResendingInvite(false);
+    }
+  }
+
+  async function cancelInvite() {
+    if (!cancelTarget || cancelSubmitting) return;
+    setCancelSubmitting(true);
+    try {
+      const response = await fetch(`/api/employees/invite/${cancelTarget.id}/cancel`, { method: "POST" });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error ?? "No se pudo anular la invitación");
+      setInvites((current) => current.filter((invite) => invite.id !== cancelTarget.id));
+      setCancelTarget(null);
+      toast.success("Invitación anulada correctamente.");
+    } catch (cancelError) {
+      toast.error(errorMessage(cancelError, "No se pudo anular la invitación"));
+    } finally {
+      setCancelSubmitting(false);
     }
   }
 
@@ -293,6 +325,8 @@ export default function EmployeesPage() {
   }
 
   async function submitRole() {
+    if (roleSubmitting) return;
+    setRoleSubmitting(true);
     try {
       const res = await fetch(roleForm.id ? `/api/roles/${roleForm.id}` : "/api/roles", {
         method: roleForm.id ? "PUT" : "POST",
@@ -312,6 +346,8 @@ export default function EmployeesPage() {
       await loadAll(false);
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error guardando rol"));
+    } finally {
+      setRoleSubmitting(false);
     }
   }
 
@@ -441,7 +477,7 @@ export default function EmployeesPage() {
                           const nextRole = roleOptions.find((role) => role.id === Number(value));
                           if (nextRole && nextRole.id !== member.role.id) setPendingRoleChange({ member, roleId: nextRole.id, roleName: nextRole.name });
                         }}
-                        disabled={!capabilities.canUpdateEmployees || currentUser?.userId === member.userId || pendingMemberId === member.id}
+                        disabled={!capabilities.canChangeRole || currentUser?.userId === member.userId || pendingMemberId === member.id}
                         loading={pendingMemberId === member.id}
                         title={currentUser?.userId === member.userId ? "No puedes cambiar tu propio rol" : undefined}
                         buttonClassName="w-[220px] rounded-lg bg-input/60"
@@ -455,7 +491,7 @@ export default function EmployeesPage() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        disabled={!capabilities.canUpdateEmployees}
+                        disabled={(member.isActive ? !capabilities.canDeactivate : !capabilities.canActivate)}
                         onClick={() => {
                           if (currentUser?.userId === member.userId) return;
                           if (member.isActive) setDeactivateTarget(member);
@@ -649,7 +685,10 @@ export default function EmployeesPage() {
                     <p className="mt-1 text-sm normal-case tracking-normal text-foreground">
                       {new Date(invite.expiresAt).toLocaleString("es-BO")}
                     </p>
-                    {capabilities.canInviteEmployees ? <Button variant="outline" size="sm" onClick={() => setResendTarget(invite)}>Reenviar invitación</Button> : null}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {capabilities.canResendInvite ? <Button variant="outline" size="sm" onClick={() => setResendTarget(invite)}>Reenviar invitación</Button> : null}
+                      {capabilities.canDeactivate ? <Button variant="outline" size="sm" onClick={() => setCancelTarget(invite)}>Anular invitación</Button> : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -746,7 +785,31 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={roleOpen} onOpenChange={setRoleOpen}>
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Anular invitación</DialogTitle>
+            <DialogDescription>
+              El enlace actual dejará de funcionar inmediatamente y la invitación se conservará en el historial.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelTarget(null)}>Cancelar</Button>
+            <Button onClick={async () => {
+                if (!cancelTarget) return;
+                // const target = cancelTarget;
+                // await updateMember(target.id, { isActive: false });
+                await cancelInvite();
+                setCancelTarget(null);
+              }}>
+              {pendingMemberId === cancelTarget?.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Anular invitación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={roleOpen} onOpenChange={(open) => { if (!roleSubmitting) setRoleOpen(open); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{roleForm.id ? "Editar rol" : "Nuevo rol"}</DialogTitle>
@@ -759,6 +822,7 @@ export default function EmployeesPage() {
               <div className="space-y-2">
                 <Label>Nombre</Label>
                 <Input
+                  disabled={roleSubmitting}
                   value={roleForm.name}
                   onChange={(e) =>
                     setRoleForm((current) => ({
@@ -773,6 +837,7 @@ export default function EmployeesPage() {
                 <Label>Clave</Label>
                 <Input
                   disabled={!!roleForm.id}
+                  readOnly={roleSubmitting}
                   value={roleForm.key}
                   onChange={(e) => {
                     setRoleKeyTouched(true);
@@ -784,6 +849,7 @@ export default function EmployeesPage() {
             <div className="space-y-2">
               <Label>Descripcion</Label>
               <Textarea
+                disabled={roleSubmitting}
                 value={roleForm.description}
                 onChange={(e) =>
                   setRoleForm((current) => ({ ...current, description: e.target.value }))
@@ -799,16 +865,74 @@ export default function EmployeesPage() {
               </div>
               <Switch
                 checked={roleForm.isActive}
+                disabled={roleSubmitting}
                 onCheckedChange={(checked) =>
                   setRoleForm((current) => ({ ...current, isActive: checked }))
                 }
               />
             </div>
+            {(() => {
+              const selectedActions = permissionCatalog.flatMap((group) => roleForm.permissions[group.module] ?? []);
+              const allSelected = permissionCatalog.every((group) =>
+                group.actions.every((action) => (roleForm.permissions[group.module] ?? []).includes(action))
+              );
+              const partiallySelected = selectedActions.length > 0 && !allSelected;
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
+                  <div>
+                    <div className="font-medium text-foreground">Permisos</div>
+                    <p className="text-sm text-muted-foreground">
+                      {partiallySelected ? "Hay permisos seleccionados parcialmente." : "Configura el acceso del rol por grupo."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    role="checkbox"
+                    aria-checked={partiallySelected ? "mixed" : allSelected}
+                    disabled={roleSubmitting || editingOwner}
+                    onClick={() => setRoleForm((current) => ({
+                      ...current,
+                      permissions: allSelected
+                        ? {}
+                        : Object.fromEntries(permissionCatalog.map((group) => [group.module, [...group.actions]])),
+                    }))}
+                  >
+                    {allSelected ? "Desmarcar todos" : "Marcar todos los permisos"}
+                  </Button>
+                </div>
+              );
+            })()}
             <div className="grid gap-3 md:grid-cols-2">
               {permissionCatalog.map((group) => (
                 <div key={group.module} className="app-panel-muted p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <div className="font-medium text-foreground">{group.label}</div>
+                    <div>
+                      <div className="font-medium text-foreground">{group.label}</div>
+                      {(() => {
+                        const selected = roleForm.permissions[group.module] ?? [];
+                        const allSelected = group.actions.every((action) => selected.includes(action));
+                        const partiallySelected = selected.length > 0 && !allSelected;
+                        return (
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="h-auto px-0 text-xs"
+                            disabled={roleSubmitting || editingOwner}
+                            role="checkbox"
+                            aria-checked={partiallySelected ? "mixed" : allSelected}
+                            onClick={() => setRoleForm((current) => ({
+                              ...current,
+                              permissions: setGroupPermissions(current.permissions, group.module, group.actions, !allSelected),
+                            }))}
+                          >
+                            {partiallySelected ? "Marcar todos" : allSelected ? "Desmarcar todos" : "Marcar todos"}
+                          </Button>
+                        );
+                      })()}
+                    </div>
                     <Badge variant="outline">
                       {(roleForm.permissions[group.module] ?? []).length}/{group.actions.length}
                     </Badge>
@@ -822,6 +946,7 @@ export default function EmployeesPage() {
                           type="button"
                           size="sm"
                           variant={active ? "default" : "outline"}
+                          disabled={roleSubmitting || editingOwner}
                           onClick={() =>
                             setRoleForm((current) => ({
                               ...current,
@@ -843,11 +968,12 @@ export default function EmployeesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRoleOpen(false)}>
+            <Button variant="outline" disabled={roleSubmitting} onClick={() => setRoleOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={submitRole} disabled={!roleForm.name || !roleForm.key}>
-              Guardar
+            <Button onClick={submitRole} disabled={!roleForm.name || !roleForm.key || roleSubmitting}>
+              {roleSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {roleSubmitting ? "Guardando..." : "Guardar"}
             </Button>
           </DialogFooter>
         </DialogContent>

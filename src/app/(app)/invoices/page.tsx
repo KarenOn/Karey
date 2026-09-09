@@ -17,6 +17,7 @@ import { usePrintSettings } from "@/lib/printing/usePrintSettings";
 import DataTablePagination from "@/components/shared/DataTablePagination";
 import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
 import StatusBadge from "@/components/shared/StatusBadge";
+import { formatCurrency, toMoney } from "@/lib/utility";
 
 const statusConfig: Record<string, { label: string; badge: "success" | "info" | "warning" | "destructive" | "neutral" }> = {
   PAID: { label: "Pagada", badge: "success" },
@@ -44,24 +45,6 @@ function StatusSelect({ value, onChange }: { value: string; onChange: (value: st
   );
 }
 
-const toMoney = (v: unknown) => {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
-export function formatCurrency(
-  amount: number,
-  currency: string = 'DOP',
-): string {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  // }).format(Math.abs(amount));
-  }).format(amount);
-}
-
 export default function InvoicesPage() {
   const access = useCurrentUserAccess();
   const { settings: printSettings } = usePrintSettings();
@@ -75,6 +58,7 @@ export default function InvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<InvoiceListRow[]>([]);
   const canCreateInvoices = !!access?.actions.invoices.create;
+  const canAnnulInvoices = !!access?.actions.invoices.annul;
   const canUpdateInvoices = !!access?.actions.invoices.update;
 
   async function load() {
@@ -182,7 +166,7 @@ export default function InvoicesPage() {
         <DropdownMenuItem className="gap-2" onSelect={(event) => { event.preventDefault(); handlePrintReceipt(invoice.id); }}><Receipt className="h-4 w-4" /> Imprimir recibo</DropdownMenuItem>
         <DropdownMenuItem className="gap-2" onSelect={(event) => { event.preventDefault(); handlePrintInvoice(invoice.id); }}><ReceiptText className="h-4 w-4" /> Imprimir factura</DropdownMenuItem>
         <DropdownMenuItem className="gap-2" onSelect={(event) => { event.preventDefault(); void handleDownloadPdf(invoice.id); }}><Download className="h-4 w-4" /> Descargar PDF</DropdownMenuItem>
-        {canUpdateInvoices && invoice.status !== "VOID" ? (
+        {canAnnulInvoices && invoice.status !== "VOID" ? (
           invoice.paymentsCount > 0 ? (
             <DropdownMenuItem disabled className="gap-2 text-muted-foreground" title="Esta factura tiene pagos registrados. Debes revertir o devolver los pagos antes de poder anularla.">
               <Ban className="h-4 w-4" /> Anular factura (requiere reverso)

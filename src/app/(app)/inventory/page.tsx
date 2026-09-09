@@ -37,6 +37,7 @@ import type { ProductCreateInput } from "@/lib/validators/product";
 import type { StockMovementType } from "@/types/common";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { formatCurrency } from "@/lib/utility";
 
 type ProductRow = {
   id: number;
@@ -49,6 +50,7 @@ type ProductRow = {
   trackStock: boolean;
   stockOnHand: number;
   minStock: number;
+  expirationDate: string | null;
   description: string | null;
   requiresPrescription?: boolean;
   isActive: boolean;
@@ -66,6 +68,7 @@ type ProductFormState = {
   trackStock: boolean;
   stockOnHand: string | number;
   minStock: string | number;
+  expirationDate: string;
   description: string;
   requiresPrescription: boolean;
   isActive: boolean;
@@ -96,6 +99,7 @@ const emptyProductForm: ProductFormState = {
   trackStock: true,
   stockOnHand: 0,
   minStock: 5,
+  expirationDate: "",
   description: "",
   requiresPrescription: false,
   isActive: true,
@@ -192,7 +196,9 @@ export default function InventoryPage() {
   const [movements, setMovements] = useState<StockMovementRow[]>([]);
   const [productSearch, setProductSearch] = useState("");
     const [productStatusFilter, setProductStatusFilter] = useState("ALL");
-    const [productCategoryFilter, setProductCategoryFilter] = useState("ALL");
+  const [productCategoryFilter, setProductCategoryFilter] = useState("ALL");
+  const [stockFilter, setStockFilter] = useState("ALL");
+  const [expirationFilter, setExpirationFilter] = useState("ALL");
   const [movementSearch, setMovementSearch] = useState("");
   const [movementTypeFilter, setMovementTypeFilter] = useState("ALL");
   const [movementProductFilter, setMovementProductFilter] = useState("ALL");
@@ -263,9 +269,13 @@ export default function InventoryPage() {
     return products.filter((product) => {
       const statusMatches = productStatusFilter === "ALL" || (productStatusFilter === "ACTIVE" ? product.isActive : !product.isActive);
       const categoryMatches = productCategoryFilter === "ALL" || (product.category || "Otro") === productCategoryFilter;
-      return statusMatches && categoryMatches;
+      const stockMatches = stockFilter === "ALL" || (stockFilter === "LOW" ? product.trackStock && product.stockOnHand <= product.minStock : product.trackStock && product.stockOnHand > product.minStock);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const expiry = product.expirationDate ? new Date(`${product.expirationDate.slice(0, 10)}T00:00:00`) : null;
+      const expirationMatches = expirationFilter === "ALL" || (expirationFilter === "EXPIRED" ? !!expiry && expiry < today : expirationFilter === "EXPIRING" ? !!expiry && expiry >= today && expiry <= new Date(today.getTime() + 5 * 86_400_000) : true);
+      return statusMatches && categoryMatches && stockMatches && expirationMatches;
     });
-  }, [products, productStatusFilter, productCategoryFilter]);
+  }, [products, productStatusFilter, productCategoryFilter, stockFilter, expirationFilter]);
 
   const filteredMovements = useMemo(() => {
     return movements.filter((movement) => {
@@ -317,6 +327,7 @@ export default function InventoryPage() {
       trackStock: !!product.trackStock,
       stockOnHand: product.stockOnHand,
       minStock: product.minStock,
+      expirationDate: product.expirationDate?.slice(0, 10) ?? "",
       description: product.description ?? "",
       requiresPrescription: !!product.requiresPrescription,
       isActive: !!product.isActive,
@@ -361,6 +372,7 @@ export default function InventoryPage() {
       trackStock: !!productForm.trackStock,
       stockOnHand: toNumber(productForm.stockOnHand),
       minStock: toNumber(productForm.minStock),
+      expirationDate: productForm.expirationDate || null,
       description: productForm.description.trim() || null,
       requiresPrescription: !!productForm.requiresPrescription,
       isActive: !!productForm.isActive,
@@ -528,6 +540,17 @@ export default function InventoryPage() {
       ),
     },
     {
+      header: "Vencimiento",
+      cell: (row: ProductRow) => {
+        if (!row.expirationDate) return <span className="text-muted-foreground/60">No aplica</span>;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const date = new Date(`${row.expirationDate.slice(0, 10)}T00:00:00`);
+        const expired = date < today;
+        const expiring = !expired && date <= new Date(today.getTime() + 5 * 86_400_000);
+        return <Badge variant="outline" className={expired ? "border-rose-200 bg-rose-50 text-rose-700" : expiring ? "border-amber-200 bg-amber-50 text-amber-700" : ""}>{expired ? "Expirado · " : expiring ? "Próximo · " : ""}{row.expirationDate.slice(0, 10)}</Badge>;
+      },
+    },
+    {
       header: "Acciones",
       cell: (row: ProductRow) => (
         <div className="flex items-center gap-2">
@@ -638,7 +661,7 @@ export default function InventoryPage() {
           { label: "Productos", value: products.length, hint: "Productos cargados" },
           { label: "Stock", value: lowStockProducts.length, hint: "Stock bajo" },
           { label: "Movimientos", value: movementStats.recent, hint: "Movimientos recientes" },
-          { label: "Valor", value: totalValue, hint: "Stock valorizado" },
+          { label: "Valor", value: formatCurrency(totalValue), hint: "Stock valorizado" },
         ]}
       />
 
@@ -649,10 +672,10 @@ export default function InventoryPage() {
         </TabsList>
 
         <TabsContent value="products" className="space-y-4">
-          <div>
+          {/* <div>
             <h2 className="app-heading text-[2rem] text-foreground sm:text-[2.35rem]">Catalogo de productos</h2>
             <p className="mt-2 text-sm text-muted-foreground">Edita precios, stock, receta y datos generales.</p>
-          </div>
+          </div> */}
           <DataTable
             title="Productos"
             columns={productColumns}
@@ -679,16 +702,18 @@ export default function InventoryPage() {
                     {productCategories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <Select value={stockFilter} onValueChange={setStockFilter}><SelectTrigger><SelectValue placeholder="Estado de stock" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todo el stock</SelectItem><SelectItem value="LOW">Stock bajo</SelectItem><SelectItem value="NORMAL">Stock normal</SelectItem></SelectContent></Select>
+                <Select value={expirationFilter} onValueChange={setExpirationFilter}><SelectTrigger><SelectValue placeholder="Vencimiento" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todo vencimiento</SelectItem><SelectItem value="EXPIRING">Próximos a vencer</SelectItem><SelectItem value="EXPIRED">Expirados</SelectItem></SelectContent></Select>
               </div>
             }
           />
         </TabsContent>
 
         <TabsContent value="movements" className="space-y-4">
-          <div>
+          {/* <div>
             <h2 className="app-heading text-[2rem] text-foreground sm:text-[2.35rem]">Movimientos de inventario</h2>
             <p className="mt-2 text-sm text-muted-foreground">Consulta las entradas, salidas, compras, ventas y ajustes registrados.</p>
-          </div>
+          </div> */}
           <DataTable
             title="Movimientos"
             columns={movementColumns}
@@ -713,6 +738,7 @@ export default function InventoryPage() {
           <FormField label="Precio de venta" name="price" type="number" value={productForm.price} onChange={handleProductChange} required />
           <FormField label="Stock actual" name="stockOnHand" type="number" value={productForm.stockOnHand} onChange={handleProductChange} />
           <FormField label="Stock minimo" name="minStock" type="number" value={productForm.minStock} onChange={handleProductChange} />
+          <FormField label="Fecha de vencimiento" name="expirationDate" type="date" value={productForm.expirationDate} onChange={handleProductChange} />
           <FormField label="Control de stock" name="trackStock" type="switch" value={productForm.trackStock} onChange={handleProductChange} placeholder="Activar seguimiento de inventario" />
           <FormField label="Activo" name="isActive" type="switch" value={productForm.isActive} onChange={handleProductChange} placeholder="Disponible para venta y uso" />
           <FormField label="Requiere receta" name="requiresPrescription" type="switch" value={productForm.requiresPrescription} onChange={handleProductChange} placeholder="Solicitar receta medica" />

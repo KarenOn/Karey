@@ -11,11 +11,16 @@ const UpdateMemberSchema = z.object({
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { clinicId, session } = await requireClinicPermission("employees.update");
     const { id } = await params;
     const memberId = Number(id);
 
     const body = UpdateMemberSchema.parse(await req.json());
+    const permission = body.roleId !== undefined
+      ? "employees.changeRole"
+      : body.isActive === true
+        ? "employees.activate"
+        : "employees.deactivate";
+    const { clinicId, session } = await requireClinicPermission(permission);
 
     const existing = await prisma.clinicMember.findFirst({ where: { id: memberId, clinicId } });
     if (!existing) return NextResponse.json({ error: "No encontrado" }, { status: 404 });

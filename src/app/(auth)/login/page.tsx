@@ -11,6 +11,7 @@ import { getFriendlyVerificationMessage } from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import PasswordInput from "@/components/shared/PasswordInput";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -153,7 +154,8 @@ export default function LoginPage() {
         <div className="app-panel-strong mx-auto w-full max-w-xl overflow-hidden p-8 sm:p-10">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)] shadow-[0_20px_40px_rgba(18,41,79,0.24)]">
-              <PawPrint className="size-7 text-white" />
+              {/* <PawPrint className="size-7 text-white" /> */}
+              <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
             </div>
 
             <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">Bienvenida de regreso</p>

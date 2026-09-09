@@ -13,7 +13,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import SignedFileUploader from "@/components/shared/SignedFileUploader";
+import SignedFileUploader, { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
 import PasswordInput from "@/components/shared/PasswordInput";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { AppAlert, type AppAlertVariant } from "@/components/shared/AppAlert";
@@ -83,6 +83,7 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<LocalFile | null>(null);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: AppAlertVariant;
@@ -142,10 +143,10 @@ export default function UserProfilePage() {
   const isProfileDirty = useMemo(() => {
     if (!profile || !snapshot) return false;
 
-    return ["name", "avatarStorageRef", "phone", "jobTitle", "bio"].some(
+    return !!avatarFile || ["name", "avatarStorageRef", "phone", "jobTitle", "bio"].some(
       (key) => profile[key as keyof ProfileData] !== snapshot[key as keyof ProfileData]
     );
-  }, [profile, snapshot]);
+  }, [profile, snapshot, avatarFile]);
 
   const startEditing = () => {
     if (!profile) {
@@ -162,45 +163,16 @@ export default function UserProfilePage() {
       return;
     }
 
-    if (
-      profile.avatarStorageRef &&
-      profile.avatarStorageRef !== snapshot.avatarStorageRef &&
-      profile.avatarStorageRef.startsWith("s3://")
-    ) {
-      await deleteTemporaryUpload(profile.avatarStorageRef);
-    }
-
+    if (avatarFile) URL.revokeObjectURL(avatarFile.previewUrl);
+    setAvatarFile(null);
     setProfile(snapshot);
     setEditing(false);
   };
 
-  const handleAvatarUploaded = async (file: {
-    fileName: string;
-    fileType: string;
-    previewUrl: string;
-    storageRef: string;
-  }) => {
-    setProfile((current) => {
-      if (!current) {
-        return current;
-      }
-
-      const previousUnsavedAvatar =
-        current.avatarStorageRef &&
-        current.avatarStorageRef !== snapshot?.avatarStorageRef
-          ? current.avatarStorageRef
-          : null;
-
-      if (previousUnsavedAvatar && previousUnsavedAvatar !== file.storageRef) {
-        void deleteTemporaryUpload(previousUnsavedAvatar);
-      }
-
-      return {
-        ...current,
-        avatarStorageRef: file.storageRef,
-        avatarUrl: file.previewUrl,
-      };
-    });
+  const handleAvatarSelected = (file: LocalFile) => {
+    if (avatarFile) URL.revokeObjectURL(avatarFile.previewUrl);
+    setAvatarFile(file);
+    setProfile((current) => current ? { ...current, avatarUrl: file.previewUrl } : current);
   };
 
   const removeAvatar = async () => {
@@ -208,14 +180,7 @@ export default function UserProfilePage() {
       return;
     }
 
-    if (
-      profile.avatarStorageRef &&
-      profile.avatarStorageRef !== snapshot?.avatarStorageRef &&
-      profile.avatarStorageRef.startsWith("s3://")
-    ) {
-      await deleteTemporaryUpload(profile.avatarStorageRef);
-    }
-
+    if (avatarFile) { URL.revokeObjectURL(avatarFile.previewUrl); setAvatarFile(null); }
     setProfile({
       ...profile,
       avatarStorageRef: null,
@@ -224,26 +189,35 @@ export default function UserProfilePage() {
   };
 
   const saveProfile = async () => {
+    if (saving) return;
     if (!profile) {
       return;
     }
 
     try {
       setSaving(true);
-      const updated = await fetchJson<ProfileData>("/api/profile", {
+      const uploaded = avatarFile ? await uploadFileToStorage(avatarFile, UPLOAD_SCOPES.userAvatar) : null;
+      let updated: ProfileData;
+      try {
+        updated = await fetchJson<ProfileData>("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: profile.name,
-          avatarStorageRef: profile.avatarStorageRef ?? "",
+          avatarStorageRef: uploaded?.storageRef ?? (avatarFile ? "" : profile.avatarStorageRef ?? ""),
           phone: profile.phone ?? "",
           jobTitle: profile.jobTitle ?? "",
           bio: profile.bio ?? "",
         }),
-      });
+        });
+      } catch (error) {
+        if (uploaded) await deleteTemporaryUpload(uploaded.storageRef);
+        throw error;
+      }
 
       setProfile(updated);
       setSnapshot(updated);
+      if (avatarFile) { URL.revokeObjectURL(avatarFile.previewUrl); setAvatarFile(null); }
       setEditing(false);
       window.dispatchEvent(new CustomEvent("user-profile-updated"));
       setAlert({
@@ -356,6 +330,8 @@ export default function UserProfilePage() {
                     accept="image/*"
                     buttonLabel=""
                     className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground dark:bg-primary/80"
+                    disabled={saving}
+                    maxSizeBytes={2 * 1024 * 1024}
                     onError={(message) => {
                       setAlert({
                         variant: "destructive",
@@ -364,8 +340,7 @@ export default function UserProfilePage() {
                       });
                       setAlertOpen(true);
                     }}
-                    onUploaded={handleAvatarUploaded}
-                    scope="user-avatar"
+                    onFileSelected={handleAvatarSelected}
                   />
                   <Button
                     className="h-10 w-10 rounded-full p-0 dark:bg-destructive/80"

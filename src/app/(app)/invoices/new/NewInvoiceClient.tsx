@@ -122,11 +122,15 @@ export default function NewInvoicePOSPage() {
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "TRANSFER">("CASH");
   const [payRef, setPayRef] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [draftPetId, setDraftPetId] = useState<number | null>(null);
+  const [draftAppointmentId, setDraftAppointmentId] = useState<number | null>(null);
+  const [draftTodayTurnId, setDraftTodayTurnId] = useState<number | null>(null);
 
   const prefilledClientId = searchParams.get("clientId");
   const prefilledPetId = searchParams.get("petId");
   const prefilledAppointmentId = searchParams.get("appointmentId");
   const prefilledTodayTurnId = searchParams.get("todayTurnId");
+  const prefilledDraftId = searchParams.get("draftId");
   const prefilledEncounterId = searchParams.get("encounterId") ?? prefilledAppointmentId;
   const prefilledPetName = searchParams.get("petName");
   const prefilledOwnerName = searchParams.get("ownerName");
@@ -134,6 +138,33 @@ export default function NewInvoicePOSPage() {
   const returnTo = searchParams.get("returnTo");
   const servicePrefillAppliedRef = useRef(false);
   const encounterPrefillAppliedRef = useRef(false);
+  const draftPrefillAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (draftPrefillAppliedRef.current || !prefilledDraftId || loading) return;
+    draftPrefillAppliedRef.current = true;
+    void (async () => {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(prefilledDraftId)}`, { cache: "no-store" });
+      const draft = await response.json().catch(() => null);
+      if (!response.ok || draft?.status !== "DRAFT") throw new Error(draft?.error ?? "No se pudo cargar el borrador.");
+      setClientId(String(draft.client.id));
+      setDraftPetId(draft.pet?.id ?? null);
+      setDraftAppointmentId(draft.appointmentId ?? null);
+      setDraftTodayTurnId(draft.todayTurnId ?? null);
+      setItems(draft.items.map((item: { id: number; type: ItemType; serviceId: number | null; productId: number | null; description: string; quantity: string; unitPrice: string; taxRate: string }) => ({
+        key: `DRAFT-${item.id}`,
+        type: item.type,
+        serviceId: item.serviceId ?? undefined,
+        productId: item.productId ?? undefined,
+        name: item.description,
+        description: item.description,
+        quantity: num(item.quantity),
+        unitPrice: num(item.unitPrice),
+        taxRate: num(item.taxRate),
+        lineTotal: num(item.quantity) * num(item.unitPrice),
+      })));
+    })().catch((error) => setErr(error instanceof Error ? error.message : "No se pudo cargar el borrador."));
+  }, [loading, prefilledDraftId]);
 
   // Load base catalog
   useEffect(() => {
@@ -246,6 +277,11 @@ export default function NewInvoicePOSPage() {
 
     setPetId(String(nextPetId));
   }, [pets, prefilledPetId]);
+
+  useEffect(() => {
+    if (!draftPetId || pets.length === 0 || !pets.some((pet) => pet.id === draftPetId)) return;
+    setPetId(String(draftPetId));
+  }, [draftPetId, pets]);
 
   const subtotal = useMemo(() => items.reduce((acc, it) => acc + it.lineTotal, 0), [items]);
   const discountApplied = useMemo(() => Math.min(discount, subtotal), [discount, subtotal]);
@@ -429,8 +465,8 @@ export default function NewInvoicePOSPage() {
     const payload = {
       clientId: Number(clientId),
       petId: petId ? Number(petId) : null,
-      appointmentId: prefilledAppointmentId ? Number(prefilledAppointmentId) : null,
-      todayTurnId: prefilledTodayTurnId ? Number(prefilledTodayTurnId) : null,
+      appointmentId: prefilledAppointmentId ? Number(prefilledAppointmentId) : draftAppointmentId,
+      todayTurnId: prefilledTodayTurnId ? Number(prefilledTodayTurnId) : draftTodayTurnId,
 
       discount: discountApplied,
       invoiceTaxRate: applyTax ? taxRate : 0,

@@ -137,6 +137,24 @@ export function rangesOverlap(
   return startA < endB && startB < endA;
 }
 
+/** A vet is unavailable only when an active appointment overlaps the requested range. */
+export function isVetAvailableForRange(
+  appointments: Array<{ id?: number; vetId?: string | null; startAt: string | Date; endAt?: string | Date | null; status?: string }>,
+  vetId: string,
+  requestedStart: Date,
+  requestedEnd: Date,
+  ignoreId?: number,
+): boolean {
+  return !appointments.some((appointment) => {
+    if (appointment.vetId !== vetId || !isAppointmentActive(appointment.status ?? "")) return false;
+    if (ignoreId !== undefined && appointment.id === ignoreId) return false;
+    const start = appointment.startAt instanceof Date ? appointment.startAt : safeDate(appointment.startAt);
+    const endValue = appointment.endAt instanceof Date ? appointment.endAt : appointment.endAt ? safeDate(appointment.endAt) : null;
+    const end = endValue ?? (start ? utilAddMinutes(start, 30) : null);
+    return Boolean(start && end && rangesOverlap(requestedStart, requestedEnd, start, end));
+  });
+}
+
 /**
  * Canonical helper: Parse ISO date string to Date
  */

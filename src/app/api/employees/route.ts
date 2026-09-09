@@ -16,7 +16,7 @@ export async function GET() {
     });
 
     const invites = await prisma.employeeInvite.findMany({
-      where: { clinicId, acceptedAt: null },
+      where: { clinicId, acceptedAt: null, revokedAt: null },
       include: {
         role: { select: { id: true, name: true } },
         invitedUser: { select: { name: true } },
@@ -32,6 +32,10 @@ export async function GET() {
       capabilities: {
         canInviteEmployees: elevated || hasPermission(member?.role.permissions, "employees.invite"),
         canUpdateEmployees: elevated || hasPermission(member?.role.permissions, "employees.update"),
+        canChangeRole: elevated || hasPermission(member?.role.permissions, "employees.changeRole"),
+        canActivate: elevated || hasPermission(member?.role.permissions, "employees.activate"),
+        canDeactivate: elevated || hasPermission(member?.role.permissions, "employees.deactivate"),
+        canResendInvite: elevated || hasPermission(member?.role.permissions, "employees.resendInvite"),
         canManageRoles: elevated || hasPermission(member?.role.permissions, "roles.manage"),
       },
     });

@@ -164,11 +164,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("appointments.update");
-  if (!clinicId) {
-    return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
-  }
-
   const id = Number((await ctx.params).id);
   const body = await req.json().catch(() => null);
   const parsed = AppointmentUpdateSchema.safeParse(body);
@@ -179,6 +174,15 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       { status: 422 }
     );
   }
+
+  const permission = parsed.data.status === "IN_PROGRESS" || parsed.data.status === "COMPLETED"
+    ? "appointments.attend"
+    : parsed.data.status === "CANCELLED" || parsed.data.status === "NO_SHOW"
+      ? "appointments.cancel"
+      : parsed.data.startAt || parsed.data.endAt
+        ? "appointments.reschedule"
+        : "appointments.edit";
+  const { clinicId } = await requireClinicPermission(permission);
 
   const current = await prisma.appointment.findFirst({
     where: { id, clinicId },

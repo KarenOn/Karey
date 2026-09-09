@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { getClinicDayRange } from "@/lib/appointment-time";
 import { AppointmentStatus, TodayTurnStatus } from "@/generated/prisma/client";
+import { buildClinicAccess } from "@/lib/permissions";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 import { prisma } from "@/lib/prisma";
@@ -107,7 +108,9 @@ export default async function TodayPage() {
   return (
     <TodayWorkspace
       initialAppointments={initialAppointments}
+      initialAccess={buildClinicAccess(member.role.key, member.role.permissions)}
       initialDateIso={today.toISOString()}
+      initialTimeZone={member.clinic.timezone}
       initialTurns={initialTurns}
     />
   );

@@ -5,7 +5,6 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Bell,
   CircleHelp,
   Calendar,
   ChevronRight,
@@ -49,6 +48,8 @@ import EmailVerificationBanner from "@/components/layout/EmailVerificationBanner
 import OnboardingWelcome from "@/components/layout/OnboardingWelcome";
 import GlobalSearch from "@/components/layout/GlobalSearch";
 import AppointmentNowAlert from "@/components/layout/AppointmentNowAlert";
+import ProductTour from "@/components/layout/onboarding/ProductTour";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 type ModuleKey =
   | "dashboard"
@@ -97,6 +98,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUserProfile | null>(initialUser);
   const router = useRouter();
 
@@ -264,10 +266,15 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
+  const canUseQuickCreate = Boolean(
+    currentUser?.access.actions.clients.create ||
+      currentUser?.access.actions.invoices.create
+  );
 
   return (
     <CurrentUserProvider value={currentUser}>
-      {currentUser ? <OnboardingWelcome user={currentUser} /> : null}
+      {currentUser ? <OnboardingWelcome user={currentUser} onStartTour={() => setTourOpen(true)} /> : null}
+      <ProductTour open={tourOpen} onOpenChange={setTourOpen} />
       <div className="app-shell-bg min-h-screen">
         <div className="app-grid pointer-events-none fixed inset-0 opacity-70" />
 
@@ -303,16 +310,17 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                 onClick={() => setSidebarOpen(false)}
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                  <PawPrint className="h-5 w-5" />
+                  {/* <PawPrint className="h-5 w-5" /> */}
+                  <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
                 </div>
                 {!collapsed ? (
                   <div className="min-w-0">
-                    <p className="truncate text-lg font-semibold text-sidebar-foreground">
+                    <p className="app-heading truncate text-xl font-semibold text-sidebar-foreground">
                       Karey Vet
                     </p>
-                    <p className="truncate text-xs text-sidebar-muted">
+                    {/* <p className="truncate text-xs text-sidebar-muted">
                       Gestión veterinaria
-                    </p>
+                    </p> */}
                   </div>
                 ) : null}
               </Link>
@@ -337,6 +345,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                   <Link
                     key={item.name}
                     href={item.href}
+                    data-tour-id={`module-${item.moduleKey}`}
                     onClick={() => setSidebarOpen(false)}
                     title={collapsed ? item.name : undefined}
                     className={cn(
@@ -429,41 +438,50 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                   <Menu className="h-5 w-5" />
                 </button>
 
-                <GlobalSearch />
+                <div data-tour-id="global-search" className="min-w-0"><GlobalSearch /></div>
               </div>
 
               <div className="flex items-center gap-2">
-                <DropdownMenu>
+                {canUseQuickCreate ? <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" className="hidden sm:inline-flex"><Plus className="h-4 w-4" />Nuevo</Button>
+                    <Button data-tour-id="quick-create" size="sm" className="inline-flex"><Plus className="h-4 w-4" />Nuevo</Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild><Link href="/clients?action=new"><User className="h-4 w-4" /> Cliente</Link></DropdownMenuItem>
-                    <DropdownMenuItem asChild><Link href="/invoices/new"><FileText className="h-4 w-4" /> Factura</Link></DropdownMenuItem>
+                    {currentUser?.access.actions.clients.create ? <DropdownMenuItem asChild><Link href="/clients?action=new"><User className="h-4 w-4" /> Cliente</Link></DropdownMenuItem> : null}
+                    {currentUser?.access.actions.invoices.create ? <DropdownMenuItem asChild><Link href="/invoices/new"><FileText className="h-4 w-4" /> Factura</Link></DropdownMenuItem> : null}
                   </DropdownMenuContent>
-                </DropdownMenu>
+                </DropdownMenu> : null}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" aria-label="Ayuda y atajos"><CircleHelp className="h-4 w-4" /></Button>
+                  <Button data-tour-id="quick-help" variant="outline" size="icon" aria-label="Ayuda y atajos"><CircleHelp className="h-4 w-4" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64">
                     <DropdownMenuLabel>Ayuda rápida</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild><Link href="/today">Consulta el centro operativo</Link></DropdownMenuItem>
-                    <DropdownMenuItem asChild><Link href="/appointments">Gestiona citas desde Agenda</Link></DropdownMenuItem>
+                    {currentUser?.roleKey === "owner" ? <DropdownMenuItem asChild><Link href="/dashboard">Primeros pasos para Owner</Link></DropdownMenuItem> : null}
+                    <DropdownMenuItem onSelect={(event) => { event.preventDefault(); setTourOpen(true); }}>Repetir recorrido</DropdownMenuItem>
+                    {pathname.startsWith("/appointments") ? <>
+                      {currentUser?.access.actions.appointments.create ? <DropdownMenuItem asChild><Link href="/appointments">Crear una cita</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.appointments.reschedule ? <DropdownMenuItem asChild><Link href="/appointments">Reprogramar una cita</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.appointments.attend ? <DropdownMenuItem asChild><Link href="/appointments">Atender una cita</Link></DropdownMenuItem> : null}
+                    </> : pathname.startsWith("/pets") ? <>
+                      {currentUser?.access.actions.visits.create ? <DropdownMenuItem asChild><Link href="/pets">Registrar una visita</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.vaccines.create ? <DropdownMenuItem asChild><Link href="/pets">Registrar una vacuna</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.pets.viewClinicalHistory ? <DropdownMenuItem asChild><Link href="/pets">Consultar historial</Link></DropdownMenuItem> : null}
+                    </> : pathname.startsWith("/invoices") ? <>
+                      {currentUser?.access.actions.invoices.viewDrafts ? <DropdownMenuItem asChild><Link href="/invoices">Procesar borradores</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.invoices.create ? <DropdownMenuItem asChild><Link href="/invoices/new">Crear factura</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.payments.register ? <DropdownMenuItem asChild><Link href="/invoices">Registrar pago</Link></DropdownMenuItem> : null}
+                    </> : <>
+                      {currentUser?.access.actions.today.read ? <DropdownMenuItem asChild><Link href="/today">Consulta el centro operativo</Link></DropdownMenuItem> : null}
+                      {currentUser?.access.actions.appointments.read ? <DropdownMenuItem asChild><Link href="/appointments">Gestiona citas desde Agenda</Link></DropdownMenuItem> : null}
+                    </>}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem disabled>Buscar en toda la app: Ctrl K</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <button
-                  type="button"
-                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-                  aria-label="Notificaciones"
-                >
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--brand-gold)]" />
-                </button>
+                <NotificationBell />
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

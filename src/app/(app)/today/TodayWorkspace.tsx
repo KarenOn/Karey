@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarClock,
@@ -18,7 +16,7 @@ import {
 } from "lucide-react";
 import { AppAlert } from "@/components/shared/AppAlert";
 import AppPageHero from "@/components/shared/AppPageHero";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import type { ClinicAccess } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -151,6 +149,30 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function formatClinicTime(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).format(new Date(value));
+}
+
+function formatClinicDateParts(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("es-ES", {
+    day: "numeric",
+    month: "long",
+    timeZone,
+    weekday: "long",
+  }).formatToParts(new Date(value));
+
+  return {
+    day: parts.find((part) => part.type === "day")?.value ?? "",
+    month: capitalize(parts.find((part) => part.type === "month")?.value ?? ""),
+    weekday: capitalize(parts.find((part) => part.type === "weekday")?.value ?? ""),
+  };
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Ocurrio un error inesperado.";
 }
@@ -281,28 +303,30 @@ function PatientCard({
   onSecondaryAction?: (() => void) | null;
 }) {
   const stateUi = STATE_STYLES[item.state];
-  const interactive = typeof onCardClick === "function";
 
   return (
     <article
       className={cn(
         "rounded-xl border border-border/70 border-l-4 bg-background px-4 py-4 transition",
         stateUi.border,
-        interactive && "cursor-pointer hover:border-primary/30 hover:bg-muted/20"
+        "hover:border-primary/30 hover:bg-muted/20"
       )}
-      onClick={onCardClick}
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={(event) => {
-        if (!interactive) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onCardClick();
-        }
-      }}
     >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-3">
+      <div
+        className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
+      >
+        <div
+          className="min-w-0 flex-1 cursor-pointer space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          role="button"
+          tabIndex={0}
+          onClick={onCardClick}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onCardClick();
+            }
+          }}
+        >
           <div className="flex flex-wrap items-center gap-2">
             {item.timeLabel ? (
               <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground">
@@ -385,14 +409,18 @@ function ReceiptOrStethoscope({ actionLabel }: { actionLabel: string }) {
 
 export default function TodayWorkspace({
   initialAppointments,
+  initialAccess,
   initialDateIso,
+  initialTimeZone,
   initialTurns,
 }: {
   initialAppointments: TodayAppointmentItem[];
+  initialAccess: ClinicAccess;
   initialDateIso: string;
+  initialTimeZone: string;
   initialTurns: TodayTurnItem[];
 }) {
-  const access = useCurrentUserAccess();
+  const access = initialAccess;
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -411,8 +439,8 @@ export default function TodayWorkspace({
 
   const canCreateTurns = !!access?.actions.todayTurns.create;
   const canUpdateTurns = !!access?.actions.todayTurns.update;
-  const canUpdateAppointments = !!access?.actions.appointments.update;
-  const canCreateInvoices = !!access?.actions.invoices.create;
+  const canUpdateAppointments = !!access?.actions.appointments.attend;
+  const canSendToBilling = !!access?.actions.invoices.create || !!access?.actions.invoices.sendToBilling;
 
   const showAlert = useCallback(
     (
@@ -490,9 +518,9 @@ export default function TodayWorkspace({
         serviceLabel: formatAppointmentType(appointment.type),
         source: "appointment",
         state: "waiting",
-        timeLabel: format(new Date(appointment.startAt), "HH:mm"),
+        timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
       })),
-    [canUpdateAppointments, upcomingAppointments]
+    [canUpdateAppointments, initialTimeZone, upcomingAppointments]
   );
 
   const waitingTurnCards = useMemo(
@@ -508,9 +536,9 @@ export default function TodayWorkspace({
         serviceLabel: turn.serviceName || formatTurnService(turn.service),
         source: "turn",
         state: "waiting",
-        timeLabel: format(new Date(turn.arrivalAt), "HH:mm"),
+        timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
       })),
-    [canUpdateTurns, waitingTurns]
+    [canUpdateTurns, initialTimeZone, waitingTurns]
   );
 
   const inProgressCards = useMemo(
@@ -530,14 +558,14 @@ export default function TodayWorkspace({
             petName: appointment.petName,
             primaryActionLabel: appointment.invoiceId
               ? "Ver factura"
-              : canCreateInvoices
+              : canSendToBilling
                 ? "Facturar"
                 : null,
             secondaryActionLabel: canUpdateAppointments ? "Gestionar atención" : null,
             serviceLabel: formatAppointmentType(appointment.type),
             source: "appointment",
             state: "in_progress",
-            timeLabel: format(new Date(appointment.startAt), "HH:mm"),
+            timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
           })),
         ...turns
           .filter((turn) => turnUnifiedState(turn.status) === "in_progress")
@@ -548,17 +576,17 @@ export default function TodayWorkspace({
             ownerLabel: turn.ownerName,
             petId: turn.petId,
             petName: turn.petName,
-            primaryActionLabel: canCreateInvoices ? "Facturar" : null,
+            primaryActionLabel: canSendToBilling ? "Facturar" : null,
             secondaryActionLabel: canUpdateTurns ? "Gestionar atención" : null,
             serviceLabel: turn.serviceName || formatTurnService(turn.service),
             source: "turn",
             state: "in_progress",
-            timeLabel: format(new Date(turn.arrivalAt), "HH:mm"),
+            timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
           })),
       ].sort((left, right) =>
         (left.timeLabel ?? "").localeCompare(right.timeLabel ?? "")
       ),
-    [appointments, canCreateInvoices, canUpdateAppointments, canUpdateTurns, turns]
+    [appointments, canSendToBilling, canUpdateAppointments, canUpdateTurns, initialTimeZone, turns]
   );
 
   const doneCards = useMemo(
@@ -577,7 +605,7 @@ export default function TodayWorkspace({
             serviceLabel: formatAppointmentType(appointment.type),
             source: "appointment",
             state: "done",
-            timeLabel: format(new Date(appointment.startAt), "HH:mm"),
+            timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
           })),
         ...turns
           .filter((turn) => turnUnifiedState(turn.status) === "done")
@@ -592,12 +620,12 @@ export default function TodayWorkspace({
             serviceLabel: turn.serviceName || formatTurnService(turn.service),
             source: "turn",
             state: "done",
-            timeLabel: format(new Date(turn.arrivalAt), "HH:mm"),
+            timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
           })),
       ].sort((left, right) =>
         (right.timeLabel ?? "").localeCompare(left.timeLabel ?? "")
       ),
-    [appointments, turns]
+    [appointments, initialTimeZone, turns]
   );
 
   async function markAppointmentInProgress(appointment: TodayAppointmentItem) {
@@ -671,12 +699,6 @@ export default function TodayWorkspace({
   async function finishEncounter() {
     if (!encounter) return;
     if (encounter.todayTurnId) {
-      const invoiceResponse = await fetch(`/api/invoices?todayTurnId=${encounter.todayTurnId}&take=1`, { cache: "no-store" });
-      const invoices = invoiceResponse.ok ? await invoiceResponse.json() as unknown[] : [];
-      if (invoices.length === 0) {
-        goToInvoiceFlow({ todayTurnId: encounter.todayTurnId, clientId: encounter.clientId, petId: encounter.petId, ownerName: encounter.ownerName, petName: encounter.petName });
-        return;
-      }
       await requestJson(`/api/today-turns/${encounter.todayTurnId}/status`, { method: "PATCH", body: JSON.stringify({ status: "READY" }) });
       setTurns((current) => current.map((turn) => turn.id === encounter.todayTurnId ? { ...turn, status: "READY" } : turn));
       setEncounter(null);
@@ -705,7 +727,7 @@ export default function TodayWorkspace({
       return;
     }
 
-    if (!canCreateInvoices) {
+    if (!canSendToBilling) {
       showAlert("warning", "Sin permisos", "No tienes permiso para crear facturas.");
       return;
     }
@@ -724,10 +746,13 @@ export default function TodayWorkspace({
     );
   }
 
-  const date = useMemo(() => new Date(initialDateIso), [initialDateIso]);
-  const weekday = capitalize(format(date, "EEEE", { locale: es }));
-  const monthLabel = capitalize(format(date, "MMMM", { locale: es }));
-  const dayNumber = format(date, "d");
+  const dateParts = useMemo(
+    () => formatClinicDateParts(initialDateIso, initialTimeZone),
+    [initialDateIso, initialTimeZone]
+  );
+  const weekday = dateParts.weekday;
+  const monthLabel = dateParts.month;
+  const dayNumber = dateParts.day;
   const totalTracked = appointments.length + turns.length;
 
   return (
@@ -1029,6 +1054,7 @@ export default function TodayWorkspace({
                 );
               }}
               onFinish={() => void finishEncounter()}
+              onViewInvoice={(invoiceId) => router.push(`/invoices/${invoiceId}`)}
               onBilling={() =>
                 goToInvoiceFlow({
                   appointmentId: encounter.appointmentId,

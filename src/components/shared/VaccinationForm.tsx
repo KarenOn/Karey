@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import { Button } from "@/components/ui/button";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
+import { toast } from "sonner";
 
 type VaccinationValues = { vaccineId: string; vaccineName: string; appliedAt: string; nextDueAt: string; batchNumber: string; notes: string };
-type VaccinationFormProps = { petId: number; vaccines: Array<{ id: number; name: string; species?: string | null }>; onSaved: () => void | Promise<void>; onCancel?: () => void };
+type VaccinationFormProps = { petId: number; vaccinationId?: number; initialValues?: Partial<VaccinationValues>; vaccines: Array<{ id: number; name: string; species?: string | null }>; onSaved: () => void | Promise<void>; onCancel?: () => void };
 const initialValues: VaccinationValues = { vaccineId: "", vaccineName: "", appliedAt: new Date().toISOString().slice(0, 10), nextDueAt: "", batchNumber: "", notes: "" };
 
-export default function VaccinationForm({ petId, vaccines, onSaved, onCancel }: VaccinationFormProps) {
-  const [values, setValues] = useState(initialValues);
+export default function VaccinationForm({ petId, vaccinationId, initialValues: providedValues, vaccines, onSaved, onCancel }: VaccinationFormProps) {
+  const [values, setValues] = useState({ ...initialValues, ...providedValues });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setValues({ ...initialValues, ...providedValues }); setError(null); }, [providedValues, vaccinationId]);
   const change = (event: FormFieldChangeEvent) => setValues((current) => ({ ...current, [event.target.name]: event.target.value }));
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -23,9 +25,10 @@ export default function VaccinationForm({ petId, vaccines, onSaved, onCancel }: 
     if (!parsed.success) { setError(parsed.error.issues[0]?.message ?? "Revisa los datos de la vacuna."); return; }
     setSaving(true); setError(null);
     try {
-      const response = await fetch(`/api/pets/${petId}/vaccinations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(parsed.data) });
+      const response = await fetch(vaccinationId ? `/api/pets/${petId}/vaccinations/${vaccinationId}` : `/api/pets/${petId}/vaccinations`, { method: vaccinationId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(parsed.data) });
       const data = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) throw new Error(data?.message ?? "No se pudo guardar la vacuna.");
+      toast.success(vaccinationId ? "Vacuna actualizada correctamente." : "Vacuna registrada correctamente.");
       await onSaved();
     } catch (submitError) { setError(submitError instanceof Error ? submitError.message : "No se pudo guardar la vacuna."); }
     finally { setSaving(false); }
@@ -93,7 +96,7 @@ export default function VaccinationForm({ petId, vaccines, onSaved, onCancel }: 
           {saving ? (
             <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
           ) : null}
-          {saving ? "Guardando..." : "Guardar vacuna"}
+          {saving ? "Guardando…" : vaccinationId ? "Actualizar vacuna" : "Guardar vacuna"}
         </Button>
       </div>
     </form>

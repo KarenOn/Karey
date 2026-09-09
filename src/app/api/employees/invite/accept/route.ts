@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { syncUserRoleFromMembership } from "@/lib/current-user-profile";
+import { notifyEmployeeOnboardingCompleted } from "@/lib/in-app-notifications";
 
 const AcceptSchema = z.object({
   token: z.string().min(10),
@@ -65,6 +66,7 @@ export async function POST(req: Request) {
     const invite = await findInvite(token);
     if (!invite) return NextResponse.json({ error: "Invitación no válida" }, { status: 404 });
     if (invite.acceptedAt) return NextResponse.json({ error: "Esta invitación ya fue utilizada" }, { status: 409 });
+    if (invite.revokedAt) return NextResponse.json({ error: "Esta invitación fue anulada" }, { status: 410 });
     if (invite.expiresAt <= new Date()) return NextResponse.json({ error: "Esta invitación ha expirado" }, { status: 410 });
     if (!invite.clinic.isActive || !invite.role.isActive) return NextResponse.json({ error: "Esta invitación ya no está disponible" }, { status: 410 });
 
@@ -86,6 +88,7 @@ export async function POST(req: Request) {
     });
 
     await syncUserRoleFromMembership(session.user.id, invite.clinicId);
+    await notifyEmployeeOnboardingCompleted(session.user.id, invite.clinicId);
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

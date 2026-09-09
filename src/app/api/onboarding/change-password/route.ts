@@ -57,6 +57,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { UserPasswordChangeSchema } from "@/lib/validators/profile";
+import { notifyEmployeeOnboardingCompleted } from "@/lib/in-app-notifications";
 
 export async function POST(req: Request) {
   try {
@@ -103,6 +104,9 @@ export async function POST(req: Request) {
         mustChangePassword: false,
       },
     });
+
+    const memberships = await prisma.clinicMember.findMany({ where: { userId: session.user.id, isActive: true }, select: { clinicId: true } });
+    await Promise.all(memberships.map((membership) => notifyEmployeeOnboardingCompleted(session.user.id, membership.clinicId)));
 
     return NextResponse.json({
       ok: true,

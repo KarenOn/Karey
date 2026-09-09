@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     try {
       await sendAppWelcomeEmail({
         clinicName: result.clinic.name,
-        loginUrl: getAppUrl("/today"),
+        loginUrl: getAppUrl("/"),
         to: email,
         userName: fullName,
         variant: "signup",

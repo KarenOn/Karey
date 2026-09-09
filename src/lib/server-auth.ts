@@ -34,7 +34,7 @@ export async function isSessionUserGlobalAdmin(userId: string, fallbackRole?: st
   return isGlobalAdminRole(role);
 }
 
-export async function requireClinicPermission(permission: PermissionKey) {
+export async function requireClinicPermissions(permissions: PermissionKey[]) {
   const session = await getSessionOrThrow();
 
   const user = await prisma.user.findUnique({
@@ -69,10 +69,14 @@ export async function requireClinicPermission(permission: PermissionKey) {
     return { session, clinicId: member.clinicId, member };
   }
 
-  const ok = hasPermission(member.role.permissions, permission);
+  const ok = permissions.some((permission) => hasPermission(member.role.permissions, permission));
   if (!ok) throw new Error("FORBIDDEN");
 
   return { session, clinicId: member.clinicId, member };
+}
+
+export async function requireClinicPermission(permission: PermissionKey) {
+  return requireClinicPermissions([permission]);
 }
 
 export async function requireSuperAdmin() {

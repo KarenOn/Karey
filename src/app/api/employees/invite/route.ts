@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAppBaseUrl, sendEmployeeInviteEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
-import { requireClinicPermission } from "@/lib/server-auth";
+import { requireClinicPermissions } from "@/lib/server-auth";
 import { setTemporaryPasswordForUser } from "@/lib/temporary-password";
 
 const InviteSchema = z.object({
@@ -16,11 +16,12 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { session, clinicId } = await requireClinicPermission("employees.invite");
+    const { session, clinicId } = await requireClinicPermissions(["employees.create", "employees.invite"]);
     const body = InviteSchema.parse(await req.json());
     const email = body.email.toLowerCase();
 
-    const [role, clinic] = await Promise.all([
+    const now = new Date();
+    const [role, clinic, existingUser, existingInvite] = await Promise.all([
       prisma.role.findFirst({
         where: { id: body.roleId, clinicId, isActive: true },
       }),
@@ -28,30 +29,25 @@ export async function POST(req: Request) {
         where: { id: clinicId },
         select: { name: true },
       }),
+      prisma.user.findUnique({ where: { email }, select: { id: true } }),
+      prisma.employeeInvite.findFirst({
+        where: { clinicId, email, acceptedAt: null, revokedAt: null, expiresAt: { gt: now } },
+        select: { id: true },
+      }),
     ]);
 
     if (!role) {
       return NextResponse.json({ error: "Rol invalido" }, { status: 400 });
     }
 
-    let user = await prisma.user.findUnique({ where: { email } });
-
-    if (user) {
-      const existingMember = await prisma.clinicMember.findFirst({
-        where: { clinicId, userId: user.id },
-        select: { id: true, isActive: true },
-      });
-
-      if (existingMember?.isActive) {
-        return NextResponse.json(
-          {
-            error:
-              "Ese usuario ya pertenece a la clinica. Puedes editar su rol desde la lista de miembros.",
-          },
-          { status: 400 }
-        );
-      }
+    if (existingUser || existingInvite) {
+      return NextResponse.json(
+        { error: "Ya existe un usuario o una invitación asociada a este correo." },
+        { status: 409 }
+      );
     }
+
+    let user = null;
 
     let tempPassword: string | null = null;
 
@@ -85,11 +81,6 @@ export async function POST(req: Request) {
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 3);
 
-    const existingInvite = await prisma.employeeInvite.findFirst({
-      where: { acceptedAt: null, clinicId, email },
-      orderBy: { createdAt: "desc" },
-    });
-
     await prisma.$transaction(async (tx) => {
       await tx.clinicMember.upsert({
         where: {
@@ -110,30 +101,17 @@ export async function POST(req: Request) {
         },
       });
 
-      if (existingInvite) {
-        await tx.employeeInvite.update({
-          where: { id: existingInvite.id },
-          data: {
-            createdById: session.user.id,
-            expiresAt,
-            roleId: role.id,
-            tokenHash,
-            userId: user.id,
-          },
-        });
-      } else {
-        await tx.employeeInvite.create({
-          data: {
-            clinicId,
-            createdById: session.user.id,
-            email,
-            expiresAt,
-            roleId: role.id,
-            tokenHash,
-            userId: user.id,
-          },
-        });
-      }
+      await tx.employeeInvite.create({
+        data: {
+          clinicId,
+          createdById: session.user.id,
+          email,
+          expiresAt,
+          roleId: role.id,
+          tokenHash,
+          userId: user.id,
+        },
+      });
     });
 
     const inviteUrl = `${getAppBaseUrl()}/accept-invite?token=${token}`;

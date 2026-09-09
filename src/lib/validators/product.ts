@@ -12,6 +12,7 @@ export const ProductCreateSchema = z.object({
   trackStock: z.coerce.boolean().default(true),
   stockOnHand: z.coerce.number().int().min(0).default(0),
   minStock: z.coerce.number().int().min(0).default(5),
+  expirationDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida.").nullable().optional(),
 
   isActive: z.coerce.boolean().default(true),
 

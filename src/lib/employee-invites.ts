@@ -18,6 +18,7 @@ export async function activatePendingEmployeeInviteForUser(
   const invite = await prisma.employeeInvite.findFirst({
     where: {
       acceptedAt: null,
+      revokedAt: null,
       email: normalizedEmail,
       expiresAt: { gt: new Date() },
     },

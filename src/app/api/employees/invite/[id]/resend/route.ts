@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireClinicPermission } from "@/lib/server-auth";
+import { requireClinicPermissions } from "@/lib/server-auth";
 import { getAppBaseUrl, sendEmployeeInviteEmail } from "@/lib/email";
 import { setTemporaryPasswordForUser } from "@/lib/temporary-password";
 
@@ -9,10 +9,10 @@ export const runtime = "nodejs";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { session, clinicId } = await requireClinicPermission("employees.invite");
+    const { session, clinicId } = await requireClinicPermissions(["employees.resendInvite", "employees.invite"]);
     const inviteId = Number((await params).id);
     const invite = await prisma.employeeInvite.findFirst({
-      where: { id: inviteId, clinicId, acceptedAt: null },
+      where: { id: inviteId, clinicId, acceptedAt: null, revokedAt: null },
       include: {
         clinic: { select: { name: true } },
         role: { select: { id: true, name: true, isActive: true } },
