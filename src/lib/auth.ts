@@ -1,6 +1,8 @@
-﻿import { betterAuth } from "better-auth";
+﻿import "server-only";
+import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
+import { toNextJsHandler } from "better-auth/next-js";
 import { headers } from "next/headers";
 import {
   getAppBaseUrl,
@@ -9,6 +11,7 @@ import {
 } from "@/lib/email";
 import { sendPasswordResetEmail as sendPasswordResetEmailMessage } from "@/lib/password-reset-email";
 import { prisma } from "@/lib/prisma";
+import { isPublicSignupEnabled } from "@/lib/runtime-config";
 
 export const auth = betterAuth({
   baseURL: getAppBaseUrl(),
@@ -49,6 +52,7 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    disableSignUp: !isPublicSignupEnabled(),
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     async sendResetPassword({ token, user }) {
@@ -57,6 +61,9 @@ export const auth = betterAuth({
         userName: user.name,
         resetUrl: getAppUrl(`/reset-password?token=${encodeURIComponent(token)}`),
       });
+    },
+    async onPasswordReset({ user }) {
+      await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: false } });
     },
   },
   emailVerification: {
@@ -71,6 +78,8 @@ export const auth = betterAuth({
   },
   plugins: [nextCookies()],
 });
+
+export const authHandler = toNextJsHandler(auth);
 
 export async function getSessionUserOrNull() {
   const session = await auth.api.getSession({
@@ -101,6 +110,7 @@ export async function getActiveClinicMembershipForUser(userId: string) {
           subscriptionStatus: true,
           subscriptionEndDate: true,
           plan: true,
+          timezone: true,
         },
       },
       role: {
@@ -132,12 +142,23 @@ export const getClinicIdOrFail = async () => {
     throw new Error("UNAUTHORIZED");
   }
 
+  if (user.banned) {
+    throw new Error("ACCESS_REVOKED");
+  }
+
   const membership = await getActiveClinicMembershipForUser(user.id);
   if (membership?.clinicId) {
-    if (!membership.clinic.isActive) {
+    if (!membership.clinic.isActive || membership.clinic.subscriptionStatus === "INACTIVE") {
       throw new Error("CLINIC_INACTIVE");
     }
     return membership.clinicId;
+  }
+
+  const inactiveMembership = await prisma.clinicMember.findFirst({ where: { userId: user.id, isActive: false }, select: { id: true } });
+  const pendingInvite = await prisma.employeeInvite.findFirst({ where: { userId: user.id, email: user.email.toLowerCase(), acceptedAt: null, revokedAt: null }, select: { id: true } });
+
+  if (inactiveMembership && !pendingInvite) {
+    throw new Error("ACCESS_REVOKED");
   }
 
   throw new Error("NO_CLINIC");

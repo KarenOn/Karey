@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
+import { syncInventoryNotifications } from "@/lib/in-app-notifications";
 import {
   StockMovementCreateSchema,
   stockMovementTypes,
@@ -74,6 +75,7 @@ export async function GET(req: Request) {
       reason: true,
       referenceType: true,
       referenceId: true,
+      invoiceId: true,
       createdById: true,
       createdAt: true,
       product: {
@@ -100,7 +102,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("inventory.update");
+  const { clinicId } = await requireClinicPermission("inventoryMovements.create");
   const body = await req.json().catch(() => null);
   const parsed = StockMovementCreateSchema.safeParse(body);
 
@@ -168,6 +170,7 @@ export async function POST(req: Request) {
         reason: true,
         referenceType: true,
         referenceId: true,
+        invoiceId: true,
         createdById: true,
         createdAt: true,
         product: {
@@ -192,6 +195,8 @@ export async function POST(req: Request) {
 
     return { movement, product: updatedProduct };
   });
+
+  await syncInventoryNotifications(clinicId);
 
   return NextResponse.json(result, { status: 201 });
 }

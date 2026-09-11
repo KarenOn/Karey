@@ -10,6 +10,6 @@ export type VaccinationRow = {
 
 export async function apiListVaccinations(): Promise<VaccinationRow[]> {
   const res = await fetch("/api/vaccinations", { cache: "no-store" });
-  if (!res.ok) throw new Error("Error cargando vacunaciones");
+  if (!res.ok) throw new Error("Error cargando vacunas");
   return res.json();
 }

@@ -1,22 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Eye, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { LoaderCircle, Mail, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { z } from "zod";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { getFriendlyVerificationMessage } from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import PasswordInput from "@/components/shared/PasswordInput";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isViewActive, setIsViewActive] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("error");
+    if (reason === "access-revoked") {
+      setErr("Tu acceso a esta clínica ha sido desactivado. Contacta al administrador de la clínica.");
+    } else if (reason === "no-clinic") {
+      setErr("Tu usuario no tiene una clínica activa asignada.");
+    }
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +35,13 @@ export default function LoginPage() {
     setIsLoading(true);
 
     const normalizedEmail = email.trim().toLowerCase();
+    if (!z.string().email().safeParse(normalizedEmail).success) {
+      setErr("Escribe un correo electrónico válido.");
+      setIsLoading(false);
+      return;
+    }
+    const requestedCallback = new URLSearchParams(window.location.search).get("callbackUrl");
+    const destination = requestedCallback?.startsWith("/") && !requestedCallback.startsWith("//") ? requestedCallback : "/";
 
     const { data, error } = await authClient.signIn.email(
       {
@@ -41,11 +59,24 @@ export default function LoginPage() {
       return;
     }
 
+    setIsLoading(false);
+    const accessResponse = await fetch("/api/profile", { cache: "no-store" });
+    if (accessResponse.status === 403) {
+      await authClient.signOut();
+      setErr("Tu acceso a esta clínica ha sido desactivado. Contacta al administrador de la clínica.");
+      setIsLoading(false);
+      return;
+    }
+
+    const accessProfile = accessResponse.ok
+      ? (await accessResponse.json().catch(() => null)) as { mustChangePassword?: boolean } | null
+      : null;
+
     if (!data?.user.emailVerified) {
       try {
         const response = await fetch("/api/auth/send-verification-email", {
           body: JSON.stringify({
-            callbackURL: "/",
+            callbackURL: destination,
             email: normalizedEmail,
           }),
           headers: { "Content-Type": "application/json" },
@@ -70,8 +101,12 @@ export default function LoginPage() {
       }
     }
 
-    setIsLoading(false);
-    router.push("/");
+    if (accessProfile?.mustChangePassword) {
+      router.push(`/onboarding/change-password?callbackUrl=${encodeURIComponent(destination)}`);
+      return;
+    }
+
+    router.push(destination);
   };
 
   const onGoogle = async () => {
@@ -91,27 +126,27 @@ export default function LoginPage() {
               <Sparkles className="size-3.5" />
               Karey Vet Suite
             </div>
-            <h1 className="app-heading max-w-xl text-5xl leading-[1.05]">La operacion veterinaria puede sentirse premium sin perder calidez.</h1>
+            <h1 className="app-heading max-w-xl text-5xl leading-[1.05]">Todo lo que pasa en tu clínica, en un solo lugar.</h1>
             <p className="mt-5 max-w-xl text-base leading-8 text-muted-foreground">
-              Disenado para clinicas que necesitan mas informacion visible, mejor jerarquia y una experiencia agradable tanto en escritorio como en jornadas largas.
+              Organiza tus pacientes, citas, inventario y facturación para que tu equipo pueda enfocarse en lo más importante: brindar una buena atención.
             </p>
           </div>
 
           <div className="relative grid gap-4 sm:grid-cols-3">
             <div className="app-panel-muted p-4">
               <PawPrint className="mb-3 size-5 text-primary" />
-              <p className="text-sm font-extrabold text-foreground">Pacientes al centro</p>
-              <p className="mt-1 text-sm text-muted-foreground">Todo mantiene contexto clinico y humano.</p>
+              <p className="text-sm font-extrabold text-foreground">Tu clínica al día</p>
+              <p className="mt-1 text-sm text-muted-foreground">Consulta rápidamente lo que necesita tu atención.</p>
             </div>
             <div className="app-panel-muted p-4">
               <MoonStar className="mb-3 size-5 text-(--brand-gold)" />
-              <p className="text-sm font-extrabold text-foreground">Dark mode real</p>
-              <p className="mt-1 text-sm text-muted-foreground">Contraste comodo para jornadas extensas.</p>
+              <p className="text-sm font-extrabold text-foreground">Todo conectado</p>
+              <p className="mt-1 text-sm text-muted-foreground">Pacientes, citas, servicios y pagos siempre a mano.</p>
             </div>
             <div className="app-panel-muted p-4">
               <Sparkles className="mb-3 size-5 text-primary" />
-              <p className="text-sm font-extrabold text-foreground">Diseno uniforme</p>
-              <p className="mt-1 text-sm text-muted-foreground">Mismos patrones en tablas, cards y formularios.</p>
+              <p className="text-sm font-extrabold text-foreground">Hecho para tu equipo</p>
+              <p className="mt-1 text-sm text-muted-foreground">Una forma sencilla de trabajar juntos cada día.</p>
             </div>
           </div>
         </section>
@@ -119,12 +154,13 @@ export default function LoginPage() {
         <div className="app-panel-strong mx-auto w-full max-w-xl overflow-hidden p-8 sm:p-10">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)] shadow-[0_20px_40px_rgba(18,41,79,0.24)]">
-              <PawPrint className="size-7 text-white" />
+              {/* <PawPrint className="size-7 text-white" /> */}
+              <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
             </div>
 
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">Bienvenida de regreso</p>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">Bienvenido de nuevo</p>
             <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">Inicia sesión en Karey Vet</h1>
-            <p className="mt-3 text-muted-foreground">Accede a clientes, pacientes, agenda y facturacion con una interfaz mas clara y expresiva.</p>
+            <p className="mt-3 text-muted-foreground">Tu clínica te espera. Continúa donde lo dejaste.</p>
           </div>
 
           <button type="button" onClick={onGoogle} className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-border/80 bg-background/70 transition hover:bg-background">
@@ -151,24 +187,18 @@ export default function LoginPage() {
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-foreground/88">Contraseña</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} type={isViewActive ? "text" : "password"} placeholder="Escribe tu contraseña" autoComplete="current-password" className="h-12 pl-11 pr-12 font-semibold" required />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setIsViewActive(!isViewActive)} aria-label="Mostrar contraseña">
-                  <Eye className="w-4 h-4" />
-                </button>
-              </div>
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Escribe tu contraseña" autoComplete="current-password" className="h-12 font-semibold" leadingIcon required />
             </div>
 
             <Button disabled={isLoading} className="h-12 w-full text-md disabled:opacity-60">
-              {isLoading ? "Ingresando..." : "Entrar al sistema"}
+              {isLoading ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Iniciando...</> : "Entrar al sistema"}
             </Button>
           </form>
 
           <div className="mt-6 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <Link className="text-left transition hover:text-foreground" href="/forgot-password">Olvidé mi contraseña</Link>
             <span>
-              ¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
+              ¿Necesitas acceso? <Link className="font-semibold text-foreground" href="/register">Solicítalo</Link>
             </span>
           </div>
         </div>

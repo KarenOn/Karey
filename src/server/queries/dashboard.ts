@@ -140,12 +140,13 @@
 import { prisma } from "@/lib/prisma";
 import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { startOfDay, endOfDay } from "@/lib/utility";
+import { syncInventoryNotifications } from "@/lib/in-app-notifications";
 
-export async function getDashboardData(clinicId: number) {
+export async function getDashboardData(clinicId: number, canViewInventory = true) {
   // ✅ Single clinic (por ahora)
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, owner: true, email: true, phone: true, mobile: true, inventoryExpiryAlertDays: true },
   });
 
   if (!clinic) {
@@ -156,9 +157,11 @@ export async function getDashboardData(clinicId: number) {
       appointments: [],
       invoices: [],
       products: [],
+      expiringProducts: [],
       vaccinations: [],
       todayAppointmentsCount: 0,
       monthlyRevenue: 0,
+      setupChecklist: { clinic: false, schedule: false, services: false, team: false, appointment: false },
       upcomingAppointments: [],
     };
   }
@@ -179,6 +182,7 @@ export async function getDashboardData(clinicId: number) {
     upcomingAppointmentsDb,
     recentInvoicesDb,
     lowStockProductsDb,
+    expiringProductsDb,
     upcomingVaccinationsDb,
     monthlyRevenueAgg,
   ] = await Promise.all([
@@ -291,6 +295,13 @@ export async function getDashboardData(clinicId: number) {
       return all.filter((p) => p.stockOnHand <= p.minStock).slice(0, 20);
     }),
 
+    prisma.product.findMany({
+      where: { clinicId: clinic.id, isActive: true, trackStock: true, expirationDate: { gte: dayStart, lte: addDays(now, clinic.inventoryExpiryAlertDays) } },
+      orderBy: { expirationDate: "asc" },
+      take: 20,
+      select: { id: true, name: true, expirationDate: true },
+    }),
+
     prisma.vaccinationRecord.findMany({
       where: {
         clinicId: clinic.id,
@@ -316,7 +327,7 @@ export async function getDashboardData(clinicId: number) {
 
     prisma.payment.aggregate({
       where: {
-        invoice: { clinicId: clinic.id },
+        invoice: { clinicId: clinic.id, status: { not: "VOID" } },
         paidAt: { gte: monthStart, lte: monthEnd },
       },
       _sum: { amount: true },
@@ -358,6 +369,13 @@ export async function getDashboardData(clinicId: number) {
     minStock: p.minStock,
   }));
 
+  const expiringProducts = expiringProductsDb.map((p) => ({
+    id: p.id,
+    name: p.name,
+    expirationDate: format(p.expirationDate!, "yyyy-MM-dd"),
+    daysUntilExpiration: Math.max(0, Math.ceil((p.expirationDate!.getTime() - dayStart.getTime()) / 86_400_000)),
+  }));
+
   // ✅ Vacunas próximas
   const vaccinations = upcomingVaccinationsDb.map((v) => ({
     id: v.id,
@@ -370,6 +388,16 @@ export async function getDashboardData(clinicId: number) {
   }));
 
   const monthlyRevenue = Number(monthlyRevenueAgg._sum.amount ?? 0);
+
+  const [scheduleCount, serviceCount, memberCount, inviteCount, appointmentCount] = await Promise.all([
+    prisma.clinicSchedule.count({ where: { clinicId: clinic.id } }),
+    prisma.service.count({ where: { clinicId: clinic.id, isActive: true } }),
+    prisma.clinicMember.count({ where: { clinicId: clinic.id, isActive: true } }),
+    prisma.employeeInvite.count({ where: { clinicId: clinic.id, acceptedAt: null, expiresAt: { gt: now } } }),
+    prisma.appointment.count({ where: { clinicId: clinic.id } }),
+  ]);
+
+  if (canViewInventory) await syncInventoryNotifications(clinic.id);
 
   return {
     clinicName: clinic.name ?? "Tu clínica",
@@ -393,10 +421,18 @@ export async function getDashboardData(clinicId: number) {
     appointments: upcomingAppointments,
     upcomingAppointments,
     invoices,
-    products,
+    products: canViewInventory ? products : [],
+    expiringProducts: canViewInventory ? expiringProducts : [],
     vaccinations,
 
     todayAppointmentsCount,
     monthlyRevenue,
+    setupChecklist: {
+      clinic: Boolean(clinic.name.trim() && clinic.owner?.trim() && (clinic.email?.trim() || clinic.phone?.trim() || clinic.mobile?.trim())),
+      schedule: scheduleCount > 0,
+      services: serviceCount > 0,
+      team: memberCount > 1 || inviteCount > 0,
+      appointment: appointmentCount > 0,
+    },
   };
 }

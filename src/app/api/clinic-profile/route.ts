@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { getAppUrl, sendAppWelcomeEmail } from "@/lib/email";
-import { resolveStoredFileUrl } from "@/lib/storage";
+import { deleteStoredFile, isS3StorageRef, resolveStoredFileUrl } from "@/lib/storage";
 import { ClinicProfileSchema } from "@/lib/validators/clinic-profile";
 
 const DAYS = [
@@ -52,6 +52,7 @@ async function readProfile(clinicId: number) {
       address: true,
       currency: true,
       timezone: true,
+      inventoryExpiryAlertDays: true,
       logoUrl: true,
       slogan: true,
       owner: true,
@@ -170,6 +171,13 @@ export async function PUT(req: Request) {
     });
 
     const profile = await readProfile(clinicId);
+    if (
+      previousProfile.logoStorageRef &&
+      previousProfile.logoStorageRef !== profile.logoStorageRef &&
+      isS3StorageRef(previousProfile.logoStorageRef)
+    ) {
+      await deleteStoredFile(previousProfile.logoStorageRef).catch(() => undefined);
+    }
     let emailWarning: string | null = null;
 
     if (
@@ -180,7 +188,7 @@ export async function PUT(req: Request) {
       try {
         await sendAppWelcomeEmail({
           clinicName: profile.name,
-          loginUrl: getAppUrl("/today"),
+          loginUrl: getAppUrl("/"),
           to: session.user.email,
           userName: session.user.name,
           variant: "clinic_ready",

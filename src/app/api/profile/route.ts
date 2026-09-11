@@ -8,8 +8,11 @@ export async function GET() {
     return NextResponse.json(profile);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo cargar el perfil";
-    const status = message === "UNAUTHORIZED" ? 401 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const status = message === "UNAUTHORIZED" ? 401 : message === "ACCESS_REVOKED" ? 403 : 500;
+    return NextResponse.json(
+      { error: status === 403 ? "Tu acceso a esta clínica ha sido desactivado" : message },
+      { status }
+    );
   }
 }
 
@@ -29,7 +32,10 @@ export async function PUT(req: Request) {
     return NextResponse.json(profile);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo actualizar el perfil";
-    const status = message === "UNAUTHORIZED" ? 401 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const status = message === "UNAUTHORIZED" ? 401 : message === "ACCESS_REVOKED" ? 403 : 500;
+    return NextResponse.json(
+      { error: status === 403 ? "Tu acceso a esta clínica ha sido desactivado" : message },
+      { status }
+    );
   }
 }

@@ -12,6 +12,7 @@ import {
 } from "@/generated/prisma/client";
 import { z } from "zod";
 import { getWalkInClientId } from "@/lib/pos/getWalkInClient";
+import { notifyInvoiceEvent } from "@/lib/in-app-notifications";
 
 function yyyymmdd(d: Date) {
   const y = d.getFullYear();
@@ -27,7 +28,7 @@ async function nextInvoiceNumber(clinicId: number, issueDate: Date) {
   end.setDate(end.getDate() + 1);
 
   const last = await prisma.invoice.findFirst({
-    where: { clinicId, issueDate: { gte: start, lt: end } },
+    where: { clinicId, issueDate: { gte: start, lt: end }, number: { startsWith: "FAC-" } },
     orderBy: { number: "desc" },
     select: { number: true },
   });
@@ -83,12 +84,16 @@ export async function GET(req: Request) {
 
   const q = searchParams.get("q")?.trim() || "";
   const status = searchParams.get("status")?.trim() || "";
+  const appointmentId = Number(searchParams.get("appointmentId")) || null;
+  const todayTurnId = Number(searchParams.get("todayTurnId")) || null;
   const take = Math.min(Number(searchParams.get("take") || 200), 500);
   const statusFilter = Object.values(InvoiceStatus).find((value) => value === status);
 
   const where: Prisma.InvoiceWhereInput = {
     clinicId,
     ...(statusFilter ? { status: statusFilter } : {}),
+    ...(appointmentId ? { appointmentId } : {}),
+    ...(todayTurnId ? { todayTurnId } : {}),
     ...(q
       ? {
           OR: [
@@ -172,8 +177,6 @@ export async function POST(req: Request) {
 
   const dueDate = data.dueDate ? new Date(data.dueDate) : null;
 
-  const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
-
   if (data.appointmentId) {
     const appointment = await prisma.appointment.findFirst({
       where: { id: data.appointmentId, clinicId },
@@ -188,24 +191,41 @@ export async function POST(req: Request) {
   if (data.todayTurnId) {
     const todayTurn = await prisma.todayTurn.findFirst({
       where: { id: data.todayTurnId, clinicId },
-      select: { id: true },
+      select: { id: true, clientId: true, petId: true },
     });
 
     if (!todayTurn) {
       return NextResponse.json({ error: "El turno no existe en esta clínica." }, { status: 404 });
     }
+    if (data.clientId === undefined && todayTurn.clientId) data.clientId = todayTurn.clientId;
+    if (data.petId === undefined) data.petId = todayTurn.petId;
   }
+
+  const existingEncounterInvoice = await prisma.invoice.findFirst({
+    where: {
+      clinicId,
+      status: { not: InvoiceStatus.VOID },
+      ...(data.appointmentId ? { appointmentId: data.appointmentId } : {}),
+      ...(data.todayTurnId ? { todayTurnId: data.todayTurnId } : {}),
+    },
+    select: { id: true, status: true },
+  });
+  if (existingEncounterInvoice && existingEncounterInvoice.status !== InvoiceStatus.DRAFT) {
+    return NextResponse.json({ error: "Esta atención ya tiene una factura emitida." }, { status: 409 });
+  }
+
+  const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
 
   const result = await prisma.$transaction(async (tx) => {
     // Crea invoice + items
     const payAmountValue = data.payment?.amount ?? total;
 
-    const invoice = await tx.invoice.create({
-      data: {
+    const invoiceData = {
         clinicId,
         clientId: resolvedClientId,
         petId: data.petId ?? null,
         appointmentId: data.appointmentId ?? null,
+        todayTurnId: data.todayTurnId ?? null,
 
         number: (await nextInvoiceNumber(clinicId!, new Date())).toString(),
         status: data.payNow
@@ -225,21 +245,46 @@ export async function POST(req: Request) {
         notes: data.notes ?? null,
         createdById: null,
 
-        items: {
-          create: data.items.map((it) => ({
-            type: it.type,
-            serviceId: it.type === "SERVICE" ? it.serviceId ?? null : null,
-            productId: it.type === "PRODUCT" ? it.productId ?? null : null,
-            description: it.description,
-            quantity: new Prisma.Decimal(it.quantity),
-            unitPrice: new Prisma.Decimal(it.unitPrice),
-            taxRate: new Prisma.Decimal(it.taxRate ?? 0),
-            lineTotal: new Prisma.Decimal(Number(it.quantity) * Number(it.unitPrice)),
-          })),
-        },
-      },
-      select: { id: true, number: true, status: true, total: true },
-    });
+        items: { create: data.items.map((it) => ({
+          type: it.type,
+          serviceId: it.type === "SERVICE" ? it.serviceId ?? null : null,
+          productId: it.type === "PRODUCT" ? it.productId ?? null : null,
+          description: it.description,
+          quantity: new Prisma.Decimal(it.quantity),
+          unitPrice: new Prisma.Decimal(it.unitPrice),
+          taxRate: new Prisma.Decimal(it.taxRate ?? 0),
+          lineTotal: new Prisma.Decimal(Number(it.quantity) * Number(it.unitPrice)),
+        })) },
+      };
+
+    const invoice = existingEncounterInvoice
+      ? await tx.invoice.update({
+          where: { id: existingEncounterInvoice.id },
+          data: {
+            ...invoiceData,
+            items: undefined,
+          },
+          select: { id: true, number: true, status: true, total: true },
+        })
+      : await tx.invoice.create({
+          data: invoiceData,
+          select: { id: true, number: true, status: true, total: true },
+        });
+
+    if (existingEncounterInvoice) {
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
+      await tx.invoiceItem.createMany({ data: data.items.map((it) => ({
+        invoiceId: invoice.id,
+        type: it.type,
+        serviceId: it.type === "SERVICE" ? it.serviceId ?? null : null,
+        productId: it.type === "PRODUCT" ? it.productId ?? null : null,
+        description: it.description,
+        quantity: new Prisma.Decimal(it.quantity),
+        unitPrice: new Prisma.Decimal(it.unitPrice),
+        taxRate: new Prisma.Decimal(it.taxRate ?? 0),
+        lineTotal: new Prisma.Decimal(Number(it.quantity) * Number(it.unitPrice)),
+      })) });
+    }
 
     // Si payNow -> crea payment
     if (data.payNow) {
@@ -257,7 +302,10 @@ export async function POST(req: Request) {
 
     // Stock OUT (opcional) - si quieres descontar stock en el momento de facturar
     // Si aún no quieres tocar stock aquí, quita este bloque.
-    for (const it of data.items) {
+    const hasStockMovement = existingEncounterInvoice
+      ? await tx.stockMovement.count({ where: { invoiceId: invoice.id } }) > 0
+      : false;
+    if (!hasStockMovement) for (const it of data.items) {
       if (it.type !== "PRODUCT" || !it.productId) continue;
 
       const product = await tx.product.findFirst({
@@ -282,6 +330,7 @@ export async function POST(req: Request) {
             reason: "Venta / Factura",
             referenceType: "INVOICE",
             referenceId: invoice.number,
+            invoiceId: invoice.id,
             createdById: null,
           },
         });
@@ -302,10 +351,19 @@ export async function POST(req: Request) {
       });
     }
 
+    await tx.encounterItem.deleteMany({
+      where: {
+        clinicId,
+        ...(data.appointmentId ? { appointmentId: data.appointmentId } : {}),
+        ...(data.todayTurnId ? { todayTurnId: data.todayTurnId } : {}),
+      },
+    });
+
     return invoice;
   });
 
   await syncInvoicePaymentReminderNotifications(result.id);
+  await notifyInvoiceEvent(result.id, result.status === InvoiceStatus.PARTIALLY_PAID ? "PARTIAL_PAYMENT" : result.status === InvoiceStatus.PAID ? "PAID" : result.status === InvoiceStatus.DRAFT ? "DRAFT" : "ISSUED");
 
   return NextResponse.json(result, { status: 201 });
 }

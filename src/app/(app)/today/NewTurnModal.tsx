@@ -25,6 +25,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
+import type { PetSpecies } from "@/types/common";
+import SearchableSelect from "@/components/shared/SearchableSelect";
+import PhoneInput from "@/components/shared/PhoneInput";
 
 type TodayTurnStatus =
   | "WAITING"
@@ -86,7 +90,7 @@ type NewClientFormState = {
   clientName: string;
   petName: string;
   phone: string;
-  species: "DOG" | "CAT" | "OTHER";
+  species: PetSpecies;
 };
 
 type RequestInitJson = RequestInit & {
@@ -165,14 +169,7 @@ async function requestJson<T>(url: string, init?: RequestInitJson): Promise<T> {
   return response.json();
 }
 
-const SPECIES_OPTIONS: Array<{
-  label: string;
-  value: NewClientFormState["species"];
-}> = [
-  { value: "DOG", label: "Perro" },
-  { value: "CAT", label: "Gato" },
-  { value: "OTHER", label: "Otro" },
-];
+const SPECIES_OPTIONS = PET_SPECIES_OPTIONS;
 
 const emptyCreateForm: NewClientFormState = {
   clientName: "",
@@ -196,7 +193,7 @@ export default function NewTurnModal({
   const [submitting, setSubmitting] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [mode, setMode] = useState<"search" | "create">("search");
+  const [mode, setMode] = useState<"search" | "walkin">("search");
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [pets, setPets] = useState<PetRecord[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
@@ -315,7 +312,6 @@ export default function NewTurnModal({
     (mode === "search"
       ? !!selectedResult
       : !!createForm.clientName.trim() &&
-        !!createForm.phone.trim() &&
         !!createForm.petName.trim());
 
   async function handleSubmit() {
@@ -332,13 +328,9 @@ export default function NewTurnModal({
       return;
     }
 
-    if (mode === "create") {
+    if (mode === "walkin") {
       if (!createForm.clientName.trim()) {
         onShowError("Nombre del cliente requerido");
-        return;
-      }
-      if (!createForm.phone.trim()) {
-        onShowError("Telefono requerido");
         return;
       }
       if (!createForm.petName.trim()) {
@@ -350,42 +342,19 @@ export default function NewTurnModal({
     setSubmitting(true);
 
     try {
-      let clientId: number;
-      let petId: number;
-
-      if (mode === "search" && selectedResult) {
-        clientId = selectedResult.clientId;
-        petId = selectedResult.petId;
-      } else {
-        const createdClient = await requestJson<{ id: number }>("/api/clients", {
-          method: "POST",
-          body: JSON.stringify({
-            fullName: createForm.clientName.trim(),
-            phone: createForm.phone.trim(),
-          }),
-        });
-
-        const createdPet = await requestJson<{ id: number }>("/api/pets", {
-          method: "POST",
-          body: JSON.stringify({
-            clientId: createdClient.id,
-            name: createForm.petName.trim(),
-            species: createForm.species,
-            sex: "UNKNOWN",
-          }),
-        });
-
-        clientId = createdClient.id;
-        petId = createdPet.id;
-      }
-
       const createdTurn = await requestJson<TodayTurnItem>("/api/today-turns", {
         method: "POST",
         body: JSON.stringify({
-          clientId,
+          ...(mode === "search" && selectedResult
+            ? { clientId: selectedResult.clientId, petId: selectedResult.petId }
+            : {
+                ownerName: createForm.clientName.trim(),
+                ownerPhone: createForm.phone.trim() || null,
+                petName: createForm.petName.trim(),
+                species: createForm.species,
+              }),
           estimatedDuration: selectedService.durationMins ?? 60,
           notes: notes.trim() || null,
-          petId,
           service: mapServiceToTurnType(selectedService),
           serviceName: selectedService.name,
         }),
@@ -407,7 +376,7 @@ export default function NewTurnModal({
     <Modal
       onClose={onOpenChange}
       open={open}
-      size="xl"
+      size="lg"
       title="Nuevo turno"
       footer={
         <div className="flex gap-3">
@@ -454,15 +423,15 @@ export default function NewTurnModal({
 
               <Button
                 type="button"
-                variant={mode === "create" ? "default" : "outline"}
-                className={cn("rounded-xl", mode !== "create" && "bg-transparent")}
+                variant={mode === "walkin" ? "default" : "outline"}
+                className={cn("rounded-xl", mode !== "walkin" && "bg-transparent")}
                 onClick={() => {
-                  setMode("create");
+                  setMode("walkin");
                   setSelectedResult(null);
                 }}
               >
                 <UserPlus className="mr-2 h-4 w-4" />
-                Crear nuevo cliente
+                Registrar sin paciente
               </Button>
             </div>
 
@@ -479,7 +448,7 @@ export default function NewTurnModal({
                         key={`${result.clientId}-${result.petId}`}
                         type="button"
                         className={cn(
-                          "flex w-full items-center justify-between rounded-[1rem] border px-4 py-3 text-left transition",
+                          "flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition",
                           active
                             ? "border-primary/40 bg-primary/8 shadow-sm"
                             : "border-border/70 bg-background hover:border-primary/25 hover:bg-muted/30"
@@ -512,8 +481,8 @@ export default function NewTurnModal({
                     );
                   })
                 ) : (
-                  <div className="rounded-[1rem] border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    No encontramos coincidencias. Puedes crear el cliente y la mascota aqui mismo.
+                  <div className="rounded-lg border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
+                    No encontramos coincidencias. Puedes registrar la llegada sin crear un cliente o paciente.
                   </div>
                 )}
               </div>
@@ -535,8 +504,8 @@ export default function NewTurnModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="clientPhone">Telefono</Label>
-                  <Input
+                  <Label htmlFor="clientPhone">Telefono (opcional)</Label>
+                  <PhoneInput
                     id="clientPhone"
                     onChange={(event) =>
                       setCreateForm((current) => ({
@@ -600,24 +569,20 @@ export default function NewTurnModal({
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-              <div className="space-y-2">
-                <Label>Servicio</Label>
-                <Select onValueChange={setSelectedServiceId} value={selectedServiceId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un servicio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {services.map((service) => (
-                      <SelectItem key={service.id} value={String(service.id)}>
-                        {service.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-2">
+                  <Label>Servicio</Label>
+                  <SearchableSelect
+                    options={services.map((service) => ({ value: String(service.id), label: service.name, keywords: [service.category ?? ""] }))}
+                    value={selectedServiceId}
+                    onValueChange={setSelectedServiceId}
+                    placeholder="Selecciona un servicio"
+                    searchPlaceholder="Buscar servicio..."
+                    disabled={loadingData}
+                  />
+                </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-[1rem] border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Duracion
                   </p>
@@ -627,7 +592,7 @@ export default function NewTurnModal({
                   </p>
                 </div>
 
-                <div className="rounded-[1rem] border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Precio
                   </p>
@@ -655,14 +620,14 @@ export default function NewTurnModal({
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge variant="secondary" className="rounded-full px-3 py-1">
-                {mode === "search" ? "Cliente existente" : "Cliente nuevo"}
+              {mode === "search" ? "Paciente registrado" : "Sin paciente registrado"}
               </Badge>
               <Badge variant="secondary" className="rounded-full px-3 py-1">
-                Estado inicial: waiting
+                Estado inicial: en espera
               </Badge>
             </div>
 
-            <div className="mt-4 rounded-[1rem] border border-border/70 bg-background px-4 py-4">
+            <div className="mt-4 rounded-lg border border-border/70 bg-background px-4 py-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <PawPrint className="h-4 w-4" />
@@ -682,7 +647,7 @@ export default function NewTurnModal({
                   <p className="text-xs text-muted-foreground">
                     {mode === "search"
                       ? selectedResult?.ownerPhone || "Sin telefono"
-                      : createForm.phone || "Telefono requerido"}
+                      : createForm.phone || "Telefono no registrado"}
                   </p>
                 </div>
               </div>

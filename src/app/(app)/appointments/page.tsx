@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, addMinutes, format, isToday, isTomorrow, parse, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
+import { useRouter } from "next/navigation";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
   Clock,
   Edit,
+  Eye,
+  LoaderCircle,
   Plus,
   Trash2,
   UserRound,
@@ -17,15 +20,28 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AppAlert } from "@/components/shared/AppAlert";
 import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
-import FormField from "@/components/shared/FormField";
+import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
 import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { safeDate } from "@/lib/utility";
 import { cn } from "@/lib/utils";
+import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
+import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
+import { getClinicDateKey } from "@/lib/appointment-time";
+import {
+  filterAppointmentsByClinicDay,
+  canPerformAction,
+  isVetAvailableForRange,
+  invalidateAppointmentSurfaces,
+} from "@/lib/appointment-helpers";
+import { useCurrentUserProfile } from "@/components/layout/current-user-context";
 
 type PetDTO = { id: number; name: string; species: string; clientId: number };
 type ClientDTO = { id: number; fullName: string; phone?: string | null };
@@ -48,6 +64,8 @@ type AppointmentDTO = {
   pet: PetDTO;
   client: ClientDTO;
   vet: VetDTO | null;
+  visit?: { id: number; _count: { vaccinations: number } } | null;
+  encounterItems?: Array<{ id: number }>;
 };
 
 type AppointmentMetaResponse = {
@@ -57,6 +75,7 @@ type AppointmentMetaResponse = {
   schedules: ScheduleDTO[];
   appointmentTypes: string[];
   appointmentStatuses: string[];
+  clinicTimezone: string;
 };
 
 type AppointmentTableRow = AppointmentDTO & { searchText: string };
@@ -135,6 +154,9 @@ const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 const NON_BLOCKING_STATUSES = new Set(["CANCELLED", "NO_SHOW"]);
 const TIMELINE_SLOT_HEIGHT = 86;
 const TIMELINE_CARD_GAP = 8;
+const TIMELINE_SLOT_MINUTES = 30;
+const TIMELINE_PIXELS_PER_MINUTE = TIMELINE_SLOT_HEIGHT / TIMELINE_SLOT_MINUTES;
+const APPOINTMENT_HOVER_HEIGHT = 196;
 
 function formatAppointmentType(type: string) {
   return TYPE_LABELS[type] ?? type;
@@ -163,7 +185,7 @@ function buildTimeSlots(open: string | null, close: string | null, stepMinutes =
 
   const slots: string[] = [];
   let current = startDate;
-  while (current <= endDate) {
+  while (current < endDate) {
     slots.push(format(current, "HH:mm"));
     current = addMinutes(current, stepMinutes);
   }
@@ -186,6 +208,10 @@ function diffMinutes(start: Date, end: Date) {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Ocurrió un error inesperado";
+}
+
+function hasAppointmentActivity(appointment: AppointmentDTO) {
+  return Boolean(appointment.visit || appointment.encounterItems?.length);
 }
 
 function canStillSendReminder(status: string) {
@@ -244,10 +270,81 @@ function LegendItem({ colorClass, label }: { colorClass: string; label: string }
   );
 }
 
+function AppointmentDetailDialog({
+  appointment,
+  onClose,
+  canEdit,
+  canManage,
+  canAttend,
+  canReschedule,
+  canCancel,
+  onEdit,
+  onAttend,
+  onManage,
+  onReschedule,
+  onCancel,
+}: {
+  appointment: AppointmentDTO | null;
+  onClose: () => void;
+  canEdit: boolean;
+  canManage: boolean;
+  canAttend: boolean;
+  canReschedule: boolean;
+  canCancel: boolean;
+  onEdit: (appointment: AppointmentDTO) => void;
+  onAttend: (appointment: AppointmentDTO) => void;
+  onManage: (appointment: AppointmentDTO) => void;
+  onReschedule: (appointment: AppointmentDTO) => void;
+  onCancel: (appointment: AppointmentDTO) => void;
+}) {
+  if (!appointment) return null;
+  const start = safeDate(appointment.startAt);
+  const end = getAppointmentEnd(appointment);
+  const canCancelAppointment = canCancel && canPerformAction(appointment.status, "cancel") && (appointment.status !== "IN_PROGRESS" || !hasAppointmentActivity(appointment));
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader><DialogTitle>Detalle de cita</DialogTitle></DialogHeader>
+        <div className="grid gap-4 text-sm sm:grid-cols-2">
+          <DetailItem label="Paciente" value={appointment.pet?.name ?? "-"} />
+          <DetailItem label="Cliente" value={appointment.client?.fullName ?? "-"} />
+          <DetailItem label="Fecha" value={start ? format(start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : "-"} />
+          <DetailItem label="Inicio / fin" value={`${start ? format(start, "HH:mm") : "-"} - ${end ? format(end, "HH:mm") : "-"}`} />
+          <DetailItem label="Tipo" value={formatAppointmentType(appointment.type)} />
+          <DetailItem label="Estado" value={formatAppointmentStatus(appointment.status)} />
+          <DetailItem label="Veterinario" value={appointment.vet?.name ?? "Sin asignar"} />
+          <DetailItem label="Recordatorio" value={appointment.reminderSent ? "Enviado" : "Pendiente"} />
+          <DetailItem label="Motivo" value={appointment.reason ?? "Sin motivo registrado"} className="sm:col-span-2" />
+          <DetailItem label="Notas" value={appointment.notes ?? "Sin notas registradas"} className="sm:col-span-2" />
+        </div>
+        <DialogFooter className="flex-wrap sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {canEdit && canPerformAction(appointment.status, "reschedule") ? <Button variant="outline" onClick={() => onEdit(appointment)}><Edit className="mr-2 h-4 w-4" />Editar</Button> : null}
+            {canAttend && canManage && canPerformAction(appointment.status, "attend") ? <Button variant="outline" onClick={() => onAttend(appointment)}>Atender</Button> : null}
+            {canManage && appointment.status === "IN_PROGRESS" ? <Button variant="outline" onClick={() => onManage(appointment)}>Gestionar atención</Button> : null}
+            {canReschedule && canPerformAction(appointment.status, "reschedule") ? <Button variant="ghost" onClick={() => onReschedule(appointment)}>Reprogramar</Button> : null}
+            {canCancelAppointment ? <Button variant="ghost" className="text-destructive" onClick={() => onCancel(appointment)}>Cancelar</Button> : null}
+          </div>
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailItem({ label, value, className }: { label: string; value: string; className?: string }) {
+  return <div className={className}><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-foreground">{value}</p></div>;
+}
+
 export default function AppointmentsPage() {
+  const router = useRouter();
   const access = useCurrentUserAccess();
+  const profile = useCurrentUserProfile();
   const [view, setView] = useState<"agenda" | "list">("agenda");
   const [selectedDay, setSelectedDay] = useState<Date>(startOfDay(new Date()));
+  const [listViewSelectedDay, setListViewSelectedDay] = useState<string>("");
+  const listDateInitialized = useRef(false);
+  const [listStatusFilter, setListStatusFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -259,9 +356,14 @@ export default function AppointmentsPage() {
   const [schedules, setSchedules] = useState<ScheduleDTO[]>([]);
   const [appointmentTypes, setAppointmentTypes] = useState<string[]>([]);
   const [appointmentStatuses, setAppointmentStatuses] = useState<string[]>([]);
+  const [clinicTimezone, setClinicTimezone] = useState("America/Santo_Domingo");
+  const [slotVetId, setSlotVetId] = useState("__NONE__");
+  // const [listViewSearchText, setListViewSearchText] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AppointmentDTO | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentDTO | null>(null);
+  const [hoveredAppointmentId, setHoveredAppointmentId] = useState<number | null>(null);
   const [formData, setFormData] = useState<AppointmentFormState>({
     petId: "",
     type: "",
@@ -277,6 +379,13 @@ export default function AppointmentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [encounter, setEncounter] = useState<{ appointmentId: number; petId: number; clientId: number } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<AppointmentDTO | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentDTO | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleEndTime, setRescheduleEndTime] = useState("");
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: "success" | "info" | "warning" | "destructive";
@@ -285,7 +394,14 @@ export default function AppointmentsPage() {
   }>({ variant: "info", title: "" });
   const canCreateAppointments = !!access?.actions.appointments.create;
   const canUpdateAppointments = !!access?.actions.appointments.update;
+  const canEditAppointments = !!access?.actions.appointments.edit;
+  const canAttendAppointments = !!access?.actions.appointments.attend;
+  const canManageEncounter = !!access?.actions.encounters.manage;
+  const canCancelAppointments = !!access?.actions.appointments.cancel;
+  const canRescheduleAppointments = !!access?.actions.appointments.reschedule;
   const canDeleteAppointments = !!access?.actions.appointments.delete;
+  const canAssignAppointments = !!access?.actions.appointments.assign;
+  const canSelfAssignAppointments = canAssignAppointments && !!access?.actions.appointments.receiveUnassignedNowAlerts;
 
   const showAlert = useCallback((
     variant: "success" | "info" | "warning" | "destructive",
@@ -296,8 +412,8 @@ export default function AppointmentsPage() {
     setAlertOpen(true);
   }, []);
 
-  const refreshAll = useCallback(async () => {
-    setLoading(true);
+  const refreshAll = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
 
     try {
@@ -313,6 +429,7 @@ export default function AppointmentsPage() {
       setSchedules(meta.schedules);
       setAppointmentTypes(meta.appointmentTypes);
       setAppointmentStatuses(meta.appointmentStatuses);
+      setClinicTimezone(meta.clinicTimezone || "America/Santo_Domingo");
     } catch (refreshError) {
       console.error(refreshError);
       const message = getErrorMessage(refreshError);
@@ -327,7 +444,31 @@ export default function AppointmentsPage() {
     void refreshAll();
   }, [refreshAll]);
 
-  const selectedDayStr = useMemo(() => format(selectedDay, "yyyy-MM-dd"), [selectedDay]);
+  useEffect(() => {
+    const handleInvalidation = () => void refreshAll(false);
+    window.addEventListener("karey:appointments-invalidated", handleInvalidation);
+    return () => window.removeEventListener("karey:appointments-invalidated", handleInvalidation);
+  }, [refreshAll]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => void refreshAll(false), 30_000);
+    return () => window.clearInterval(interval);
+  }, [refreshAll]);
+
+  // Initialize list view selected day when clinic timezone is set
+  useEffect(() => {
+    if (!listDateInitialized.current && clinicTimezone) {
+      const today = new Date();
+      const clinicDateKey = getClinicDateKey(today, clinicTimezone);
+      setListViewSelectedDay(clinicDateKey);
+      listDateInitialized.current = true;
+    }
+  }, [clinicTimezone]);
+
+  // Compute selectedDayStr using clinic timezone instead of browser timezone
+  const selectedDayStr = useMemo(() => {
+    return getClinicDateKey(selectedDay, clinicTimezone);
+  }, [selectedDay, clinicTimezone]);
   const scheduleByDay = useMemo(() => new Map(schedules.map((schedule) => [schedule.day, schedule])), [schedules]);
   const selectedSchedule = useMemo(
     () => scheduleByDay.get(getWeekdayKey(selectedDay)) ?? DEFAULT_SCHEDULE,
@@ -338,6 +479,10 @@ export default function AppointmentsPage() {
     () => (isClosedDay ? [] : buildTimeSlots(selectedSchedule.open, selectedSchedule.close)),
     [isClosedDay, selectedSchedule.close, selectedSchedule.open]
   );
+  const timelineStart = selectedSchedule.open ? combineDateAndTime(selectedDayStr, selectedSchedule.open) : null;
+  const timelineEnd = selectedSchedule.close ? combineDateAndTime(selectedDayStr, selectedSchedule.close) : null;
+  const timelineMinutes = timelineStart && timelineEnd ? Math.max(0, diffMinutes(timelineStart, timelineEnd)) : 0;
+  const gridHeight = Math.max(TIMELINE_SLOT_HEIGHT, timelineMinutes * TIMELINE_PIXELS_PER_MINUTE);
 
   const petById = useMemo(() => new Map(pets.map((pet) => [pet.id, pet])), [pets]);
   const clientById = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
@@ -361,10 +506,40 @@ export default function AppointmentsPage() {
     [appointmentStatuses]
   );
 
-  const vetOptions = useMemo(
-    () => [{ value: "__NONE__", label: "Sin asignar" }, ...vets.map((vet) => ({ value: vet.id, label: vet.name }))],
-    [vets]
-  );
+  const vetOptions = useMemo(() => {
+    const start = formData.date && formData.time ? combineDateAndTime(formData.date, formData.time) : null;
+    const end = formData.date && formData.endTime ? combineDateAndTime(formData.date, formData.endTime) : start ? addMinutes(start, DEFAULT_APPOINTMENT_DURATION_MINUTES) : null;
+    if (!start || !end || end <= start) {
+      return [{ value: "__NONE__", label: "Sin asignar" }, ...vets.map((vet) => ({ value: vet.id, label: vet.name }))];
+    }
+    const daySchedule = scheduleByDay.get(getWeekdayKey(start));
+    const openAt = daySchedule?.open ? combineDateAndTime(formData.date, daySchedule.open) : null;
+    const closeAt = daySchedule?.close ? combineDateAndTime(formData.date, daySchedule.close) : null;
+    if (!daySchedule || daySchedule.closed || !openAt || !closeAt || start < openAt || end > closeAt) {
+      return [{ value: "__NONE__", label: "Sin asignar" }];
+    }
+    const available = vets.filter((vet) => isVetAvailableForRange(appointments, vet.id, start, end, editing?.id));
+    return [{ value: "__NONE__", label: "Sin asignar" }, ...available.map((vet) => ({ value: vet.id, label: vet.name }))];
+  }, [appointments, editing?.id, formData.date, formData.endTime, formData.time, scheduleByDay, vets]);
+
+  const currentUserIsVet = !!profile?.userId && vets.some((vet) => vet.id === profile.userId);
+  const showSelfAssign = !!editing && formData.vetId === "__NONE__" && currentUserIsVet && canSelfAssignAppointments;
+  const hideVetSelector = !!editing && formData.vetId === "__NONE__" && currentUserIsVet;
+
+  async function assignEditingAppointmentToSelf() {
+    if (!editing || !profile?.userId || !showSelfAssign) return;
+    setSaving(true);
+    try {
+      const updated = await requestJson<AppointmentDTO>(`/api/appointments/${editing.id}/assign`, { method: "PATCH", body: JSON.stringify({ vetId: profile.userId }) });
+      setFormData((current) => ({ ...current, vetId: updated.vetId ?? profile.userId }));
+      setAppointments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setEditing(updated);
+      invalidateAppointmentSurfaces({ appointmentId: updated.id, status: updated.status });
+      showAlert("success", "Cita asignada", "La cita fue asignada a tu usuario.");
+    } catch (error) {
+      showAlert("destructive", "No se pudo asignar la cita", getErrorMessage(error));
+    } finally { setSaving(false); }
+  }
 
   const selectedPet = formData.petId ? petById.get(Number(formData.petId)) ?? null : null;
   const selectedClient = selectedPet ? clientById.get(selectedPet.clientId) ?? null : null;
@@ -374,11 +549,11 @@ export default function AppointmentsPage() {
       appointments
         .filter((appointment) => {
           const start = safeDate(appointment.startAt);
-          return start ? format(start, "yyyy-MM-dd") === selectedDayStr : false;
+          return start ? getClinicDateKey(start, clinicTimezone) === selectedDayStr : false;
         })
         .slice()
         .sort((left, right) => left.startAt.localeCompare(right.startAt)),
-    [appointments, selectedDayStr]
+    [appointments, clinicTimezone, selectedDayStr]
   );
 
   const activeAppointments = useMemo(
@@ -418,7 +593,7 @@ export default function AppointmentsPage() {
     for (const appointment of activeDayAppointments) {
       const start = safeDate(appointment.startAt);
       const end = getAppointmentEnd(appointment);
-      if (!start || !end) continue;
+      if (!start || !end || appointment.vetId !== (slotVetId === "__NONE__" ? null : slotVetId)) continue;
 
       for (const slot of timeSlots) {
         const slotStart = combineDateAndTime(selectedDayStr, slot);
@@ -430,32 +605,72 @@ export default function AppointmentsPage() {
     }
 
     return occupied;
-  }, [activeDayAppointments, selectedDayStr, timeSlots]);
+  }, [activeDayAppointments, selectedDayStr, slotVetId, timeSlots]);
+
+  const isPastSlot = (slot: string) => combineDateAndTime(selectedDayStr, slot) <= new Date();
+  const getTimelineSlotHeight = (slot: string) => {
+    if (!timelineEnd) return TIMELINE_SLOT_HEIGHT;
+    const remainingMinutes = diffMinutes(combineDateAndTime(selectedDayStr, slot), timelineEnd);
+    return Math.max(1, Math.min(TIMELINE_SLOT_MINUTES, remainingMinutes) * TIMELINE_PIXELS_PER_MINUTE);
+  };
 
   const appointmentLayouts = useMemo(() => {
-    const timelineStart = timeSlots[0] ? combineDateAndTime(selectedDayStr, timeSlots[0]) : null;
     if (!timelineStart) return [];
 
-    return activeDayAppointments
+    const entries = activeDayAppointments
       .map((appointment) => {
         const start = safeDate(appointment.startAt);
         const end = getAppointmentEnd(appointment);
         if (!start || !end) return null;
 
-        const top = (diffMinutes(timelineStart, start) / DEFAULT_APPOINTMENT_DURATION_MINUTES) * TIMELINE_SLOT_HEIGHT;
+        const top = diffMinutes(timelineStart, start) * TIMELINE_PIXELS_PER_MINUTE;
+        const availableHeight = Math.max(1, gridHeight - top - 4);
         const height = Math.max(
-          (diffMinutes(start, end) / DEFAULT_APPOINTMENT_DURATION_MINUTES) * TIMELINE_SLOT_HEIGHT - TIMELINE_CARD_GAP,
-          TIMELINE_SLOT_HEIGHT - TIMELINE_CARD_GAP
+          Math.min(
+            diffMinutes(start, end) * TIMELINE_PIXELS_PER_MINUTE - TIMELINE_CARD_GAP,
+            availableHeight,
+          ),
+          1,
         );
 
         return {
           appointment,
+          start,
+          end,
           top,
           height,
         };
       })
-      .filter((item): item is { appointment: AppointmentDTO; top: number; height: number } => Boolean(item));
-  }, [activeDayAppointments, selectedDayStr, timeSlots]);
+      .filter((item): item is { appointment: AppointmentDTO; start: Date; end: Date; top: number; height: number } => Boolean(item))
+      .sort((left, right) => left.start.getTime() - right.start.getTime());
+
+    const layouts: Array<typeof entries[number] & { lane: number; laneCount: number }> = [];
+    let cluster: typeof entries = [];
+    let clusterEnd = 0;
+    const flushCluster = () => {
+      if (!cluster.length) return;
+      const lanes: Date[] = [];
+      const assigned = cluster.map((entry) => {
+        let lane = lanes.findIndex((end) => end.getTime() <= entry.start.getTime());
+        if (lane < 0) { lane = lanes.length; lanes.push(entry.end); } else { lanes[lane] = entry.end; }
+        return { ...entry, lane };
+      });
+      layouts.push(...assigned.map((entry) => ({ ...entry, laneCount: lanes.length })));
+      cluster = [];
+      clusterEnd = 0;
+    };
+    for (const entry of entries) {
+      if (cluster.length && entry.start.getTime() >= clusterEnd) flushCluster();
+      cluster.push(entry);
+      clusterEnd = Math.max(clusterEnd, entry.end.getTime());
+    }
+    flushCluster();
+    return layouts;
+  }, [activeDayAppointments, gridHeight, timelineStart]);
+  const renderedTimelineHeight = Math.max(
+    gridHeight,
+    ...appointmentLayouts.map(({ top, height }) => top + height + 4),
+  );
 
   const renderCalendarDayButton = React.useCallback(
     (props: React.ComponentProps<typeof CalendarDayButton>) => {
@@ -480,24 +695,47 @@ export default function AppointmentsPage() {
     },
     [calendarDotsByDay]
   );
+  // Filter appointments for list view by selected day and search text
+  const listViewAppointments = useMemo(() => {
+    const filtered = listViewSelectedDay
+      ? filterAppointmentsByClinicDay(appointments, listViewSelectedDay, clinicTimezone)
+      : appointments;
 
-  const tableRows = useMemo<AppointmentTableRow[]>(
-    () =>
-      appointments.map((appointment) => ({
-        ...appointment,
+    // if (listViewSearchText.trim()) {
+    //   const searchLower = listViewSearchText.toLowerCase();
+    //   filtered = filtered.filter((apt) => {
+    //     const searchText = [
+    //       apt.pet?.name,
+    //       apt.client?.fullName,
+    //       apt.vet?.name,
+    //       apt.reason,
+    //       formatAppointmentType(apt.type),
+    //       formatAppointmentStatus(apt.status),
+    //     ]
+    //       .filter(Boolean)
+    //       .join(" ")
+    //       .toLowerCase();
+    //     return searchText.includes(searchLower);
+    //   });
+    // }
+
+    return filtered
+      .filter((apt) => listStatusFilter === "ALL" || apt.status === listStatusFilter)
+      .map((apt) => ({
+        ...apt,
         searchText: [
-          appointment.pet?.name,
-          appointment.client?.fullName,
-          appointment.vet?.name,
-          appointment.reason,
-          formatAppointmentType(appointment.type),
-          formatAppointmentStatus(appointment.status),
+          apt.pet?.name,
+          apt.client?.fullName,
+          apt.vet?.name,
+          apt.reason,
+          formatAppointmentType(apt.type),
+          formatAppointmentStatus(apt.status),
         ]
           .filter(Boolean)
           .join(" "),
-      })),
-    [appointments]
-  );
+      }))
+      .sort((a, b) => a.startAt.localeCompare(b.startAt));
+  }, [appointments, listViewSelectedDay, listStatusFilter, clinicTimezone]);
 
   const legendItems = useMemo(
     () =>
@@ -512,7 +750,7 @@ export default function AppointmentsPage() {
     return scheduleByDay.get(getWeekdayKey(date)) ?? null;
   }
 
-  function resetForm(day = selectedDay, time = "09:00") {
+  function resetForm(day = selectedDay, time = "09:00", vetId = "__NONE__") {
     const defaultEndTime = format(
       addMinutes(combineDateAndTime(format(day, "yyyy-MM-dd"), time), DEFAULT_APPOINTMENT_DURATION_MINUTES),
       "HH:mm"
@@ -525,16 +763,16 @@ export default function AppointmentsPage() {
       time,
       endTime: defaultEndTime,
       status: appointmentStatuses[0] ?? "",
-      vetId: "__NONE__",
+      vetId,
       reason: "",
       notes: "",
     });
   }
 
-  function openCreateAt(day: Date, time: string) {
+  function openCreateAt(day: Date, time: string, vetId = slotVetId) {
     if (!canCreateAppointments) return;
     setEditing(null);
-    resetForm(day, time);
+    resetForm(day, time, vetId);
     setModalOpen(true);
   }
 
@@ -567,13 +805,113 @@ export default function AppointmentsPage() {
     setDeleteOpen(true);
   }
 
-  function handleChange(event: { target: { name: string; value: string } }) {
+  async function startEncounter(appointment: AppointmentDTO) {
+    if (!canAttendAppointments || !canManageEncounter || appointment.status === "COMPLETED") return;
+    setSaving(true);
+    try {
+      await requestJson(`/api/appointments/${appointment.id}`, { method: "PUT", body: JSON.stringify({ status: "IN_PROGRESS" }) });
+      setAppointments((current) => current.map((item) => item.id === appointment.id ? { ...item, status: "IN_PROGRESS" } : item));
+      invalidateAppointmentSurfaces({ appointmentId: appointment.id, status: "IN_PROGRESS" });
+      setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId });
+      showAlert("success", "Atención iniciada", "La cita está en progreso.");
+    } catch (error) {
+      showAlert("destructive", "No se pudo iniciar la atención", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function finishEncounter() {
+    if (!encounter) return;
+    const target = appointments.find((appointment) => appointment.id === encounter.appointmentId && appointment.status === "IN_PROGRESS");
+    if (target) {
+      await requestJson(`/api/appointments/${target.id}`, { method: "PUT", body: JSON.stringify({ status: "COMPLETED" }) });
+      setAppointments((current) => current.map((item) => item.id === target.id ? { ...item, status: "COMPLETED" } : item));
+      invalidateAppointmentSurfaces({ appointmentId: target.id, status: "COMPLETED" });
+    }
+    setEncounter(null);
+  }
+
+  async function cancelAppointment() {
+    if (!cancelTarget || saving) return;
+    if (cancelTarget.status === "IN_PROGRESS" && !cancelReason.trim()) {
+      showAlert("warning", "Motivo requerido", "Indica por qué se cancela la atención.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await requestJson(`/api/appointments/${cancelTarget.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "CANCELLED", ...(cancelTarget.status === "IN_PROGRESS" ? { reason: cancelReason.trim() } : {}) }) });
+      setAppointments((current) => current.map((item) => item.id === cancelTarget.id ? { ...item, status: "CANCELLED" } : item));
+      invalidateAppointmentSurfaces({ appointmentId: cancelTarget.id, status: "CANCELLED" });
+      setCancelTarget(null);
+      setCancelReason("");
+      showAlert("success", "Cita cancelada correctamente");
+    } catch (error) {
+      showAlert("destructive", "No se pudo cancelar la cita", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rescheduleAppointment() {
+    if (!rescheduleTarget || !rescheduleDate || !rescheduleTime || saving) return;
+    setSaving(true);
+    try {
+      const nextStart = combineDateAndTime(rescheduleDate, rescheduleTime);
+      
+      // If user provided explicit end time, use it; otherwise preserve duration
+      let nextEnd: Date;
+      if (rescheduleEndTime) {
+        nextEnd = combineDateAndTime(rescheduleDate, rescheduleEndTime);
+      } else {
+        // Preserve the original appointment duration
+        const originalStart = safeDate(rescheduleTarget.startAt);
+        const originalEnd = safeDate(rescheduleTarget.endAt);
+        let durationMinutes = DEFAULT_APPOINTMENT_DURATION_MINUTES;
+        
+        if (originalStart && originalEnd) {
+          durationMinutes = diffMinutes(originalStart, originalEnd);
+        }
+        nextEnd = addMinutes(nextStart, durationMinutes);
+      }
+      
+      // Validate end time
+      if (nextEnd <= nextStart) {
+        showAlert("warning", "Rango inválido", "La hora final debe ser posterior a la hora inicial.");
+        setSaving(false);
+        return;
+      }
+      
+      const updated = await requestJson<AppointmentDTO>(`/api/appointments/${rescheduleTarget.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          startAt: nextStart.toISOString(),
+          endAt: nextEnd.toISOString(),
+          status: "SCHEDULED",
+        }),
+      });
+      
+      setAppointments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      invalidateAppointmentSurfaces({ appointmentId: updated.id, status: updated.status });
+      setRescheduleTarget(null);
+      setRescheduleDate("");
+      setRescheduleTime("");
+      setRescheduleEndTime("");
+      showAlert("success", "Cita reprogramada correctamente");
+    } catch (error) {
+      showAlert("destructive", "No se pudo reprogramar la cita", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleChange(event: FormFieldChangeEvent) {
     const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: value }));
+    setFormData((current) => ({ ...current, [name]: String(value) }));
   }
 
   async function submitAppointment() {
-    if ((editing && !canUpdateAppointments) || (!editing && !canCreateAppointments)) {
+    if ((editing && !canEditAppointments) || (!editing && !canCreateAppointments)) {
       showAlert("warning", "No tienes permisos para guardar citas");
       return;
     }
@@ -596,6 +934,11 @@ export default function AppointmentsPage() {
       return;
     }
 
+    if (startAt <= new Date()) {
+      showAlert("warning", "Horario pasado", "No puedes agendar una cita en un horario que ya pasó.");
+      return;
+    }
+
     const endDate = formData.endTime
       ? combineDateAndTime(formData.date, formData.endTime)
       : addMinutes(startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
@@ -605,7 +948,7 @@ export default function AppointmentsPage() {
       return;
     }
 
-    if (endDate < startAt) {
+    if (endDate <= startAt) {
       showAlert("warning", "Rango inválido", "La hora final no puede ser menor que la inicial.");
       return;
     }
@@ -627,23 +970,55 @@ export default function AppointmentsPage() {
       return;
     }
 
-    const conflictingAppointment = activeAppointments.find((appointment) => {
-      if (editing && appointment.id === editing.id) return false;
+    // Validate scheduling conflicts
+    // Only check against active (non-cancelled, non-no-show) appointments
+    const selectedVetId = formData.vetId === "__NONE__" ? null : formData.vetId;
+    
+    let conflictingAppointment: AppointmentDTO | undefined;
+    
+    if (selectedVetId) {
+      // For assigned vet: check only against same vet's appointments
+      conflictingAppointment = activeAppointments.find((appointment) => {
+        if (editing && appointment.id === editing.id) return false;
+        if (appointment.vetId !== selectedVetId) return false; // Different vet, no conflict
 
-      const appointmentStart = safeDate(appointment.startAt);
-      const appointmentEnd = getAppointmentEnd(appointment);
-      if (!appointmentStart || !appointmentEnd) return false;
+        const appointmentStart = safeDate(appointment.startAt);
+        const appointmentEnd = getAppointmentEnd(appointment);
+        if (!appointmentStart || !appointmentEnd) return false;
 
-      return rangesOverlap(startAt, endDate, appointmentStart, appointmentEnd);
-    });
+        return rangesOverlap(startAt, endDate, appointmentStart, appointmentEnd);
+      });
+      
+      if (conflictingAppointment) {
+        showAlert(
+          "warning",
+          "Horario ocupado",
+          `${formData.vetId} ya tiene una cita en ese horario.`
+        );
+        return;
+      }
+    } else {
+      // For unassigned appointment: only allow one unassigned per time slot
+      // But don't block assigned vets
+      conflictingAppointment = activeAppointments.find((appointment) => {
+        if (editing && appointment.id === editing.id) return false;
+        if (appointment.vetId !== null) return false; // Assigned vet, no conflict with unassigned
 
-    if (conflictingAppointment) {
-      showAlert(
-        "warning",
-        "Horario ocupado",
-        `La cita se solapa con ${conflictingAppointment.pet?.name ?? "otra cita"} de ${conflictingAppointment.client?.fullName ?? "otro cliente"}.`
-      );
-      return;
+        const appointmentStart = safeDate(appointment.startAt);
+        const appointmentEnd = getAppointmentEnd(appointment);
+        if (!appointmentStart || !appointmentEnd) return false;
+
+        return rangesOverlap(startAt, endDate, appointmentStart, appointmentEnd);
+      });
+      
+      if (conflictingAppointment) {
+        showAlert(
+          "warning",
+          "Horario ocupado",
+          "Ya existe una cita sin asignar que se solapa con ese horario."
+        );
+        return;
+      }
     }
 
     const payload = {
@@ -677,7 +1052,8 @@ export default function AppointmentsPage() {
       setModalOpen(false);
       setEditing(null);
       resetForm();
-      await refreshAll();
+      await refreshAll(false);
+      invalidateAppointmentSurfaces({ appointmentId: editing?.id, status: payload.status });
     } catch (submitError) {
       console.error(submitError);
       showAlert("destructive", editing ? "No se pudo actualizar la cita" : "No se pudo crear la cita", getErrorMessage(submitError));
@@ -698,7 +1074,8 @@ export default function AppointmentsPage() {
       await requestJson(`/api/appointments/${deleteTarget.id}`, { method: "DELETE" });
       setDeleteOpen(false);
       setDeleteTarget(null);
-      await refreshAll();
+      await refreshAll(false);
+      invalidateAppointmentSurfaces({ appointmentId: deleteTarget.id });
       showAlert("success", "Cita eliminada", "La cita se eliminó correctamente.");
     } catch (deleteError) {
       console.error(deleteError);
@@ -766,13 +1143,20 @@ export default function AppointmentsPage() {
     {
       header: "Acciones",
       cell: (row: AppointmentTableRow) => (
-        <div className="flex items-center gap-2">
-          {canUpdateAppointments ? (
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ver cita de ${row.pet?.name ?? "paciente"}`} onClick={() => setSelectedAppointment(row)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+          {canAttendAppointments && canManageEncounter && canPerformAction(row.status, "attend") ? <Button variant="outline" size="sm" onClick={() => void startEncounter(row)}>Atender</Button> : null}
+          {canManageEncounter && row.status === "IN_PROGRESS" ? <Button variant="outline" size="sm" onClick={() => setEncounter({ appointmentId: row.id, petId: row.petId, clientId: row.clientId })}>Gestionar atención</Button> : null}
+          {canRescheduleAppointments && canPerformAction(row.status, "reschedule") ? <Button variant="ghost" size="sm" onClick={() => { const start = safeDate(row.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(row); }}>Reprogramar</Button> : null}
+          {canCancelAppointments && canPerformAction(row.status, "cancel") && (row.status !== "IN_PROGRESS" || !hasAppointmentActivity(row)) ? <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { setCancelReason(""); setCancelTarget(row); }}>{row.status === "IN_PROGRESS" ? "Cancelar atención" : "Cancelar"}</Button> : null}
+          {canRescheduleAppointments && canPerformAction(row.status, "reschedule") ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
               <Edit className="h-4 w-4 text-muted-foreground" />
             </Button>
           ) : null}
-          {canDeleteAppointments ? (
+          {canDeleteAppointments && canPerformAction(row.status, "reschedule") ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => askDelete(row)}>
               <Trash2 className="h-4 w-4 text-red-500" />
             </Button>
@@ -784,9 +1168,7 @@ export default function AppointmentsPage() {
 
   if (loading) {
     return (
-      <div className="app-empty flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-      </div>
+      <DataTableSkeleton />
     );
   }
 
@@ -811,33 +1193,57 @@ export default function AppointmentsPage() {
         description="Organiza citas, horarios y disponibilidad en un solo lugar."
         actions={
           canCreateAppointments ? (
-            <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+            <Button
+              onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Nueva Cita
             </Button>
           ) : null
         }
         stats={[
-          { label: "Del día", value: dayAppointments.length, hint: "Citas registradas" },
-          { label: "Activas", value: activeDayAppointments.length, hint: "Sin canceladas ni no-show" },
-          { label: "Veterinarios", value: vets.length, hint: "Disponibles para asignación" },
+          {
+            label: "Del día",
+            value: activeDayAppointments.length,
+            hint: "Citas visibles",
+          },
+          {
+            label: "Activas",
+            value: activeDayAppointments.length,
+            hint: "Sin canceladas ni no-show",
+          },
+          {
+            label: "Veterinarios",
+            value: vets.length,
+            hint: "Disponibles para asignación",
+          },
         ]}
       />
       <div className="hidden">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Agenda de Citas</h2>
-          <p className="text-muted-foreground">Gestiona las citas según mascotas, clientes, veterinarios y horario de la clínica</p>
+          <h2 className="text-2xl font-bold text-foreground">
+            Agenda de Citas
+          </h2>
+          <p className="text-muted-foreground">
+            Gestiona las citas según mascotas, clientes, veterinarios y horario
+            de la clínica
+          </p>
         </div>
 
         {canCreateAppointments ? (
-          <Button onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}>
+          <Button
+            onClick={() => openCreateAt(selectedDay, timeSlots[0] ?? "09:00")}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nueva Cita
           </Button>
         ) : null}
       </div>
 
-      <Tabs value={view} onValueChange={(value) => setView(value as "agenda" | "list")}>
+      <Tabs
+        value={view}
+        onValueChange={(value) => setView(value as "agenda" | "list")}
+      >
         <TabsList>
           <TabsTrigger value="agenda">Agenda</TabsTrigger>
           <TabsTrigger value="list">Lista</TabsTrigger>
@@ -851,23 +1257,35 @@ export default function AppointmentsPage() {
                   mode="single"
                   selected={selectedDay}
                   onSelect={(day) => day && setSelectedDay(startOfDay(day))}
-                  disabled={(day) => Boolean(scheduleByDay.get(getWeekdayKey(day))?.closed)}
+                  disabled={(day) =>
+                    Boolean(scheduleByDay.get(getWeekdayKey(day))?.closed)
+                  }
                   components={{ DayButton: renderCalendarDayButton }}
                   className="rounded-xl w-full border border-border/70"
                 />
 
                 <div className="mt-4 border-t border-border/70 pt-4">
-                  <p className="mb-3 text-sm font-semibold text-foreground">Tipos de cita</p>
+                  <p className="mb-3 text-sm font-semibold text-foreground">
+                    Tipos de cita
+                  </p>
                   <div className="space-y-2">
                     {legendItems.map((item) => (
-                      <LegendItem key={item.label} colorClass={item.color} label={item.label} />
+                      <LegendItem
+                        key={item.label}
+                        colorClass={item.color}
+                        label={item.label}
+                      />
                     ))}
                   </div>
                 </div>
 
                 <div className="mt-4 rounded-xl border border-border/70 bg-muted/45 p-3 text-sm text-muted-foreground">
                   <p className="font-medium text-foreground">Horario del día</p>
-                  <p>{isClosedDay ? "La clínica está cerrada este día" : `${selectedSchedule.open ?? "09:00"} - ${selectedSchedule.close ?? "17:00"}`}</p>
+                  <p>
+                    {isClosedDay
+                      ? "La clínica está cerrada este día"
+                      : `${selectedSchedule.open ?? "09:00"} - ${selectedSchedule.close ?? "17:00"}`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -876,30 +1294,77 @@ export default function AppointmentsPage() {
               <div className="app-panel-strong overflow-hidden">
                 <div className="flex items-center justify-between gap-3 border-b border-border/70 p-4">
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => setSelectedDay((current) => addDays(current, -1))} className="rounded-xl">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() =>
+                        setSelectedDay((current) => addDays(current, -1))
+                      }
+                      className="rounded-xl"
+                    >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
 
                     <div className="px-2">
-                      <p className="font-semibold capitalize text-foreground">{format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}</p>
+                      <p className="font-semibold capitalize text-foreground">
+                        {format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", {
+                          locale: es,
+                        })}
+                      </p>
                       <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <CalendarIcon className="h-3 w-3" />
-                        {dayAppointments.length} cita(s)
+                        {activeDayAppointments.length} cita(s)
                       </p>
                     </div>
 
-                    <Button variant="outline" size="icon" onClick={() => setSelectedDay((current) => addDays(current, 1))} className="rounded-xl">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() =>
+                        setSelectedDay((current) => addDays(current, 1))
+                      }
+                      className="rounded-xl"
+                    >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
 
-                  <Button variant="outline" onClick={() => setSelectedDay(startOfDay(new Date()))} className="rounded-xl">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedDay(startOfDay(new Date()))}
+                    className="rounded-xl"
+                  >
                     Hoy
                   </Button>
                 </div>
 
+                <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
+                  <label
+                    htmlFor="agenda-vet-lane"
+                    className="text-sm font-medium text-muted-foreground"
+                  >
+                    Disponibilidad de:
+                  </label>
+                  <select
+                    id="agenda-vet-lane"
+                    value={slotVetId}
+                    onChange={(event) => setSlotVetId(event.target.value)}
+                    className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
+                  >
+                    <option value="__NONE__">Sin asignar</option>
+                    {vets.map((vet) => (
+                      <option key={vet.id} value={vet.id}>
+                        {vet.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {isClosedDay ? (
-                  <div className="p-8 text-center text-muted-foreground">No hay agenda disponible porque la clínica está cerrada este día.</div>
+                  <div className="p-8 text-center text-muted-foreground">
+                    No hay agenda disponible porque la clínica está cerrada este
+                    día.
+                  </div>
                 ) : (
                   <div className="flex">
                     <div className="w-20 border-r border-border/70">
@@ -907,7 +1372,7 @@ export default function AppointmentsPage() {
                         <div
                           key={slot}
                           className="flex items-start px-4 py-3 text-sm text-muted-foreground"
-                          style={{ height: `${TIMELINE_SLOT_HEIGHT}px` }}
+                           style={{ height: `${getTimelineSlotHeight(slot)}px` }}
                         >
                           {slot}
                         </div>
@@ -916,104 +1381,134 @@ export default function AppointmentsPage() {
 
                     <div
                       className="relative flex-1"
-                      style={{ height: `${timeSlots.length * TIMELINE_SLOT_HEIGHT}px` }}
+                      style={{
+                        height: `${renderedTimelineHeight}px`,
+                      }}
                     >
                       <div className="absolute inset-0">
                         {timeSlots.map((slot) => (
                           <div
                             key={slot}
                             className="border-b border-border/70 px-3 py-3"
-                            style={{ height: `${TIMELINE_SLOT_HEIGHT}px` }}
+                             style={{ height: `${getTimelineSlotHeight(slot)}px` }}
                           >
-                            {!occupiedSlots.has(slot) && canCreateAppointments ? (
-                              <button
-                                type="button"
-                                onClick={() => openCreateAt(selectedDay, slot)}
-                                className="flex h-full w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-muted-foreground transition hover:border-primary/30 hover:bg-muted/45"
-                              >
-                                <Plus className="h-4 w-4" />
-                                Agendar cita
-                              </button>
-                            ) : null}
+                            {appointmentLayouts.some(({ start, end }) =>
+                              rangesOverlap(
+                                combineDateAndTime(selectedDayStr, slot),
+                                addMinutes(combineDateAndTime(selectedDayStr, slot), TIMELINE_SLOT_MINUTES),
+                                start,
+                                end,
+                              )
+                            ) ? null : !isPastSlot(slot) &&
+                              !occupiedSlots.has(slot) &&
+                              canCreateAppointments ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openCreateAt(selectedDay, slot)}
+                                  className="flex h-full w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-muted-foreground transition hover:border-primary/30 hover:bg-muted/45"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  Agendar cita
+                                </button>
+                              ) : (
+                                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/30 text-xs text-muted-foreground">
+                                  {isPastSlot(slot)
+                                    ? "Horario pasado"
+                                    : "Horario ocupado"}
+                                </div>
+                              )}
                           </div>
                         ))}
                       </div>
 
-                      <div className="pointer-events-none absolute inset-0 px-3 py-3">
-                        {appointmentLayouts.map(({ appointment, top }) => {
-                          const styles = TYPE_STYLES[appointment.type] ?? TYPE_STYLES.OTHER;
-                          const reminderBadge = getReminderBadge(appointment);
+                      <div className="pointer-events-none absolute inset-0 px-3">
+                        {appointmentLayouts.map(
+                          ({ appointment, top, height, lane, laneCount }) => {
+                            const styles =
+                              TYPE_STYLES[appointment.type] ??
+                              TYPE_STYLES.OTHER;
+                            const isHovered = hoveredAppointmentId === appointment.id;
+                            const displayHeight = isHovered
+                              ? Math.max(height, APPOINTMENT_HOVER_HEIGHT)
+                              : height;
+                            const displayTop = isHovered
+                              ? Math.max(0, top + height - displayHeight)
+                              : top;
+                            const start = safeDate(appointment.startAt) ?? new Date();
+                            const end = getAppointmentEnd(appointment) ?? addMinutes(start, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+                            const reminderBadge = getReminderBadge(appointment);
+                            return (
+                              <div
+                                key={appointment.id}
+                                className="pointer-events-auto absolute z-10 overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition-[height,top,box-shadow] duration-150 cursor-pointer hover:z-30 hover:shadow-md"
+                                style={{
+                                  top: `${displayTop + 4}px`,
+                                  height: `${displayHeight}px`,
+                                  left: `calc(${lane * (100 / laneCount)}% + 0.25rem)`,
+                                  width: `calc(${100 / laneCount}% - 0.5rem)`,
+                                }}
+                                onMouseEnter={() => setHoveredAppointmentId(appointment.id)}
+                                onMouseLeave={() => setHoveredAppointmentId(null)}
+                                onClick={() => setSelectedAppointment(appointment)}
+                              >
+                                <div
+                                  className={`absolute left-0 top-0 h-full w-1.5 ${styles.bar}`}
+                                />
 
-                          return (
-                            <div
-                              key={appointment.id}
-                              className="pointer-events-auto absolute left-3 right-3 cursor-pointer overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition hover:-translate-y-0.5"
-                              style={{
-                                top: `${top + 4}px`,
-                                // height: `${height}px`,
-                              }}
-                              onClick={() => openEdit(appointment)}
-                            >
-                              <div className={`absolute left-0 top-0 h-full w-1.5 ${styles.bar}`} />
-
-                              <div className="flex h-full items-start justify-between gap-3 p-4 pl-5">
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="font-semibold text-foreground">{appointment.pet?.name ?? "Paciente"}</p>
-                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles.badge}`}>
-                                      {formatAppointmentType(appointment.type)}
-                                    </span>
-                                    <Badge className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
-                                      {formatAppointmentStatus(appointment.status)}
-                                    </Badge>
-                                    {reminderBadge ? (
-                                      <Badge className={`${reminderBadge.className} border`}>
-                                        {reminderBadge.label}
-                                      </Badge>
-                                    ) : null}
+                                  <div className="flex h-full items-start justify-between gap-3 p-4 pl-5">
+                                    <div className="min-h-0">
+                                      <p className="font-semibold text-foreground">
+                                        {appointment.pet?.name ?? "Paciente"}
+                                      </p>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles.badge}`}>
+                                          {formatAppointmentType(appointment.type)}
+                                        </span>
+                                        <Badge className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
+                                          {formatAppointmentStatus(appointment.status)}
+                                        </Badge>
+                                        {reminderBadge ? <Badge className={`${reminderBadge.className} border`}>{reminderBadge.label}</Badge> : null}
+                                      </div>
+                                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                                        {appointment.client?.fullName ?? "Propietario"}
+                                      </p>
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        {appointment.reason || "Sin motivo registrado"}
+                                      </p>
+                                      <p className="mt-2 text-xs text-muted-foreground/80">
+                                        {format(start, "HH:mm")} - {format(end, "HH:mm")}
+                                      </p>
+                                      <p className="mt-1 text-xs text-muted-foreground/80">
+                                        Veterinario: {appointment.vet?.name ?? "Sin asignar"}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {canUpdateAppointments && canManageEncounter && canPerformAction(appointment.status, "attend") ? (
+                                        <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>
+                                          Atender
+                                        </Button>
+                                      ) : null}
+                                      {canManageEncounter && appointment.status === "IN_PROGRESS" ? (
+                                        <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}>
+                                          Gestionar atención
+                                        </Button>
+                                      ) : null}
+                                      {canUpdateAppointments && canPerformAction(appointment.status, "reschedule") ? (
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(event) => { event.stopPropagation(); openEdit(appointment); }}>
+                                          <Edit className="h-4 w-4 text-muted-foreground" />
+                                        </Button>
+                                      ) : null}
+                                      {canDeleteAppointments && canPerformAction(appointment.status, "reschedule") ? (
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(event) => { event.stopPropagation(); askDelete(appointment); }}>
+                                          <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                      ) : null}
+                                    </div>
                                   </div>
-
-                                  <p className="mt-1 truncate text-sm text-muted-foreground">{appointment.client?.fullName ?? "Propietario"}</p>
-                                  <p className="mt-1 text-sm text-muted-foreground">{appointment.reason || "Sin motivo registrado"}</p>
-                                  <p className="mt-2 text-xs text-muted-foreground/80">
-                                    {format(safeDate(appointment.startAt) ?? combineDateAndTime(selectedDayStr, timeSlots[0] ?? "09:00"), "HH:mm")} -{" "}
-                                    {format(getAppointmentEnd(appointment) ?? combineDateAndTime(selectedDayStr, timeSlots[0] ?? "09:30"), "HH:mm")}
-                                  </p>
-                                  <p className="mt-1 text-xs text-muted-foreground/80">Veterinario: {appointment.vet?.name ?? "Sin asignar"}</p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {canUpdateAppointments ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        openEdit(appointment);
-                                      }}
-                                    >
-                                      <Edit className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                  ) : null}
-                                  {canDeleteAppointments ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        askDelete(appointment);
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-red-500" />
-                                    </Button>
-                                  ) : null}
-                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          },
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1024,13 +1519,51 @@ export default function AppointmentsPage() {
         </TabsContent>
 
         <TabsContent value="list" className="mt-6">
-          <DataTable
-            columns={columns}
-            data={tableRows}
-            searchKey="searchText"
-            searchPlaceholder="Buscar por mascota, cliente, veterinario o motivo..."
-            emptyMessage="No hay citas registradas"
-          />
+          <div className="app-panel-strong">
+            {/* <div className="border-b border-border/70 p-4">
+              <p className="mb-3 text-sm font-semibold text-foreground">
+                {listViewAppointments.length} registros encontrados
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Buscar por mascota, cliente, veterinario o motivo..."
+                    value={listViewSearchText}
+                    onChange={(e) => setListViewSearchText(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                
+              </div>
+            </div> */}
+            <DataTable
+              columns={columns}
+              data={listViewAppointments}
+              searchKey="searchText"
+              searchPlaceholder="Buscar por mascota, cliente o veterinario..."
+              emptyMessage="No hay citas para esta fecha"
+              actions={
+                <div className="flex w-full gap-2 sm:w-auto">
+                  <select value={listViewSelectedDay ? "DATE" : "ALL"} onChange={(event) => {
+                    if (event.target.value === "ALL") setListViewSelectedDay("");
+                  }} className="h-10 rounded-lg border border-border bg-background px-3 text-sm">
+                    <option value="ALL">Todas las fechas</option>
+                    <option value="DATE" disabled>Elegir fecha abajo</option>
+                  </select>
+                  <Input
+                    type="date"
+                    value={listViewSelectedDay}
+                    onChange={(e) => setListViewSelectedDay(e.target.value)}
+                    className="h-10"
+                  />
+                  <select value={listStatusFilter} onChange={(event) => setListStatusFilter(event.target.value)} className="h-10 rounded-lg border border-border bg-background px-3 text-sm">
+                    <option value="ALL">Todos los estados</option>
+                    {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
+              }
+            />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -1045,39 +1578,272 @@ export default function AppointmentsPage() {
               Cancelar
             </Button>
             {(editing ? canUpdateAppointments : canCreateAppointments) ? (
-              <Button onClick={() => void submitAppointment()} disabled={saving}>
-                {saving ? "Guardando..." : editing ? "Guardar Cambios" : "Crear Cita"}
+              <Button
+                onClick={() => void submitAppointment()}
+                disabled={saving}
+              >
+                {saving ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                {saving
+                  ? "Guardando..."
+                  : editing
+                    ? "Guardar Cambios"
+                    : "Crear Cita"}
               </Button>
             ) : null}
           </div>
         }
       >
-        <form onSubmit={(event) => { event.preventDefault(); void submitAppointment(); }} className="space-y-4">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitAppointment();
+          }}
+          className="space-y-4"
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Paciente" name="petId" type="select" value={formData.petId} onChange={() => handleChange} options={petOptions} placeholder="Selecciona una mascota" required />
+            <FormField
+              label="Paciente"
+              name="petId"
+              type="select"
+              value={formData.petId}
+              onChange={handleChange}
+              options={petOptions}
+              placeholder="Selecciona una mascota"
+              required
+            />
 
             <div className="space-y-2">
-              <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Propietario</label>
-              <div className="flex min-h-10 items-center rounded-2xl border border-border/70 bg-muted/45 px-3 text-sm text-foreground">
+              <label className="text-[0.78rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                Propietario
+              </label>
+              <div className="flex min-h-10 items-center rounded-lg border border-border/70 bg-muted/45 px-3 text-sm text-foreground">
                 <UserRound className="mr-2 h-4 w-4 text-muted-foreground" />
                 {selectedClient?.fullName ?? "Se asigna según la mascota"}
               </div>
             </div>
 
-            <FormField label="Tipo de Cita" name="type" type="select" value={formData.type} onChange={() => handleChange} options={typeOptions} placeholder="Selecciona un tipo" required />
-            <FormField label="Estado" name="status" type="select" value={formData.status} onChange={() => handleChange} options={statusOptions} placeholder="Selecciona un estado" required />
-            <FormField label="Fecha" name="date" type="date" value={formData.date} onChange={() => handleChange} required />
-            <FormField label="Hora inicial" name="time" type="time" value={formData.time} onChange={() => handleChange} required />
-            <FormField label="Hora final" name="endTime" type="time" value={formData.endTime} onChange={() => handleChange} />
-            <FormField label="Veterinario" name="vetId" type="select" value={formData.vetId} onChange={() => handleChange} options={vetOptions} />
-            <FormField label="Motivo" name="reason" type="textarea" value={formData.reason} onChange={() => handleChange} className="sm:col-span-2" />
-            <FormField label="Notas" name="notes" type="textarea" value={formData.notes} onChange={() => handleChange} className="sm:col-span-2" />
+            <FormField
+              label="Tipo de Cita"
+              name="type"
+              type="select"
+              value={formData.type}
+              onChange={handleChange}
+              options={typeOptions}
+              placeholder="Selecciona un tipo"
+              required
+            />
+            <FormField
+              label="Estado"
+              name="status"
+              type="select"
+              value={formData.status}
+              onChange={handleChange}
+              options={statusOptions}
+              placeholder="Selecciona un estado"
+              required
+            />
+            <FormField
+              label="Fecha"
+              name="date"
+              type="date"
+              value={formData.date}
+              onChange={handleChange}
+              required
+            />
+            <FormField
+              label="Hora inicial"
+              name="time"
+              type="time"
+              value={formData.time}
+              onChange={handleChange}
+              required
+            />
+            <FormField
+              label="Hora final"
+              name="endTime"
+              type="time"
+              value={formData.endTime}
+              onChange={handleChange}
+            />
+            {showSelfAssign ? <div className="space-y-2"><Label>Veterinario</Label><Button type="button" variant="outline" onClick={() => void assignEditingAppointmentToSelf()} disabled={saving}>Asignarme esta cita</Button></div> : hideVetSelector ? null : <FormField
+              label="Veterinario"
+              name="vetId"
+              type="select"
+              value={formData.vetId}
+              onChange={handleChange}
+              options={vetOptions}
+            />}
+            <FormField
+              label="Motivo"
+              name="reason"
+              type="textarea"
+              value={formData.reason}
+              onChange={handleChange}
+              className="sm:col-span-2"
+            />
+            <FormField
+              label="Notas"
+              name="notes"
+              type="textarea"
+              value={formData.notes}
+              onChange={handleChange}
+              className="sm:col-span-2"
+            />
           </div>
         </form>
       </Modal>
 
-      <ModalDelete open={deleteOpen} onOpenChange={setDeleteOpen} title="Eliminar cita" itemName={deleteTarget?.label} loading={deleting} onConfirm={handleDelete} />
+      <ModalDelete
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Eliminar cita"
+        itemName={deleteTarget?.label}
+        loading={deleting}
+        onConfirm={handleDelete}
+      />
+      <Modal
+        open={!!encounter}
+        onClose={(open) => {
+          if (!open) setEncounter(null);
+        }}
+        title="Atención clínica"
+        size="xl"
+      >
+        {encounter ? (
+          <EncounterWorkflow
+            petId={encounter.petId}
+            clientId={encounter.clientId}
+            appointmentId={encounter.appointmentId}
+            assignedVetId={
+              appointments.find(
+                (appointment) => appointment.id === encounter.appointmentId,
+              )?.vetId
+            }
+            vets={vets}
+            onFinish={() => void finishEncounter()}
+            onViewInvoice={(invoiceId) => router.push(`/invoices/${invoiceId}`)}
+            onBilling={() =>
+              router.push(
+                `/invoices/new?clientId=${encounter.clientId}&petId=${encounter.petId}&appointmentId=${encounter.appointmentId}`,
+              )
+            }
+          />
+        ) : null}
+      </Modal>
+      <ModalDelete
+        open={!!cancelTarget && cancelTarget.status !== "IN_PROGRESS"}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null);
+        }}
+        title="Cancelar cita"
+        itemName={cancelTarget?.pet?.name}
+        description="La cita quedará marcada como cancelada."
+        dangerText="Cancelar cita"
+        loading={saving}
+        onConfirm={cancelAppointment}
+      />
+      <Dialog
+        open={!!cancelTarget && cancelTarget.status === "IN_PROGRESS"}
+        onOpenChange={(open) => { if (!open) { setCancelTarget(null); setCancelReason(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar atención</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">La atención no tiene actividad clínica registrada. Indica el motivo para cancelarla.</p>
+          <div className="space-y-2">
+            <Label htmlFor="cancel-in-progress-reason">Motivo</Label>
+            <Input id="cancel-in-progress-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Ej. Se inició por error" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCancelTarget(null); setCancelReason(""); }}>Volver</Button>
+            <Button variant="destructive" onClick={() => void cancelAppointment()} disabled={saving || !cancelReason.trim()}>{saving ? "Cancelando..." : "Cancelar atención"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!rescheduleTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRescheduleTarget(null);
+            setRescheduleDate("");
+            setRescheduleTime("");
+            setRescheduleEndTime("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reprogramar cita</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-date">Nueva fecha</Label>
+              <Input
+                id="reschedule-date"
+                type="date"
+                value={rescheduleDate}
+                onChange={(event) => setRescheduleDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-time">Hora inicial</Label>
+              <Input
+                id="reschedule-time"
+                type="time"
+                value={rescheduleTime}
+                onChange={(event) => setRescheduleTime(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-end-time">Hora final (opcional)</Label>
+              <Input
+                id="reschedule-end-time"
+                type="time"
+                value={rescheduleEndTime}
+                onChange={(event) => setRescheduleEndTime(event.target.value)}
+                placeholder="Se preservará la duración original"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRescheduleTarget(null);
+                setRescheduleDate("");
+                setRescheduleTime("");
+                setRescheduleEndTime("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void rescheduleAppointment()}
+              disabled={saving || !rescheduleDate || !rescheduleTime}
+            >
+              {saving ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
+      <AppointmentDetailDialog
+        appointment={selectedAppointment}
+        onClose={() => setSelectedAppointment(null)}
+        canEdit={canEditAppointments}
+        canAttend={canAttendAppointments}
+        canManage={canManageEncounter}
+        canReschedule={canRescheduleAppointments}
+        canCancel={canCancelAppointments}
+        onEdit={(appointment) => { setSelectedAppointment(null); openEdit(appointment); }}
+        onAttend={(appointment) => { setSelectedAppointment(null); void startEncounter(appointment); }}
+        onManage={(appointment) => { setSelectedAppointment(null); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}
+        onReschedule={(appointment) => { setSelectedAppointment(null); const start = safeDate(appointment.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(appointment); }}
+        onCancel={(appointment) => { setSelectedAppointment(null); setCancelReason(""); setCancelTarget(appointment); }}
+      />
       <AppAlert
         open={alertOpen}
         onOpenChange={setAlertOpen}

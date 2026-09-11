@@ -10,6 +10,7 @@ import {
   getAppUrl,
   sendAppointmentReminderEmail,
   sendPaymentReminderEmail,
+  sendSubscriptionReminderEmail,
 } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { isValidWhatsAppPhone, sendWhatsAppMessage } from "@/lib/whatsapp";
@@ -58,6 +59,14 @@ type PaymentReminderMeta = {
   petName: string | null;
   recipientName: string | null;
   total: string;
+};
+
+type SubscriptionReminderMeta = {
+  clinicName: string;
+  date: string;
+  kind: "REMINDER_BEFORE_DUE" | "DUE_TODAY" | "GRACE_REMINDER";
+  kindMarker: "subscription-reminder";
+  recipientName: string | null;
 };
 
 function scheduleOneDayBefore(date: Date) {
@@ -279,6 +288,10 @@ function isPaymentReminderMeta(meta: unknown): meta is PaymentReminderMeta {
   return (meta as { kind?: string }).kind === "payment-reminder";
 }
 
+function isSubscriptionReminderMeta(meta: unknown): meta is SubscriptionReminderMeta {
+  return Boolean(meta && typeof meta === "object" && (meta as { kindMarker?: string }).kindMarker === "subscription-reminder");
+}
+
 function buildAppointmentWhatsAppText(meta: AppointmentReminderMeta) {
   const appointmentDate = new Date(meta.startAtIso);
 
@@ -340,7 +353,7 @@ function buildPaymentWhatsAppText(meta: PaymentReminderMeta) {
 async function deliverNotification(params: {
   channel: NotificationChannel;
   email: string | null;
-  meta: AppointmentReminderMeta | PaymentReminderMeta | null;
+  meta: AppointmentReminderMeta | PaymentReminderMeta | SubscriptionReminderMeta | null;
   phone: string | null;
 }) {
   const { channel, email, meta, phone } = params;
@@ -382,6 +395,17 @@ async function deliverNotification(params: {
       });
       return;
     }
+
+    if (isSubscriptionReminderMeta(meta)) {
+      await sendSubscriptionReminderEmail({
+        clinicName: meta.clinicName,
+        date: meta.date,
+        kind: meta.kind,
+        recipientName: meta.recipientName,
+        to: email,
+      });
+      return;
+    }
   }
 
   if (channel === NotificationChannel.WHATSAPP) {
@@ -411,7 +435,7 @@ async function deliverNotification(params: {
 
 async function markAppointmentReminderDelivered(params: {
   channel: NotificationChannel;
-  meta: AppointmentReminderMeta | PaymentReminderMeta | null;
+  meta: AppointmentReminderMeta | PaymentReminderMeta | SubscriptionReminderMeta | null;
 }) {
   const { channel, meta } = params;
 
@@ -798,7 +822,8 @@ export async function processQueuedNotifications(limit = 50) {
           email: recipient.email,
           meta:
             isAppointmentReminderMeta(notification.meta) ||
-            isPaymentReminderMeta(notification.meta)
+            isPaymentReminderMeta(notification.meta) ||
+            isSubscriptionReminderMeta(notification.meta)
               ? notification.meta
               : null,
           phone: recipient.phone,
@@ -820,7 +845,8 @@ export async function processQueuedNotifications(limit = 50) {
           channel: notification.channel,
           meta:
             isAppointmentReminderMeta(notification.meta) ||
-            isPaymentReminderMeta(notification.meta)
+            isPaymentReminderMeta(notification.meta) ||
+            isSubscriptionReminderMeta(notification.meta)
               ? notification.meta
               : null,
         });

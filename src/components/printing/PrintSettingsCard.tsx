@@ -120,14 +120,14 @@ export default function PrintSettingsCard() {
           </div>
         </div>
 
-        <div className="flex items-start gap-2 rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+        {/* <div className="flex items-start gap-2 rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
           <Monitor className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Karey Vet no guarda aquí el nombre físico de la impresora porque el
             navegador no puede seleccionarla automáticamente con `window.print()`.
             La elección de impresora sigue ocurriendo en Chrome o Edge.
           </p>
-        </div>
+        </div> */}
       </div>
     </section>
   );

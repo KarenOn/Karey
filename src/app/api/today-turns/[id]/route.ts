@@ -60,6 +60,34 @@ import { prisma } from "@/lib/prisma";
 import { getClinicIdOrFail } from "@/lib/auth";
 import { TodayTurnUpdateSchema } from "@/lib/validators/today-turns";
 import { zodDetails } from "@/lib/zodDetails";
+import { z } from "zod";
+
+const LinkTodayTurnSchema = z.object({
+  clientId: z.number().int().positive(),
+  petId: z.number().int().positive(),
+});
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const clinicId = await getClinicIdOrFail();
+  const id = Number((await params).id);
+  const parsed = LinkTodayTurnSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Selecciona un cliente y un paciente registrados." }, { status: 422 });
+
+  const [turn, pet] = await Promise.all([
+    prisma.todayTurn.findFirst({ where: { id, clinicId }, select: { id: true } }),
+    prisma.pet.findFirst({ where: { id: parsed.data.petId, clinicId }, select: { id: true, clientId: true, name: true, species: true } }),
+  ]);
+  const client = await prisma.client.findFirst({ where: { id: parsed.data.clientId, clinicId }, select: { id: true, fullName: true, phone: true } });
+  if (!turn) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  if (!pet || !client || pet.clientId !== client.id) return NextResponse.json({ error: "El paciente no pertenece al cliente seleccionado." }, { status: 422 });
+
+  const updated = await prisma.todayTurn.update({
+    where: { id },
+    data: { clientId: client.id, petId: pet.id, ownerName: client.fullName, ownerPhone: client.phone ?? "", petName: pet.name, species: pet.species },
+    include: { pet: { select: { id: true, name: true, species: true } }, client: { select: { id: true, fullName: true, phone: true } } },
+  });
+  return NextResponse.json(updated);
+}
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const clinicId = await getClinicIdOrFail();

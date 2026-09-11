@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { PaymentCreateSchema } from "@/lib/validators/payment";
 import { InvoiceStatus, Prisma } from "@/generated/prisma/client";
 import { zodDetails } from "@/lib/zodDetails";
+import { notifyInvoiceEvent } from "@/lib/in-app-notifications";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("payments.read");
   const invoiceId = Number((await params).id);
 
   const inv = await prisma.invoice.findFirst({
@@ -31,19 +32,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("payments.register");
   const invoiceId = Number((await params).id);
 
   const body = await req.json().catch(() => null);
   const parsed = PaymentCreateSchema.safeParse(body);
-  console.log("Entre a hacer un pago", parsed);
   if (!parsed.success) {
     return NextResponse.json({ error: "Pago inválido", details: zodDetails(parsed.error) }, { status: 422 });
   }
 
   const input = parsed.data;
-  console.log("Input payment:", input);
-
   const result = await prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findFirst({
       where: { id: invoiceId, clinicId },
@@ -83,8 +81,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
 
-    return { paymentId: created.id, isFullyPaid };
+    return { paymentId: created.id, isFullyPaid, previousStatus: inv.status, nextStatus: isFullyPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID };
   });
+
+  if (result.nextStatus !== result.previousStatus) {
+    await notifyInvoiceEvent(invoiceId, result.isFullyPaid ? "PAID" : "PARTIAL_PAYMENT");
+  }
 
   return NextResponse.json(result, { status: 201 });
 }

@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMaskito } from "@maskito/react";
 import {
   BadgeCheck,
-  Camera,
   IdCard,
   KeyRound,
   Loader2,
@@ -15,7 +13,8 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import SignedFileUploader from "@/components/shared/SignedFileUploader";
+import SignedFileUploader, { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import PasswordInput from "@/components/shared/PasswordInput";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { AppAlert, type AppAlertVariant } from "@/components/shared/AppAlert";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import options from "@/components/shared/PhoneMask";
+import PhoneInput from "@/components/shared/PhoneInput";
 
 type ProfileData = {
   userId: string;
@@ -77,14 +76,14 @@ async function deleteTemporaryUpload(storageRef?: string | null) {
 }
 
 export default function UserProfilePage() {
-  const phoneMaskRef = useMaskito({ options });
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [snapshot, setSnapshot] = useState<ProfileData | null>(null);
   const [passwordForm, setPasswordForm] = useState<PasswordForm>(emptyPasswordForm);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<LocalFile | null>(null);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: AppAlertVariant;
@@ -141,6 +140,14 @@ export default function UserProfilePage() {
       .join("");
   }, [profile?.name]);
 
+  const isProfileDirty = useMemo(() => {
+    if (!profile || !snapshot) return false;
+
+    return !!avatarFile || ["name", "avatarStorageRef", "phone", "jobTitle", "bio"].some(
+      (key) => profile[key as keyof ProfileData] !== snapshot[key as keyof ProfileData]
+    );
+  }, [profile, snapshot, avatarFile]);
+
   const startEditing = () => {
     if (!profile) {
       return;
@@ -152,49 +159,20 @@ export default function UserProfilePage() {
 
   const cancelEditing = async () => {
     if (!profile || !snapshot) {
-      setEditing(false);
+      setEditing(true);
       return;
     }
 
-    if (
-      profile.avatarStorageRef &&
-      profile.avatarStorageRef !== snapshot.avatarStorageRef &&
-      profile.avatarStorageRef.startsWith("s3://")
-    ) {
-      await deleteTemporaryUpload(profile.avatarStorageRef);
-    }
-
+    if (avatarFile) URL.revokeObjectURL(avatarFile.previewUrl);
+    setAvatarFile(null);
     setProfile(snapshot);
     setEditing(false);
   };
 
-  const handleAvatarUploaded = async (file: {
-    fileName: string;
-    fileType: string;
-    previewUrl: string;
-    storageRef: string;
-  }) => {
-    setProfile((current) => {
-      if (!current) {
-        return current;
-      }
-
-      const previousUnsavedAvatar =
-        current.avatarStorageRef &&
-        current.avatarStorageRef !== snapshot?.avatarStorageRef
-          ? current.avatarStorageRef
-          : null;
-
-      if (previousUnsavedAvatar && previousUnsavedAvatar !== file.storageRef) {
-        void deleteTemporaryUpload(previousUnsavedAvatar);
-      }
-
-      return {
-        ...current,
-        avatarStorageRef: file.storageRef,
-        avatarUrl: file.previewUrl,
-      };
-    });
+  const handleAvatarSelected = (file: LocalFile) => {
+    if (avatarFile) URL.revokeObjectURL(avatarFile.previewUrl);
+    setAvatarFile(file);
+    setProfile((current) => current ? { ...current, avatarUrl: file.previewUrl } : current);
   };
 
   const removeAvatar = async () => {
@@ -202,14 +180,7 @@ export default function UserProfilePage() {
       return;
     }
 
-    if (
-      profile.avatarStorageRef &&
-      profile.avatarStorageRef !== snapshot?.avatarStorageRef &&
-      profile.avatarStorageRef.startsWith("s3://")
-    ) {
-      await deleteTemporaryUpload(profile.avatarStorageRef);
-    }
-
+    if (avatarFile) { URL.revokeObjectURL(avatarFile.previewUrl); setAvatarFile(null); }
     setProfile({
       ...profile,
       avatarStorageRef: null,
@@ -218,26 +189,35 @@ export default function UserProfilePage() {
   };
 
   const saveProfile = async () => {
+    if (saving) return;
     if (!profile) {
       return;
     }
 
     try {
       setSaving(true);
-      const updated = await fetchJson<ProfileData>("/api/profile", {
+      const uploaded = avatarFile ? await uploadFileToStorage(avatarFile, UPLOAD_SCOPES.userAvatar) : null;
+      let updated: ProfileData;
+      try {
+        updated = await fetchJson<ProfileData>("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: profile.name,
-          avatarStorageRef: profile.avatarStorageRef ?? "",
+          avatarStorageRef: uploaded?.storageRef ?? (avatarFile ? "" : profile.avatarStorageRef ?? ""),
           phone: profile.phone ?? "",
           jobTitle: profile.jobTitle ?? "",
           bio: profile.bio ?? "",
         }),
-      });
+        });
+      } catch (error) {
+        if (uploaded) await deleteTemporaryUpload(uploaded.storageRef);
+        throw error;
+      }
 
       setProfile(updated);
       setSnapshot(updated);
+      if (avatarFile) { URL.revokeObjectURL(avatarFile.previewUrl); setAvatarFile(null); }
       setEditing(false);
       window.dispatchEvent(new CustomEvent("user-profile-updated"));
       setAlert({
@@ -310,10 +290,10 @@ export default function UserProfilePage() {
         actions={
           editing ? (
             <>
-              <Button disabled={saving} onClick={() => void cancelEditing()} type="button" variant="outline">
-                Cancelar
-              </Button>
-              <Button disabled={saving} onClick={() => void saveProfile()} type="button">
+              {isProfileDirty ? <Button disabled={saving} onClick={() => void cancelEditing()} type="button" variant="outline">
+                Descartar cambios
+              </Button> : null}
+              <Button disabled={saving || !isProfileDirty} onClick={() => void saveProfile()} type="button">
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Guardar cambios
               </Button>
@@ -349,7 +329,9 @@ export default function UserProfilePage() {
                   <SignedFileUploader
                     accept="image/*"
                     buttonLabel=""
-                    className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground"
+                    className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground dark:bg-primary/80"
+                    disabled={saving}
+                    maxSizeBytes={2 * 1024 * 1024}
                     onError={(message) => {
                       setAlert({
                         variant: "destructive",
@@ -358,14 +340,13 @@ export default function UserProfilePage() {
                       });
                       setAlertOpen(true);
                     }}
-                    onUploaded={handleAvatarUploaded}
-                    scope="user-avatar"
+                    onFileSelected={handleAvatarSelected}
                   />
                   <Button
-                    className="h-10 w-10 rounded-full p-0"
+                    className="h-10 w-10 rounded-full p-0 dark:bg-destructive/80"
                     onClick={() => void removeAvatar()}
                     type="button"
-                    variant="outline"
+                    variant="destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -425,11 +406,10 @@ export default function UserProfilePage() {
 
             <div className="space-y-2">
               <Label htmlFor="profile-phone">Teléfono</Label>
-              <Input
+              <PhoneInput
                 disabled={!editing}
                 id="profile-phone"
                 onChange={(event) => setProfile({ ...profile, phone: event.target.value })}
-                ref={phoneMaskRef}
                 value={profile.phone ?? ""}
               />
             </div>
@@ -501,12 +481,11 @@ export default function UserProfilePage() {
             <div className="mt-5 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="current-password">Contraseña actual</Label>
-                <Input
+                <PasswordInput
                   id="current-password"
                   onChange={(event) =>
                     setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))
                   }
-                  type="password"
                   placeholder="Escribe tu contraseña actual"
                   autoComplete="current-password"
                   value={passwordForm.currentPassword}
@@ -515,12 +494,11 @@ export default function UserProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="new-password">Nueva contraseña</Label>
-                <Input
+                <PasswordInput
                   id="new-password"
                   onChange={(event) =>
                     setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))
                   }
-                  type="password"
                   placeholder="Escribe una nueva contraseña"
                   autoComplete="new-password"
                   value={passwordForm.newPassword}
@@ -529,12 +507,11 @@ export default function UserProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar nueva contraseña</Label>
-                <Input
+                <PasswordInput
                   id="confirm-password"
                   onChange={(event) =>
                     setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))
                   }
-                  type="password"
                   placeholder="Vuelve a escribir la nueva contraseña"
                   autoComplete="new-password"
                   value={passwordForm.confirmPassword}

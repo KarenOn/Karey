@@ -38,3 +38,21 @@ export function parseDateOrThrow(value: string, fieldName: string) {
 export function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60_000);
 }
+
+export function toMoney(v: unknown) {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function formatCurrency(
+  amount: number,
+  currency: string = 'DOP',
+): string {
+  return new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  // }).format(Math.abs(amount));
+  }).format(amount);
+}

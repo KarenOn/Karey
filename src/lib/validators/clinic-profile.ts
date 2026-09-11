@@ -62,6 +62,7 @@ export const ClinicProfileSchema = z
     website: optStr().optional(),
 
     address: optStr().optional(),
+    inventoryExpiryAlertDays: z.coerce.number().int().min(1).max(365).default(5),
 
     socialMedia: z
       .object({

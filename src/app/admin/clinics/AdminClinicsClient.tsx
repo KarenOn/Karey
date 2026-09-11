@@ -13,6 +13,9 @@ import {
   UserRoundPlus,
 } from "lucide-react";
 import ClinicAvatar from "@/components/shared/ClinicAvatar";
+import DataTablePagination from "@/components/shared/DataTablePagination";
+import PhoneInput from "@/components/shared/PhoneInput";
+import SearchInput from "@/components/shared/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +48,7 @@ import type {
   AdminClinicRecord,
   AdminClinicSubscriptionStatus,
 } from "@/types/admin-clinics";
+import { getClinicDateKey } from "@/lib/appointment-time";
 
 type AdminClinicsClientProps = {
   initialClinics: AdminClinicRecord[];
@@ -59,6 +63,8 @@ type EditForm = {
   isActive: boolean;
   subscriptionStatus: AdminClinicSubscriptionStatus;
   subscriptionEndDate: string;
+  subscriptionReminderDays: number;
+  subscriptionGraceDays: number;
 };
 
 type CreateForm = {
@@ -102,6 +108,17 @@ const statusClassName: Record<AdminClinicSubscriptionStatus, string> = {
   past_due: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };
 
+function paymentLabel(clinic: AdminClinicRecord) {
+  if (clinic.subscriptionPaymentStatus === "PAID") return "Pagado";
+  if (!clinic.subscriptionEndDate) return "Pendiente";
+  const today = getClinicDateKey(new Date(), clinic.timezone);
+  const due = clinic.subscriptionEndDate;
+  const graceEnd = new Date(`${due}T00:00:00.000Z`);
+  graceEnd.setUTCDate(graceEnd.getUTCDate() + clinic.subscriptionGraceDays);
+  const graceEndKey = graceEnd.toISOString().slice(0, 10);
+  return today > due && today <= graceEndKey ? "En gracia" : "Pendiente";
+}
+
 const emptyCreateForm: CreateForm = {
   clinicName: "",
   clinicEmail: "",
@@ -139,6 +156,8 @@ function createEditForm(clinic: AdminClinicRecord): EditForm {
     isActive: clinic.isActive,
     subscriptionStatus: clinic.subscriptionStatus,
     subscriptionEndDate: clinic.subscriptionEndDate ?? "",
+    subscriptionReminderDays: clinic.subscriptionReminderDays,
+    subscriptionGraceDays: clinic.subscriptionGraceDays,
   };
 }
 
@@ -152,10 +171,23 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
   const [createForm, setCreateForm] = useState<CreateForm>(emptyCreateForm);
   const [creatingClinic, setCreatingClinic] = useState(false);
   const [ownerAccessResult, setOwnerAccessResult] = useState<OwnerAccessResult | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [confirmPaymentClinic, setConfirmPaymentClinic] = useState<AdminClinicRecord | null>(null);
 
-  const orderedClinics = useMemo(
-    () =>
-      [...clinics].sort((left, right) => {
+  const filteredClinics = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase("es");
+    return [...clinics]
+      .filter((clinic) => {
+        if (!normalizedSearch) return true;
+        return [
+          clinic.name,
+          clinic.owner?.name,
+          clinic.owner?.email,
+        ].some((value) => value?.toLocaleLowerCase("es").includes(normalizedSearch));
+      })
+      .sort((left, right) => {
         const weight = (status: AdminClinicSubscriptionStatus) => {
           if (status === "past_due") return 0;
           if (status === "active") return 1;
@@ -166,9 +198,10 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
         if (statusDiff !== 0) return statusDiff;
 
         return left.name.localeCompare(right.name, "es");
-      }),
-    [clinics]
-  );
+      });
+  }, [clinics, search]);
+
+  const orderedClinics = filteredClinics.slice(page * pageSize, (page + 1) * pageSize);
 
   function mergeClinic(updated: AdminClinicRecord) {
     setClinics((current) => {
@@ -221,6 +254,20 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
     );
   }
 
+  async function resendOwnerInvitation(clinic: AdminClinicRecord) {
+    try {
+      setBusyClinicId(clinic.id);
+      const res = await fetch(`/api/admin/clinics/${clinic.id}`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo reenviar la invitación");
+      toast.success("Invitación reenviada");
+    } catch (error) {
+      toast.error(errorMessage(error, "No se pudo reenviar la invitación"));
+    } finally {
+      setBusyClinicId(null);
+    }
+  }
+
   async function saveEdit() {
     if (!editForm) {
       return;
@@ -239,6 +286,8 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
           isActive: editForm.isActive,
           subscriptionStatus: editForm.subscriptionStatus,
           subscriptionEndDate: editForm.subscriptionEndDate,
+          subscriptionReminderDays: editForm.subscriptionReminderDays,
+          subscriptionGraceDays: editForm.subscriptionGraceDays,
         },
         "Clínica actualizada"
       );
@@ -301,6 +350,11 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
     }
   }
 
+  async function markPaid(clinic: AdminClinicRecord) {
+    const updated = await updateClinic(clinic.id, { action: "mark_paid" }, "Pago registrado");
+    if (updated) setConfirmPaymentClinic(null);
+  }
+
   return (
     <>
       <section className="app-panel-strong overflow-hidden p-0">
@@ -312,9 +366,23 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              {clinics.length} registros
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <SearchInput
+                aria-label="Buscar clínicas u owners"
+                className="min-w-[18rem] sm:w-80"
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(0);
+                }}
+                onClear={() => {
+                  setSearch("");
+                  setPage(0);
+                }}
+                placeholder="Buscar clínica, owner o email"
+                value={search}
+              />
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {filteredClinics.length} registros
             </div>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
@@ -328,8 +396,9 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
             <TableRow>
               <TableHead>Nombre clínica</TableHead>
               <TableHead>Responsable</TableHead>
+              <TableHead>Empleados</TableHead>
               <TableHead>Telefono</TableHead>
-              <TableHead>Estado</TableHead>
+              <TableHead>Pago</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>Proximo pago</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -364,10 +433,11 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                       {clinic.responsible?.email ?? "Sin usuario principal"}
                     </p>
                   </TableCell>
+                  <TableCell>{clinic.employeeCount} empleados <span className="text-xs text-muted-foreground">(incluye owner)</span></TableCell>
                   <TableCell>{clinic.phone ?? "Sin telefono"}</TableCell>
                   <TableCell>
-                    <Badge className={statusClassName[clinic.subscriptionStatus]} variant="outline">
-                      {statusLabel[clinic.subscriptionStatus]}
+                    <Badge className={paymentLabel(clinic) === "Pagado" ? statusClassName.active : paymentLabel(clinic) === "En gracia" ? statusClassName.past_due : statusClassName.inactive} variant="outline">
+                      {paymentLabel(clinic)}
                     </Badge>
                   </TableCell>
                   <TableCell>{clinic.plan ?? "Manual"}</TableCell>
@@ -387,6 +457,17 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                         )}
                         {clinic.isActive ? "Desactivar" : "Activar"}
                       </Button>
+                      {clinic.owner?.onboardingPending ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void resendOwnerInvitation(clinic)}
+                          disabled={isBusy}
+                        >
+                          {isBusy ? <Loader2 className="size-4 animate-spin" /> : <UserRoundPlus className="size-4" />}
+                          Reenviar invitación
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
                         variant="outline"
@@ -399,6 +480,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                         <Eye className="size-4" />
                         Ver detalle
                       </Button>
+                      {clinic.subscriptionPaymentStatus === "PENDING" ? <Button size="sm" onClick={() => setConfirmPaymentClinic(clinic)} disabled={isBusy}>Marcar como pagado</Button> : null}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -406,6 +488,23 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
             })}
           </TableBody>
         </Table>
+        {filteredClinics.length > 0 ? (
+          <DataTablePagination
+            page={page}
+            pageSize={pageSize}
+            total={filteredClinics.length}
+            onPageChange={setPage}
+            pageSizeOptions={[10, 20, 50]}
+            onPageSizeChange={(nextPageSize) => {
+              setPageSize(nextPageSize);
+              setPage(0);
+            }}
+          />
+        ) : (
+          <div className="border-t border-border/70 px-5 py-8 text-center text-sm text-muted-foreground">
+            No hay clínicas que coincidan con la búsqueda.
+          </div>
+        )}
       </section>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -450,7 +549,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
 
               <div className="space-y-2">
                 <Label htmlFor="create-clinic-phone">Teléfono de la clínica</Label>
-                <Input
+                <PhoneInput
                   id="create-clinic-phone"
                   value={createForm.clinicPhone}
                   onChange={(event) =>
@@ -565,7 +664,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
 
               <div className="space-y-2">
                 <Label htmlFor="create-owner-phone">Telefono owner</Label>
-                <Input
+                <PhoneInput
                   id="create-owner-phone"
                   value={createForm.ownerPhone}
                   onChange={(event) =>
@@ -748,6 +847,10 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                 </p>
               </div>
               <div className="app-panel-muted p-4">
+                <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Empleados</p>
+                <p className="mt-2 text-sm text-foreground">{viewClinic.employeeCount} empleados (incluye owner)</p>
+              </div>
+              <div className="app-panel-muted p-4">
                 <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                   Plan
                 </p>
@@ -770,6 +873,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                 <p className="mt-2 text-sm text-foreground">
                   {formatDate(viewClinic.subscriptionEndDate)}
                 </p>
+                <p className="mt-2 text-sm text-foreground">Pago: {paymentLabel(viewClinic)}</p>
               </div>
             </div>
           ) : null}
@@ -816,7 +920,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
 
               <div className="space-y-2">
                 <Label htmlFor="clinic-phone">Teléfono</Label>
-                <Input
+                <PhoneInput
                   id="clinic-phone"
                   value={editForm.phone}
                   onChange={(event) =>
@@ -878,6 +982,15 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="subscription-reminder-days">Recordatorio (días antes)</Label>
+                <Input id="subscription-reminder-days" type="number" min={0} max={30} value={editForm.subscriptionReminderDays} onChange={(event) => setEditForm((current) => current ? { ...current, subscriptionReminderDays: Number(event.target.value) || 0 } : current)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="subscription-grace-days">Gracia (días)</Label>
+                <Input id="subscription-grace-days" type="number" min={0} max={30} value={editForm.subscriptionGraceDays} onChange={(event) => setEditForm((current) => current ? { ...current, subscriptionGraceDays: Number(event.target.value) || 0 } : current)} />
+              </div>
+
               <div className="app-panel-muted flex items-center justify-between p-4 sm:col-span-2">
                 <div>
                   <p className="font-semibold text-foreground">Acceso habilitado</p>
@@ -923,6 +1036,12 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               Guardar cambios
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!confirmPaymentClinic} onOpenChange={(open) => !open && setConfirmPaymentClinic(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Confirmar pago</DialogTitle><DialogDescription>Registra manualmente el pago de la suscripción de {confirmPaymentClinic?.name}. Se calculará el siguiente vencimiento.</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" onClick={() => setConfirmPaymentClinic(null)}>Cancelar</Button><Button onClick={() => confirmPaymentClinic && void markPaid(confirmPaymentClinic)}>Marcar como pagado</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

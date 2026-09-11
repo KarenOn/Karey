@@ -10,6 +10,7 @@ export type StockMovementRow = {
   reason: string | null;
   referenceType: string | null;
   referenceId: string | null;
+  invoiceId: number | null;
   createdById: string | null;
   createdAt: string;
   product: {

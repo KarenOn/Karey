@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarClock,
@@ -12,15 +10,19 @@ import {
   LoaderCircle,
   Plus,
   Receipt,
+  Sparkles,
   Stethoscope,
   UserRound,
 } from "lucide-react";
+import { AppAlert } from "@/components/shared/AppAlert";
+import AppPageHero from "@/components/shared/AppPageHero";
+import type { ClinicAccess } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AppAlert } from "@/components/shared/AppAlert";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { cn } from "@/lib/utils";
 import NewTurnModal from "./NewTurnModal";
+import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
+import Modal from "@/components/shared/Modal";
 
 type AppointmentStatus =
   | "SCHEDULED"
@@ -51,6 +53,7 @@ export type TodayAppointmentItem = {
   startAt: string;
   status: AppointmentStatus;
   type: string;
+  vetId: string | null;
 };
 
 export type TodayTurnItem = {
@@ -63,6 +66,7 @@ export type TodayTurnItem = {
   petName: string;
   service: TodayTurnService;
   serviceName: string;
+  species?: string | null;
   status: TodayTurnStatus;
 };
 
@@ -82,6 +86,7 @@ type PatientCardItem = {
   petId: number | null;
   petName: string;
   primaryActionLabel: string | null;
+  secondaryActionLabel?: string | null;
   serviceLabel: string;
   source: "appointment" | "turn";
   state: UnifiedState;
@@ -89,30 +94,30 @@ type PatientCardItem = {
 };
 
 const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
-  AESTHETIC: "Estética",
-  BATH: "Baño",
+  AESTHETIC: "Estetica",
+  BATH: "Bano",
   CHECKUP: "Chequeo",
   CONSULTATION: "Consulta",
-  DEWORMING: "Desparasitación",
+  DEWORMING: "Desparasitacion",
   EMERGENCY: "Emergencia",
-  GROOMING: "Peluquería",
-  HOSPITALIZATION: "Hospitalización",
+  GROOMING: "Peluqueria",
+  HOSPITALIZATION: "Hospitalizacion",
   OTHER: "Otro",
-  SURGERY: "Cirugía",
-  VACCINATION: "Vacunación",
+  SURGERY: "Cirugia",
+  VACCINATION: "Vacunacion",
 };
 
 const TURN_SERVICE_LABELS: Record<TodayTurnService, string> = {
-  BATH: "Baño",
-  GROOMING: "Peluquería",
-  HOSPITALIZATION: "Hospitalización",
+  BATH: "Bano",
+  GROOMING: "Peluqueria",
+  HOSPITALIZATION: "Hospitalizacion",
   OTHER: "Otro",
-  SURGERY: "Cirugía",
+  SURGERY: "Cirugia",
 };
 
 const STATE_LABELS: Record<UnifiedState, string> = {
   done: "Atendido",
-  in_progress: "En atención",
+  in_progress: "En atencion",
   waiting: "En espera",
 };
 
@@ -144,8 +149,32 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function formatClinicTime(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).format(new Date(value));
+}
+
+function formatClinicDateParts(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("es-ES", {
+    day: "numeric",
+    month: "long",
+    timeZone,
+    weekday: "long",
+  }).formatToParts(new Date(value));
+
+  return {
+    day: parts.find((part) => part.type === "day")?.value ?? "",
+    month: capitalize(parts.find((part) => part.type === "month")?.value ?? ""),
+    weekday: capitalize(parts.find((part) => part.type === "weekday")?.value ?? ""),
+  };
+}
+
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Ocurrió un error inesperado.";
+  return error instanceof Error ? error.message : "Ocurrio un error inesperado.";
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -162,7 +191,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     const payload = (await response.json().catch(() => null)) as
       | { error?: string }
       | null;
-    throw new Error(payload?.error ?? "No pudimos completar esta acción.");
+    throw new Error(payload?.error ?? "No pudimos completar esta accion.");
   }
 
   return response.json();
@@ -212,81 +241,49 @@ function buildInvoiceUrl(input: {
   return `/invoices/new?${params.toString()}`;
 }
 
-function TodayHeader({
-  canCreateTurns,
-  dateIso,
-  onNewTurn,
-}: {
-  canCreateTurns: boolean;
-  dateIso: string;
-  onNewTurn: () => void;
-}) {
-  const date = new Date(dateIso);
-  const weekday = capitalize(format(date, "EEEE", { locale: es }));
-  const dayNumber = format(date, "d");
-  const month = capitalize(format(date, "MMMM", { locale: es }));
-
-  return (
-    <div className="flex flex-col gap-4 rounded-[1.75rem] border border-border/70 bg-card px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <div className="min-w-0">
-        <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-          Operación del día
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
-          {weekday} {dayNumber}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {month}. Consulta las citas, pacientes en espera y atenciones activas de la jornada.
-        </p>
-      </div>
-
-      {canCreateTurns ? (
-        <Button onClick={onNewTurn} className="h-11 rounded-2xl px-5">
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar paciente sin cita
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 function TodaySection({
   children,
   count,
+  description,
   emptyMessage,
   icon: Icon,
+  priority = false,
   title,
 }: {
   children: React.ReactNode;
   count: number;
+  description: string;
   emptyMessage: string;
   icon: React.ElementType;
+  priority?: boolean;
   title: string;
 }) {
   return (
-    <section className="rounded-[1.75rem] border border-border/70 bg-card shadow-sm">
-      <header className="flex items-center justify-between border-b border-border/70 px-5 py-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-foreground">
-            <Icon className="h-4 w-4" />
+    <section
+      className={cn(
+        "app-panel-strong overflow-hidden p-0",
+        priority && "border-primary/20"
+      )}
+    >
+      <header className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4 sm:px-6">
+        <div className="flex items-start gap-3">
+          <div className="app-stat-icon mt-0.5 h-10 w-10">
+            <Icon className="size-4.5" />
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-            <p className="text-sm text-muted-foreground">
-              {count} {count === 1 ? "paciente" : "pacientes"}
-            </p>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-foreground sm:text-lg">
+              {title}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
+        <Badge variant="outline" className="shrink-0">
+          {count} {count === 1 ? "paciente" : "pacientes"}
+        </Badge>
       </header>
 
       <div className="space-y-3 p-4 sm:p-5">
-        {count === 0 ? (
-          <div className="rounded-[1.25rem] border border-dashed border-border bg-muted/35 px-4 py-8 text-center text-sm text-muted-foreground">
-            {emptyMessage}
-          </div>
-        ) : (
-          children
-        )}
+        {count === 0 ? <div className="app-empty">{emptyMessage}</div> : children}
       </div>
     </section>
   );
@@ -297,36 +294,42 @@ function PatientCard({
   item,
   onCardClick,
   onPrimaryAction,
+  onSecondaryAction,
 }: {
   busy: boolean;
   item: PatientCardItem;
   onCardClick: () => void;
   onPrimaryAction?: (() => void) | null;
+  onSecondaryAction?: (() => void) | null;
 }) {
   const stateUi = STATE_STYLES[item.state];
 
   return (
     <article
       className={cn(
-        "group rounded-[1.4rem] border border-border/70 border-l-4 bg-background/80 px-4 py-4 text-left transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm",
+        "rounded-xl border border-border/70 border-l-4 bg-background px-4 py-4 transition",
         stateUi.border,
-        typeof onCardClick === "function" && "cursor-pointer"
+        "hover:border-primary/30 hover:bg-muted/20"
       )}
-      onClick={onCardClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onCardClick();
-        }
-      }}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-3">
+      <div
+        className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
+      >
+        <div
+          className="min-w-0 flex-1 cursor-pointer space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          role="button"
+          tabIndex={0}
+          onClick={onCardClick}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onCardClick();
+            }
+          }}
+        >
           <div className="flex flex-wrap items-center gap-2">
             {item.timeLabel ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
+              <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground">
                 <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
                 {item.timeLabel}
               </span>
@@ -335,7 +338,7 @@ function PatientCard({
               <span className={cn("mr-1.5 inline-block h-2 w-2 rounded-full", stateUi.dot)} />
               {STATE_LABELS[item.state]}
             </Badge>
-            <Badge variant="outline" className="rounded-full">
+            <Badge variant="outline">
               {item.source === "appointment" ? "Cita" : "Sin cita"}
             </Badge>
           </div>
@@ -350,17 +353,32 @@ function PatientCard({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">
-              {item.serviceLabel}
-            </Badge>
-          </div>
+          <Badge variant="secondary" className="w-fit">
+            {item.serviceLabel}
+          </Badge>
         </div>
 
-        {item.primaryActionLabel && onPrimaryAction ? (
-          <div className="sm:pl-4">
+        {item.secondaryActionLabel && onSecondaryAction ? (
+          <div className="lg:pl-2">
             <Button
-              className={cn("h-10 rounded-2xl px-4", stateUi.button)}
+              className={cn("h-10 rounded-lg px-3", stateUi.button)}
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSecondaryAction();
+              }}
+            >
+              <Stethoscope className="mr-2 h-4 w-4" />
+              {item.secondaryActionLabel}
+            </Button>
+          </div>
+        ) : null}
+        {item.primaryActionLabel && onPrimaryAction ? (
+          <div className="lg:pl-4">
+            <Button
+              className={cn("h-10 rounded-lg px-4", stateUi.button)}
               disabled={busy}
               onClick={(event) => {
                 event.stopPropagation();
@@ -391,14 +409,18 @@ function ReceiptOrStethoscope({ actionLabel }: { actionLabel: string }) {
 
 export default function TodayWorkspace({
   initialAppointments,
+  initialAccess,
   initialDateIso,
+  initialTimeZone,
   initialTurns,
 }: {
   initialAppointments: TodayAppointmentItem[];
+  initialAccess: ClinicAccess;
   initialDateIso: string;
+  initialTimeZone: string;
   initialTurns: TodayTurnItem[];
 }) {
-  const access = useCurrentUserAccess();
+  const access = initialAccess;
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -408,6 +430,7 @@ export default function TodayWorkspace({
   const [turns, setTurns] = useState<TodayTurnItem[]>(initialTurns);
   const [turnModalOpen, setTurnModalOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [encounter, setEncounter] = useState<{ appointmentId?: number; todayTurnId?: number; petId: number | null; clientId: number | null; ownerName?: string; petName?: string; species?: string | null; ownerPhone?: string | null } | null>(null);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<AlertState>({
     variant: "info",
@@ -416,17 +439,21 @@ export default function TodayWorkspace({
 
   const canCreateTurns = !!access?.actions.todayTurns.create;
   const canUpdateTurns = !!access?.actions.todayTurns.update;
-  const canUpdateAppointments = !!access?.actions.appointments.update;
-  const canCreateInvoices = !!access?.actions.invoices.create;
+  const canUpdateAppointments = !!access?.actions.appointments.attend;
+  const canManageEncounter = !!access?.actions.encounters.manage;
+  const canSendToBilling = !!access?.actions.invoices.create || !!access?.actions.invoices.sendToBilling;
 
-  const showAlert = useCallback((
-    variant: AlertState["variant"],
-    title: string,
-    description?: string
-  ) => {
-    setAlert({ variant, title, description });
-    setAlertOpen(true);
-  }, []);
+  const showAlert = useCallback(
+    (
+      variant: AlertState["variant"],
+      title: string,
+      description?: string
+    ) => {
+      setAlert({ variant, title, description });
+      setAlertOpen(true);
+    },
+    []
+  );
 
   const showTurnModalError = useCallback(
     (title: string, description?: string) => {
@@ -439,13 +466,27 @@ export default function TodayWorkspace({
     const createdInvoiceId = searchParams.get("createdInvoiceId");
     if (!createdInvoiceId) return;
 
-      showAlert(
-        "success",
-        "Factura creada",
-        `La factura ${createdInvoiceId} se registró y el paciente pasó a Atendidos.`
-      );
+    showAlert(
+      "success",
+      "Factura creada",
+      // `La factura ${createdInvoiceId} se registro y el paciente paso a Atendidos.`
+      `La factura se registro y el paciente paso a Atendidos.`
+    );
     router.replace(pathname);
   }, [pathname, router, searchParams, showAlert]);
+
+  useEffect(() => {
+    const handleInvalidation = async () => {
+      const [appointmentsResponse, turnsResponse] = await Promise.all([
+        fetch("/api/appointments", { cache: "no-store" }),
+        fetch(`/api/today-turns?date=${encodeURIComponent(initialDateIso.slice(0, 10))}`, { cache: "no-store" }),
+      ]);
+      if (appointmentsResponse.ok) setAppointments(await appointmentsResponse.json());
+      if (turnsResponse.ok) setTurns(await turnsResponse.json());
+    };
+    window.addEventListener("karey:appointments-invalidated", handleInvalidation);
+    return () => window.removeEventListener("karey:appointments-invalidated", handleInvalidation);
+  }, [initialDateIso]);
 
   const upcomingAppointments = useMemo(
     () =>
@@ -474,13 +515,13 @@ export default function TodayWorkspace({
         ownerLabel: appointment.clientName,
         petId: appointment.petId,
         petName: appointment.petName,
-        primaryActionLabel: canUpdateAppointments ? "Atender" : null,
+        primaryActionLabel: canUpdateAppointments && canManageEncounter ? "Atender" : null,
         serviceLabel: formatAppointmentType(appointment.type),
         source: "appointment",
         state: "waiting",
-        timeLabel: format(new Date(appointment.startAt), "HH:mm"),
+        timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
       })),
-    [canUpdateAppointments, upcomingAppointments]
+    [canManageEncounter, canUpdateAppointments, initialTimeZone, upcomingAppointments]
   );
 
   const waitingTurnCards = useMemo(
@@ -492,13 +533,13 @@ export default function TodayWorkspace({
         ownerLabel: turn.ownerName,
         petId: turn.petId,
         petName: turn.petName,
-        primaryActionLabel: canUpdateTurns ? "Atender" : null,
+        primaryActionLabel: canUpdateTurns && canManageEncounter ? "Atender" : null,
         serviceLabel: turn.serviceName || formatTurnService(turn.service),
         source: "turn",
         state: "waiting",
-        timeLabel: format(new Date(turn.arrivalAt), "HH:mm"),
+        timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
       })),
-    [canUpdateTurns, waitingTurns]
+    [canManageEncounter, canUpdateTurns, initialTimeZone, waitingTurns]
   );
 
   const inProgressCards = useMemo(
@@ -518,13 +559,14 @@ export default function TodayWorkspace({
             petName: appointment.petName,
             primaryActionLabel: appointment.invoiceId
               ? "Ver factura"
-              : canCreateInvoices
+              : canSendToBilling
                 ? "Facturar"
                 : null,
+            secondaryActionLabel: canManageEncounter ? "Gestionar atención" : null,
             serviceLabel: formatAppointmentType(appointment.type),
             source: "appointment",
             state: "in_progress",
-            timeLabel: format(new Date(appointment.startAt), "HH:mm"),
+            timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
           })),
         ...turns
           .filter((turn) => turnUnifiedState(turn.status) === "in_progress")
@@ -535,16 +577,17 @@ export default function TodayWorkspace({
             ownerLabel: turn.ownerName,
             petId: turn.petId,
             petName: turn.petName,
-            primaryActionLabel: canCreateInvoices ? "Facturar" : null,
+            primaryActionLabel: canSendToBilling ? "Facturar" : null,
+            secondaryActionLabel: canManageEncounter ? "Gestionar atención" : null,
             serviceLabel: turn.serviceName || formatTurnService(turn.service),
             source: "turn",
             state: "in_progress",
-            timeLabel: format(new Date(turn.arrivalAt), "HH:mm"),
+            timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
           })),
       ].sort((left, right) =>
         (left.timeLabel ?? "").localeCompare(right.timeLabel ?? "")
       ),
-    [appointments, canCreateInvoices, turns]
+    [appointments, canManageEncounter, canSendToBilling, initialTimeZone, turns]
   );
 
   const doneCards = useMemo(
@@ -563,7 +606,7 @@ export default function TodayWorkspace({
             serviceLabel: formatAppointmentType(appointment.type),
             source: "appointment",
             state: "done",
-            timeLabel: format(new Date(appointment.startAt), "HH:mm"),
+            timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
           })),
         ...turns
           .filter((turn) => turnUnifiedState(turn.status) === "done")
@@ -578,12 +621,12 @@ export default function TodayWorkspace({
             serviceLabel: turn.serviceName || formatTurnService(turn.service),
             source: "turn",
             state: "done",
-            timeLabel: format(new Date(turn.arrivalAt), "HH:mm"),
+            timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
           })),
       ].sort((left, right) =>
         (right.timeLabel ?? "").localeCompare(left.timeLabel ?? "")
       ),
-    [appointments, turns]
+    [appointments, initialTimeZone, turns]
   );
 
   async function markAppointmentInProgress(appointment: TodayAppointmentItem) {
@@ -606,6 +649,8 @@ export default function TodayWorkspace({
           item.id === appointment.id ? { ...item, status: "IN_PROGRESS" } : item
         )
       );
+      setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId });
+      showAlert("success", "Cita puesta en atención", "La cita está en progreso.");
     } catch (error) {
       showAlert(
         "destructive",
@@ -619,7 +664,11 @@ export default function TodayWorkspace({
 
   async function markTurnInProgress(turn: TodayTurnItem) {
     if (!canUpdateTurns) {
-      showAlert("warning", "Sin permisos", "No tienes permiso para actualizar atenciones sin cita.");
+      showAlert(
+        "warning",
+        "Sin permisos",
+        "No tienes permiso para actualizar atenciones sin cita."
+      );
       return;
     }
 
@@ -640,12 +689,28 @@ export default function TodayWorkspace({
     } catch (error) {
       showAlert(
         "destructive",
-        "No se pudo iniciar la atención",
+        "No se pudo iniciar la atencion",
         getErrorMessage(error)
       );
     } finally {
       setBusyKey(null);
     }
+  }
+
+  async function finishEncounter() {
+    if (!encounter) return;
+    if (encounter.todayTurnId) {
+      await requestJson(`/api/today-turns/${encounter.todayTurnId}/status`, { method: "PATCH", body: JSON.stringify({ status: "READY" }) });
+      setTurns((current) => current.map((turn) => turn.id === encounter.todayTurnId ? { ...turn, status: "READY" } : turn));
+      setEncounter(null);
+      return;
+    }
+    const target = appointments.find((appointment) => appointment.id === encounter.appointmentId && appointment.status === "IN_PROGRESS");
+    if (target) {
+      await requestJson(`/api/appointments/${target.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "COMPLETED" }) });
+      setAppointments((current) => current.map((item) => item.id === target.id ? { ...item, status: "COMPLETED" } : item));
+    }
+    setEncounter(null);
   }
 
   function goToInvoiceFlow(input: {
@@ -663,7 +728,7 @@ export default function TodayWorkspace({
       return;
     }
 
-    if (!canCreateInvoices) {
+    if (!canSendToBilling) {
       showAlert("warning", "Sin permisos", "No tienes permiso para crear facturas.");
       return;
     }
@@ -682,174 +747,330 @@ export default function TodayWorkspace({
     );
   }
 
+  const dateParts = useMemo(
+    () => formatClinicDateParts(initialDateIso, initialTimeZone),
+    [initialDateIso, initialTimeZone]
+  );
+  const weekday = dateParts.weekday;
+  const monthLabel = dateParts.month;
+  const dayNumber = dateParts.day;
+  const totalTracked = appointments.length + turns.length;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
-      <TodayHeader
-        canCreateTurns={canCreateTurns}
-        dateIso={initialDateIso}
-        onNewTurn={() => setTurnModalOpen(true)}
+    <div className="space-y-6">
+      <AppPageHero
+        badgeIcon={<Sparkles className="size-3.5" />}
+        badgeLabel="Centro operativo"
+        title={`Hoy · ${weekday} ${dayNumber}`}
+        description={`Revisa la agenda, las llegadas sin cita y la atencion activa de ${monthLabel} desde una sola vista.`}
+        actions={
+          canCreateTurns ? (
+            <Button className="gap-2" onClick={() => setTurnModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Agregar paciente sin cita
+            </Button>
+          ) : null
+        }
+        stats={[
+          {
+            label: "Proximas citas",
+            value: appointmentCards.length,
+            hint: "Pendientes por atender",
+          },
+          {
+            label: "Sin cita",
+            value: waitingTurnCards.length,
+            hint: "Pacientes en espera",
+          },
+          {
+            label: "En atencion",
+            value: inProgressCards.length,
+            hint: "Casos activos",
+          },
+          {
+            label: "Atendidos",
+            value: doneCards.length,
+            hint: `${totalTracked} movimientos registrados hoy`,
+          },
+        ]}
       />
 
-      <TodaySection
-        count={appointmentCards.length}
-        emptyMessage="No hay citas pendientes para hoy."
-        icon={CalendarClock}
-        title="Próximas citas"
-      >
-        {appointmentCards.map((item) => (
-          <PatientCard
-            key={`appointment-${item.id}`}
-            busy={busyKey === `appointment-${item.id}`}
-            item={item}
-            onCardClick={() => {
-              const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
-              if (!appointment || !canUpdateAppointments) return;
-              void markAppointmentInProgress(appointment);
-            }}
-            onPrimaryAction={
-              canUpdateAppointments
-                ? () => {
-                    const appointment = upcomingAppointments.find((entry) => entry.id === item.id);
-                    if (!appointment) return;
-                    void markAppointmentInProgress(appointment);
-                  }
-                : null
-            }
-          />
-        ))}
-      </TodaySection>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <TodaySection
+          count={appointmentCards.length}
+          description="Agenda confirmada para la jornada actual."
+          emptyMessage="No hay citas pendientes para hoy."
+          icon={CalendarClock}
+          title="Proximas citas"
+        >
+          {appointmentCards.map((item) => (
+            <PatientCard
+              key={`appointment-${item.id}`}
+              busy={busyKey === `appointment-${item.id}`}
+              item={item}
+              onCardClick={() => {
+                const appointment = upcomingAppointments.find(
+                  (entry) => entry.id === item.id,
+                );
+                if (!appointment || !canUpdateAppointments) return;
+                void markAppointmentInProgress(appointment);
+              }}
+              onPrimaryAction={
+                canUpdateAppointments
+                  ? () => {
+                      const appointment = upcomingAppointments.find(
+                        (entry) => entry.id === item.id,
+                      );
+                      if (!appointment) return;
+                      void markAppointmentInProgress(appointment);
+                    }
+                  : null
+              }
+            />
+          ))}
+        </TodaySection>
 
-      <TodaySection
-        count={waitingTurnCards.length}
-        emptyMessage="No hay pacientes sin cita en espera en este momento."
-        icon={ClipboardList}
-        title="Sin cita en espera"
-      >
-        {waitingTurnCards.map((item) => (
-          <PatientCard
-            key={`turn-${item.id}`}
-            busy={busyKey === `turn-${item.id}`}
-            item={item}
-            onCardClick={() => {
-              const turn = waitingTurns.find((entry) => entry.id === item.id);
-              if (!turn || !canUpdateTurns) return;
-              void markTurnInProgress(turn);
-            }}
-            onPrimaryAction={
-              canUpdateTurns
-                ? () => {
-                    const turn = waitingTurns.find((entry) => entry.id === item.id);
-                    if (!turn) return;
-                    void markTurnInProgress(turn);
-                  }
-                : null
-            }
-          />
-        ))}
-      </TodaySection>
+        <TodaySection
+          count={waitingTurnCards.length}
+          description="Pacientes que llegaron sin una cita agendada."
+          emptyMessage="No hay pacientes sin cita en espera en este momento."
+          icon={ClipboardList}
+          title="Sin cita en espera"
+        >
+          {waitingTurnCards.map((item) => (
+            <PatientCard
+              key={`turn-${item.id}`}
+              busy={busyKey === `turn-${item.id}`}
+              item={item}
+              onCardClick={() => {
+                const turn = waitingTurns.find((entry) => entry.id === item.id);
+                if (!turn || !canUpdateTurns) return;
+                void markTurnInProgress(turn);
+              }}
+              onPrimaryAction={
+                canUpdateTurns
+                  ? () => {
+                      const turn = waitingTurns.find(
+                        (entry) => entry.id === item.id,
+                      );
+                      if (!turn) return;
+                      void markTurnInProgress(turn);
+                    }
+                  : null
+              }
+            />
+          ))}
+        </TodaySection>
+      </div>
 
       <TodaySection
         count={inProgressCards.length}
-        emptyMessage="No hay pacientes en atención ahora mismo."
+        description="Pacientes que ya estan siendo atendidos o listos para facturar."
+        emptyMessage="No hay pacientes en atencion ahora mismo."
         icon={Stethoscope}
-        title="En atención"
+        priority
+        title="En atencion"
       >
-        {inProgressCards.map((item) => (
-          <PatientCard
-            key={`${item.source}-${item.id}-progress`}
-            busy={busyKey === `${item.source}-${item.id}-progress`}
-            item={item}
-            onCardClick={() => {
-              if (item.source === "appointment") {
-                const appointment = appointments.find((entry) => entry.id === item.id);
-                if (!appointment) return;
-                goToInvoiceFlow({
-                  appointmentId: appointment.id,
-                  clientId: appointment.clientId,
-                  invoiceId: appointment.invoiceId,
-                  petId: appointment.petId,
-                  petName: appointment.petName,
-                });
-                return;
-              }
+        <div className="grid gap-3 xl:grid-cols-2">
+          {inProgressCards.map((item) => (
+            <PatientCard
+              key={`${item.source}-${item.id}-progress`}
+              busy={busyKey === `${item.source}-${item.id}-progress`}
+              item={item}
+              onCardClick={() => {
+                if (item.source === "appointment") {
+                  const appointment = appointments.find(
+                    (entry) => entry.id === item.id,
+                  );
+                  if (!appointment) return;
+                  goToInvoiceFlow({
+                    appointmentId: appointment.id,
+                    clientId: appointment.clientId,
+                    invoiceId: appointment.invoiceId,
+                    petId: appointment.petId,
+                    petName: appointment.petName,
+                  });
+                  return;
+                }
 
-              const turn = turns.find((entry) => entry.id === item.id);
-              if (!turn) return;
-              goToInvoiceFlow({
-                clientId: turn.clientId,
-                ownerName: turn.ownerName,
-                petId: turn.petId,
-                petName: turn.petName,
-                serviceName: turn.serviceName,
-                todayTurnId: turn.id,
-              });
-            }}
-            onPrimaryAction={() => {
-              if (item.source === "appointment") {
-                const appointment = appointments.find((entry) => entry.id === item.id);
-                if (!appointment) return;
+                const turn = turns.find((entry) => entry.id === item.id);
+                if (!turn) return;
                 goToInvoiceFlow({
-                  appointmentId: appointment.id,
-                  clientId: appointment.clientId,
-                  invoiceId: appointment.invoiceId,
-                  petId: appointment.petId,
-                  petName: appointment.petName,
+                  clientId: turn.clientId,
+                  ownerName: turn.ownerName,
+                  petId: turn.petId,
+                  petName: turn.petName,
+                  serviceName: turn.serviceName,
+                  todayTurnId: turn.id,
                 });
-                return;
+              }}
+              onSecondaryAction={
+                item.source === "appointment" && canManageEncounter
+                  ? () => {
+                      const appointment = appointments.find(
+                        (entry) => entry.id === item.id,
+                      );
+                      if (!appointment) return;
+                      setEncounter({
+                        appointmentId: appointment.id,
+                        petId: appointment.petId,
+                        clientId: appointment.clientId,
+                      });
+                    }
+                  : item.source === "turn" && canManageEncounter
+                    ? () => {
+                        const turn = turns.find(
+                          (entry) => entry.id === item.id,
+                        );
+                        if (!turn) return;
+                        setEncounter({
+                          todayTurnId: turn.id,
+                          clientId: turn.clientId,
+                          petId: turn.petId,
+                          ownerName: turn.ownerName,
+                          ownerPhone: turn.ownerPhone,
+                          petName: turn.petName,
+                        });
+                      }
+                    : null
               }
+              onPrimaryAction={() => {
+                if (item.source === "appointment") {
+                  const appointment = appointments.find(
+                    (entry) => entry.id === item.id,
+                  );
+                  if (!appointment) return;
+                  goToInvoiceFlow({
+                    appointmentId: appointment.id,
+                    clientId: appointment.clientId,
+                    invoiceId: appointment.invoiceId,
+                    petId: appointment.petId,
+                    petName: appointment.petName,
+                  });
+                  return;
+                }
 
-              const turn = turns.find((entry) => entry.id === item.id);
-              if (!turn) return;
-              goToInvoiceFlow({
-                clientId: turn.clientId,
-                ownerName: turn.ownerName,
-                petId: turn.petId,
-                petName: turn.petName,
-                serviceName: turn.serviceName,
-                todayTurnId: turn.id,
-              });
-            }}
-          />
-        ))}
+                const turn = turns.find((entry) => entry.id === item.id);
+                if (!turn) return;
+                goToInvoiceFlow({
+                  clientId: turn.clientId,
+                  ownerName: turn.ownerName,
+                  petId: turn.petId,
+                  petName: turn.petName,
+                  serviceName: turn.serviceName,
+                  todayTurnId: turn.id,
+                });
+              }}
+            />
+          ))}
+        </div>
       </TodaySection>
 
       <TodaySection
         count={doneCards.length}
-        emptyMessage="Todavía no hay pacientes atendidos hoy."
+        description="Historico rapido de pacientes ya resueltos en la jornada."
+        emptyMessage="Todavia no hay pacientes atendidos hoy."
         icon={CheckCircle2}
         title="Atendidos"
       >
-        {doneCards.map((item) => (
-          <PatientCard
-            key={`${item.source}-${item.id}-done`}
-            busy={false}
-            item={item}
-            onCardClick={() => {
-              if (item.detailHref) {
-                router.push(item.detailHref);
-              }
-            }}
-          />
-        ))}
+        <div className="grid gap-3 xl:grid-cols-2">
+          {doneCards.map((item) => (
+            <PatientCard
+              key={`${item.source}-${item.id}-done`}
+              busy={false}
+              item={item}
+              onCardClick={() => {
+                if (item.detailHref) {
+                  router.push(item.detailHref);
+                }
+              }}
+            />
+          ))}
+        </div>
       </TodaySection>
 
       <NewTurnModal
         onCreated={(created) => {
           setTurns((current) =>
             [...current, created].sort((left, right) =>
-              left.arrivalAt.localeCompare(right.arrivalAt)
-            )
+              left.arrivalAt.localeCompare(right.arrivalAt),
+            ),
           );
           showAlert(
             "success",
             "Paciente agregado",
-            "El paciente quedó agregado en la columna En espera."
+            "El paciente quedo agregado en la columna En espera.",
           );
         }}
         onOpenChange={setTurnModalOpen}
         onShowError={showTurnModalError}
         open={turnModalOpen}
       />
+      {encounter ? (
+        // <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/30 p-4">
+        //   <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl bg-card p-6 shadow-xl">
+        //     <div className="mb-4 flex items-center justify-between">
+        //       <h2 className="app-heading text-3xl text-foreground">
+        //         Atención clínica
+        //       </h2>
+        //       <Button variant="outline" onClick={() => setEncounter(null)}>
+        //         Cerrar
+        //       </Button>
+        //     </div>
+        <Modal
+                open={!!encounter}
+                onClose={(open) => {
+                  if (!open) setEncounter(null);
+                }}
+                title="Atención clínica"
+                size="xl"
+              >
+            <EncounterWorkflow
+              petId={encounter.petId}
+              clientId={encounter.clientId}
+              todayTurnId={encounter.todayTurnId}
+              walkInOwnerName={encounter.ownerName}
+              walkInOwnerPhone={encounter.ownerPhone}
+              walkInPetName={encounter.petName}
+              walkInSpecies={
+                turns.find((turn) => turn.id === encounter.todayTurnId)?.species
+              }
+              appointmentId={encounter.appointmentId}
+              assignedVetId={
+                appointments.find(
+                  (appointment) => appointment.id === encounter.appointmentId,
+                )?.vetId
+              }
+              vets={[]}
+              onLinked={({ clientId, petId }) => {
+                setEncounter((current) =>
+                  current ? { ...current, clientId, petId } : current,
+                );
+                setTurns((current) =>
+                  current.map((turn) =>
+                    turn.id === encounter.todayTurnId
+                      ? { ...turn, clientId, petId }
+                      : turn,
+                  ),
+                );
+              }}
+              onFinish={() => void finishEncounter()}
+              onViewInvoice={(invoiceId) => router.push(`/invoices/${invoiceId}`)}
+              onBilling={() =>
+                goToInvoiceFlow({
+                  appointmentId: encounter.appointmentId,
+                  clientId: encounter.clientId,
+                  petId: encounter.petId,
+                  todayTurnId: encounter.todayTurnId,
+                  ownerName: encounter.ownerName,
+                  petName: encounter.petName,
+                })
+              }
+            />
+            </Modal>
+          // </div>
+        // </div>
+      ) : null}
 
       <AppAlert
         description={alert.description}

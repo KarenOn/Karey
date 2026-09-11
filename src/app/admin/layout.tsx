@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import SignOutButton from "@/components/shared/SignOutButton";
 import { requireSuperAdmin } from "@/lib/server-auth";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 async function getAdminSessionOrRedirect() {
   try {
@@ -35,6 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <NotificationBell />
             <div className="rounded-xl border border-border/70 bg-background/75 px-3 py-2 text-sm font-semibold text-foreground">
               Solo super admin
             </div>

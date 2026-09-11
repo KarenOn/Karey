@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { deleteStoredFile } from "@/lib/storage";
 
@@ -11,7 +11,7 @@ export async function DELETE(
     params,
   }: { params: Promise<{ visitId: string; attachmentId: string }> }
 ) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.attachDocuments");
   const { visitId: rawVisitId, attachmentId: rawAttachmentId } = await params;
 
   const visitId = Number(rawVisitId);

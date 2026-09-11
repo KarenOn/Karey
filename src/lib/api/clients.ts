@@ -30,3 +30,15 @@ export async function apiCreateClient(data: ClientFormValues): Promise<ClientRow
 
   return payload;
 }
+
+export async function apiUpdateClient(id: number, data: ClientFormValues): Promise<ClientRow> {
+  const res = await fetch(`/api/clients/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.error ?? "No se pudo actualizar el cliente.");
+  return payload;
+}

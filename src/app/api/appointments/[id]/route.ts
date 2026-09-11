@@ -8,6 +8,7 @@ import {
 } from "@/lib/reminders";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentUpdateSchema } from "@/lib/validators/appointments";
+import { getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -21,6 +22,8 @@ const appointmentInclude = {
   pet: { select: { id: true, name: true, species: true, clientId: true } },
   client: { select: { id: true, fullName: true, phone: true } },
   vet: { select: { id: true, name: true, email: true } },
+  visit: { select: { id: true, _count: { select: { vaccinations: true } } } },
+  encounterItems: { select: { id: true } },
 } as const;
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 
@@ -48,24 +51,20 @@ function combineDateAndTime(date: Date, time: string) {
   return next;
 }
 
-function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
-  return startA < endB && startB < endA;
-}
-
 async function findOverlappingAppointment(params: {
   clinicId: number;
   startAt: Date;
   endAt: Date;
+  vetId?: string | null;
   ignoreId: number;
 }) {
-  const { clinicId, startAt, endAt, ignoreId } = params;
+  const { clinicId, startAt, endAt, vetId, ignoreId } = params;
   const searchFrom = addMinutes(startAt, -1440);
   const searchTo = addMinutes(endAt, 1440);
 
   const candidates = await prisma.appointment.findMany({
     where: {
       clinicId,
-      status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
       NOT: { id: ignoreId },
       startAt: {
         gte: searchFrom,
@@ -76,16 +75,29 @@ async function findOverlappingAppointment(params: {
       id: true,
       startAt: true,
       endAt: true,
+      vetId: true,
+      status: true,
       pet: { select: { name: true } },
       client: { select: { fullName: true } },
+      vet: { select: { name: true } },
     },
     orderBy: { startAt: "asc" },
   });
 
   return (
     candidates.find((appointment) => {
-      const appointmentEnd = appointment.endAt ?? addMinutes(appointment.startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
-      return rangesOverlap(startAt, endAt, appointment.startAt, appointmentEnd);
+      if (!isAppointmentActive(appointment.status)) return false;
+      // Check based on vet assignment
+      if (vetId) {
+        // For assigned vet: only conflict with same vet
+        if (appointment.vetId !== vetId) return false;
+      } else {
+        // For unassigned: only conflict with other unassigned appointments
+        if (appointment.vetId !== null) return false;
+      }
+
+      const appointmentEnd = getAppointmentEnd(appointment, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+      return Boolean(appointmentEnd && rangesOverlap(startAt, endAt, appointment.startAt, appointmentEnd));
     }) ?? null
   );
 }
@@ -151,11 +163,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("appointments.update");
-  if (!clinicId) {
-    return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
-  }
-
   const id = Number((await ctx.params).id);
   const body = await req.json().catch(() => null);
   const parsed = AppointmentUpdateSchema.safeParse(body);
@@ -167,6 +174,15 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     );
   }
 
+  const permission = parsed.data.status === "IN_PROGRESS" || parsed.data.status === "COMPLETED"
+    ? "appointments.attend"
+    : parsed.data.status === "CANCELLED" || parsed.data.status === "NO_SHOW"
+      ? "appointments.cancel"
+      : parsed.data.startAt || parsed.data.endAt
+        ? "appointments.reschedule"
+        : "appointments.edit";
+  const { clinicId } = await requireClinicPermission(permission);
+
   const current = await prisma.appointment.findFirst({
     where: { id, clinicId },
     select: {
@@ -176,6 +192,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       startAt: true,
       endAt: true,
       vetId: true,
+      status: true,
     },
   });
 
@@ -184,6 +201,17 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   const input = parsed.data;
+  if (input.startAt && input.startAt <= new Date()) {
+    return NextResponse.json({ error: "No puedes reprogramar una cita a un horario que ya pasó." }, { status: 422 });
+  }
+  const isTerminal = ([AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] as AppointmentStatus[]).includes(current.status);
+  const changesSchedule = input.startAt !== undefined || input.endAt !== undefined || input.petId !== undefined || input.clientId !== undefined || input.vetId !== undefined;
+  if (isTerminal && (changesSchedule || input.status !== undefined && input.status !== current.status)) {
+    return NextResponse.json({ error: "Una cita histórica no puede modificarse. Crea una nueva ocurrencia." }, { status: 409 });
+  }
+  if (current.status === AppointmentStatus.IN_PROGRESS && (changesSchedule || input.status !== undefined && input.status !== AppointmentStatus.COMPLETED)) {
+    return NextResponse.json({ error: "Una cita en atención solo puede finalizarse desde el flujo clínico." }, { status: 409 });
+  }
   const nextPetId = input.petId ?? current.petId;
 
   const pet = await prisma.pet.findFirst({
@@ -237,7 +265,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     ? current.endAt ?? addMinutes(nextStartAt, DEFAULT_APPOINTMENT_DURATION_MINUTES)
     : input.endAt ?? addMinutes(nextStartAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
 
-  if (nextEndAt && nextEndAt < nextStartAt) {
+  if (nextEndAt && nextEndAt <= nextStartAt) {
     return NextResponse.json(
       { error: "La hora final no puede ser menor que la inicial" },
       { status: 422 }
@@ -257,6 +285,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     clinicId,
     startAt: nextStartAt,
     endAt: nextEndAt,
+    vetId: nextVetId,
     ignoreId: id,
   });
 

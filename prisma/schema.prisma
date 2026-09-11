@@ -7,11 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
-/**
- * =========================
- * ENUMS (Dominio)
- * =========================
- */
+//
+// =========================
+// ENUMS (Dominio)
+// =========================
+//
 
 enum ClinicRole {
   OWNER
@@ -87,6 +87,13 @@ enum NotificationStatus {
   CANCELLED
 }
 
+enum ClinicalReportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum VaccineIntervalUnit {
   DAYS
   WEEKS
@@ -132,11 +139,16 @@ enum SubscriptionStatus {
   PAST_DUE
 }
 
-/**
- * =========================
- * BETTER AUTH
- * =========================
- */
+enum SubscriptionPaymentStatus {
+  PAID
+  PENDING
+}
+
+//
+// =========================
+// BETTER AUTH
+// =========================
+//
 
 model User {
   id            String    @id
@@ -149,6 +161,9 @@ model User {
   banned        Boolean?  @default(false)
   banReason     String?   @db.Text
   banExpires    DateTime?
+  mustChangePassword Boolean @default(false)
+  onboardingCompletedAt DateTime?
+  welcomeSeenAt        DateTime?
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -164,6 +179,7 @@ model User {
   createdPayments    Payment[]       @relation("PaymentCreatedBy")
   stockMovements     StockMovement[] @relation("StockMovementCreatedBy")
   clinicalVisits     ClinicalVisit[] @relation("ClinicalVisitVet")
+  clinicalReportJobs ClinicalReportJob[]
 
   notificationRecipients  NotificationRecipient[]
   createdNotifications    Notification[]   @relation("NotificationCreatedBy")
@@ -206,6 +222,7 @@ model Session {
 
 model Account {
   id                    String    @id
+  issuer                String    @default("")
   accountId             String    @db.Text
   providerId            String    @db.Text
   userId                String
@@ -220,6 +237,7 @@ model Account {
   updatedAt             DateTime  @updatedAt
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([issuer, accountId], map: "account_issuer_accountId_uidx")
   @@index([userId])
   @@map("account")
 }
@@ -275,6 +293,7 @@ model EmployeeInvite {
   tokenHash String @unique
   expiresAt DateTime
   acceptedAt DateTime?
+  revokedAt DateTime?
 
   createdById String?
   createdAt   DateTime @default(now())
@@ -288,11 +307,11 @@ model EmployeeInvite {
   @@map("employeeinvite")
 }
 
-/**
- * =========================
- * CORE (Clínica + membresía)
- * =========================
- */
+//
+// =========================
+// CORE (Clínica + membresía)
+// =========================
+//
 
 model Clinic {
   id       Int     @id @default(autoincrement())
@@ -302,6 +321,7 @@ model Clinic {
   address  String?
   currency String  @default("USD")
   timezone String  @default("America/Santo_Domingo")
+  inventoryExpiryAlertDays Int @default(5)
 
   logoUrl  String? @db.Text
   slogan   String?
@@ -324,6 +344,11 @@ model Clinic {
   isActive            Boolean            @default(true)
   subscriptionStatus  SubscriptionStatus @default(ACTIVE)
   subscriptionEndDate DateTime?          @db.Date
+  subscriptionPaymentStatus SubscriptionPaymentStatus @default(PAID)
+  subscriptionPaidAt DateTime?
+  subscriptionReminderDays Int @default(3)
+  subscriptionGraceDays Int @default(2)
+  subscriptionIntervalMonths Int @default(1)
   plan                String?
 
   createdAt DateTime @default(now())
@@ -342,11 +367,13 @@ model Clinic {
   products           Product[]
   invoices           Invoice[]
   visits             ClinicalVisit[]
+  clinicalReportJobs ClinicalReportJob[]
   vaccines           VaccineCatalog[]
   vaccinations       VaccinationRecord[]
   notifications      Notification[]
   stockMovements     StockMovement[]
   medicalAttachments MedicalAttachment[]
+  encounterItems     EncounterItem[]
 
   @@index([createdAt])
   @@index([isActive, subscriptionStatus])
@@ -390,11 +417,11 @@ model ClinicMember {
   @@map("clinicmember")
 }
 
-/**
- * =========================
- * CLIENTES / PETS
- * =========================
- */
+//
+// =========================
+// CLIENTES / PETS
+// =========================
+//
 
 model Client {
   id       Int     @id @default(autoincrement())
@@ -415,6 +442,7 @@ model Client {
   appointments Appointment[]
   invoices     Invoice[]
   visits       ClinicalVisit[]
+  encounterItems EncounterItem[]
 
   notificationRecipients NotificationRecipient[]
 
@@ -451,6 +479,7 @@ model Pet {
   visits       ClinicalVisit[]
   vaccinations VaccinationRecord[]
   invoices     Invoice[]
+  encounterItems EncounterItem[]
 
   @@unique([clinicId, microchip])
   @@index([clinicId])
@@ -459,11 +488,11 @@ model Pet {
   @@map("pet")
 }
 
-/**
- * =========================
- * AGENDA / CITAS
- * =========================
- */
+//
+// =========================
+// AGENDA / CITAS
+// =========================
+//
 
 model Appointment {
   id       Int @id @default(autoincrement())
@@ -496,6 +525,7 @@ model Appointment {
 
   visit   ClinicalVisit?
   invoice Invoice?
+  encounterItems EncounterItem[]
 
   @@index([clinicId, startAt])
   @@index([clinicId, status])
@@ -507,11 +537,11 @@ model Appointment {
   @@map("appointment")
 }
 
-/**
- * =========================
- * Turno de hoy
- * =========================
-*/
+//
+// =========================
+// Turno de hoy
+// =========================
+//
 
 model TodayTurn {
   id       Int @id @default(autoincrement())
@@ -543,6 +573,8 @@ model TodayTurn {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
   pet    Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
+  encounterItems EncounterItem[]
+  invoice Invoice?
 
   @@index([clinicId, arrivalAt])
   @@index([clinicId, status])
@@ -552,11 +584,11 @@ model TodayTurn {
   @@map("todayturn")
 }
 
-/**
- * =========================
- * SERVICIOS
- * =========================
- */
+//
+// =========================
+// SERVICIOS
+// =========================
+//
 
 model Service {
   id           Int @id @default(autoincrement())
@@ -573,6 +605,7 @@ model Service {
 
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   invoiceItems InvoiceItem[]
+  encounterItems EncounterItem[]
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
@@ -580,11 +613,11 @@ model Service {
   @@map("service")
 }
 
-/**
- * =========================
- * INVENTARIO
- * =========================
- */
+//
+// =========================
+// INVENTARIO
+// =========================
+//
 
 model Product {
   id       Int @id @default(autoincrement())
@@ -601,6 +634,7 @@ model Product {
   trackStock  Boolean @default(true)
   stockOnHand Int     @default(0)
   minStock    Int     @default(0)
+  expirationDate DateTime? @db.Date
 
   isActive Boolean @default(true)
 
@@ -614,11 +648,14 @@ model Product {
 
   stockMovements StockMovement[]
   invoiceItems   InvoiceItem[]
+  encounterItems  EncounterItem[]
+  vaccineCatalog  VaccineCatalog?
 
   @@unique([clinicId, sku])
   @@index([clinicId, isActive])
   @@index([clinicId, stockOnHand])
   @@index([clinicId, minStock])
+  @@index([clinicId, expirationDate])
   @@map("product")
 }
 
@@ -632,6 +669,7 @@ model StockMovement {
   reason        String?
   referenceType String?
   referenceId   String?
+  invoiceId     Int?
 
   createdById String?
   createdBy   User? @relation("StockMovementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -640,18 +678,20 @@ model StockMovement {
 
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, createdAt])
   @@index([productId])
   @@index([createdById])
+  @@index([invoiceId])
   @@map("stockmovement")
 }
 
-/**
- * =========================
- * FACTURACIÓN
- * =========================
- */
+//
+// =========================
+// FACTURACIÓN
+// =========================
+//
 
 model Invoice {
   id       Int @id @default(autoincrement())
@@ -660,6 +700,7 @@ model Invoice {
 
   petId         Int?
   appointmentId Int? @unique
+  todayTurnId   Int? @unique
 
   number String
   status InvoiceStatus @default(ISSUED)
@@ -685,9 +726,11 @@ model Invoice {
   client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   pet         Pet?         @relation(fields: [petId], references: [id], onDelete: SetNull)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  todayTurn   TodayTurn? @relation(fields: [todayTurnId], references: [id], onDelete: SetNull)
 
   items    InvoiceItem[]
   payments Payment[]
+  stockMovements StockMovement[]
 
   @@unique([clinicId, number])
   @@index([clinicId, issueDate])
@@ -743,11 +786,41 @@ model Payment {
   @@map("payment")
 }
 
-/**
- * =========================
- * HISTORIAL CLÍNICO + VACUNAS
- * =========================
- */
+model EncounterItem {
+  id            Int @id @default(autoincrement())
+  clinicId      Int
+  clientId      Int
+  petId         Int
+  appointmentId Int?
+  todayTurnId   Int?
+  type          InvoiceItemType
+  serviceId     Int?
+  productId     Int?
+  description   String
+  quantity      Decimal @default(1.00) @db.Decimal(12, 2)
+  unitPrice     Decimal @default(0.00) @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  pet         Pet         @relation(fields: [petId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  todayTurn   TodayTurn?  @relation(fields: [todayTurnId], references: [id], onDelete: Cascade)
+  service     Service?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, appointmentId])
+  @@index([clinicId, todayTurnId])
+  @@index([petId])
+  @@map("encounteritem")
+}
+
+//
+// =========================
+// HISTORIAL CLÍNICO + VACUNAS
+// =========================
+//
 
 model ClinicalVisit {
   id       Int @id @default(autoincrement())
@@ -807,6 +880,7 @@ model MedicalAttachment {
 model VaccineCatalog {
   id       Int @id @default(autoincrement())
   clinicId Int
+  productId Int? @unique
 
   name    String
   species PetSpecies?
@@ -821,10 +895,12 @@ model VaccineCatalog {
   updatedAt DateTime @updatedAt
 
   clinic  Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  product Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
   records VaccinationRecord[]
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
+  @@index([clinicId, productId])
   @@map("vaccinecatalog")
 }
 
@@ -855,11 +931,11 @@ model VaccinationRecord {
   @@map("vaccinationrecord")
 }
 
-/**
- * =========================
- * NOTIFICACIONES (log)
- * =========================
- */
+//
+// =========================
+// NOTIFICACIONES (log)
+// =========================
+//
 
 model Notification {
   id       Int @id @default(autoincrement())
@@ -867,9 +943,12 @@ model Notification {
 
   channel NotificationChannel
   status  NotificationStatus @default(QUEUED)
+  type    String @default("SYSTEM")
+  eventKey String?
 
   title   String
   message String @db.Text
+  targetUrl String?
 
   scheduledAt DateTime?
   sentAt      DateTime?
@@ -887,9 +966,34 @@ model Notification {
 
   @@index([clinicId, createdAt])
   @@index([clinicId, status])
+  @@unique([clinicId, eventKey])
   @@index([scheduledAt])
   @@index([createdById])
   @@map("notification")
+}
+
+model ClinicalReportJob {
+  id            Int                   @id @default(autoincrement())
+  clinicId      Int
+  requestedById String
+  dedupeKey     String
+  petIds        Json
+  clientId      Int?
+  range         Json
+  status        ClinicalReportJobStatus @default(PENDING)
+  storageRef    String?               @db.Text
+  error         String?               @db.Text
+  completedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  clinic      Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, dedupeKey])
+  @@index([status, createdAt])
+  @@index([clinicId, requestedById])
+  @@map("clinicalreportjob")
 }
 
 model NotificationRecipient {
@@ -903,6 +1007,7 @@ model NotificationRecipient {
   phone String?
 
   status NotificationStatus @default(QUEUED)
+  readAt DateTime?
   sentAt DateTime?
   error  String? @db.Text
 
@@ -912,6 +1017,7 @@ model NotificationRecipient {
 
   @@index([notificationId])
   @@index([userId])
+  @@index([userId, readAt])
   @@index([clientId])
   @@map("notificationrecipient")
 }

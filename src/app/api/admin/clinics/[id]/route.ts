@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SubscriptionStatus } from "@/generated/prisma/client";
-import { getAdminClinicById, toPrismaSubscriptionStatus } from "@/lib/admin-clinics";
+import { getAdminClinicById, normalizeAdminPhone, toPrismaSubscriptionStatus } from "@/lib/admin-clinics";
+import { getAppUrl, sendClinicWelcomeEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { requireSuperAdmin } from "@/lib/server-auth";
+import { setTemporaryPasswordForUser } from "@/lib/temporary-password";
+import { markSubscriptionPaid } from "@/lib/subscription-lifecycle";
 
 const updateClinicSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("mark_paid") }),
   z.object({ action: z.literal("activate") }),
   z.object({ action: z.literal("deactivate") }),
   z.object({
@@ -21,6 +25,8 @@ const updateClinicSchema = z.discriminatedUnion("action", [
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .or(z.literal(""))
       .optional(),
+    subscriptionReminderDays: z.number().int().min(0).max(30).optional(),
+    subscriptionGraceDays: z.number().int().min(0).max(30).optional(),
   }),
 ]);
 
@@ -86,6 +92,11 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       return NextResponse.json({ error: "Clinica no encontrada" }, { status: 404 });
     }
 
+    if (parsed.data.action === "mark_paid") {
+      await markSubscriptionPaid(clinicId);
+      return NextResponse.json(await getAdminClinicById(clinicId));
+    }
+
     if (parsed.data.action === "activate") {
       await prisma.clinic.update({
         where: { id: clinicId },
@@ -119,7 +130,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
         data: {
           name: parsed.data.name.trim(),
           email: toNullishString(parsed.data.email),
-          phone: toNullishString(parsed.data.phone),
+          phone: normalizeAdminPhone(parsed.data.phone),
           plan: toNullishString(parsed.data.plan),
           isActive: nextIsActive,
           subscriptionStatus: nextSubscriptionStatus,
@@ -127,6 +138,8 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
             parsed.data.subscriptionEndDate === undefined
               ? undefined
               : toDateOnly(parsed.data.subscriptionEndDate),
+          subscriptionReminderDays: parsed.data.subscriptionReminderDays,
+          subscriptionGraceDays: parsed.data.subscriptionGraceDays,
         },
       });
     }
@@ -135,7 +148,51 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     return NextResponse.json(clinic);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo actualizar la clinica";
-    const status = message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : 500;
+    const status = message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : message === "SUBSCRIPTION_ALREADY_PAID" ? 409 : 500;
     return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    await requireSuperAdmin();
+    const clinicId = Number((await context.params).id);
+    if (!Number.isInteger(clinicId) || clinicId <= 0) {
+      return NextResponse.json({ error: "Clinica invalida" }, { status: 400 });
+    }
+
+    const owner = await prisma.clinicMember.findFirst({
+      where: { clinicId, isActive: true, role: { is: { key: "owner", isActive: true } } },
+      select: {
+        user: { select: { id: true, name: true, email: true, mustChangePassword: true } },
+        clinic: { select: { name: true, plan: true, subscriptionEndDate: true } },
+      },
+    });
+
+    if (!owner) return NextResponse.json({ error: "Owner no encontrado" }, { status: 404 });
+    if (!owner.user.mustChangePassword) {
+      return NextResponse.json({ error: "El owner ya completó su acceso" }, { status: 409 });
+    }
+
+    const temporaryPassword = await prisma.$transaction((tx) =>
+      setTemporaryPasswordForUser(tx, owner.user.id),
+    );
+
+    await sendClinicWelcomeEmail({
+      clinicName: owner.clinic.name,
+      loginUrl: getAppUrl("/login"),
+      ownerEmail: owner.user.email,
+      ownerName: owner.user.name,
+      plan: owner.clinic.plan,
+      subscriptionEndDate: owner.clinic.subscriptionEndDate,
+      tempPassword: temporaryPassword,
+      to: owner.user.email,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo reenviar la invitación";
+    const status = message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : 500;
+    return NextResponse.json({ error: status === 500 ? "No se pudo reenviar la invitación" : message }, { status });
   }
 }

@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireClinicPermission } from "@/lib/server-auth";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const clinicId = Number(searchParams.get("clinicId") ?? "1");
+export async function GET() {
+  const { clinicId } = await requireClinicPermission("vaccines.read");
 
   const vaccines = await prisma.vaccineCatalog.findMany({
-    where: { clinicId, isActive: true },
+    where: {
+      clinicId,
+      isActive: true,
+      // OR: [{ product: { is: null } }, { product: { isActive: true } }],
+    },
     orderBy: { name: "asc" },
   });
 

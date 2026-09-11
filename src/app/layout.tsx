@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Manrope, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter, Oswald } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import RegisterSW from "@/components/pwa/RegisterSW";
 import { Toaster } from "@/components/ui/sonner";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const oswald = Oswald({
+  variable: "--font-oswald",
   subsets: ["latin"],
 });
 
@@ -47,7 +47,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body
-        className={`${manrope.variable} ${fraunces.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${oswald.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider
           attribute="class"

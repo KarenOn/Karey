@@ -4,6 +4,7 @@ import React from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -18,14 +19,15 @@ type ModalProps = {
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: ModalSize;
+  description?: React.ReactNode;
 };
 
 const sizeClasses: Record<ModalSize, string> = {
-  sm: "max-w-lg",
-  default: "max-w-xl",
-  lg: "max-w-3xl",
-  xl: "max-w-5xl",
-  full: "max-w-6xl",
+  sm: "sm:max-w-lg",
+  default: "sm:max-w-xl",
+  lg: "sm:max-w-3xl",
+  xl: "sm:max-w-5xl",
+  full: "sm:max-w-[calc(100vw-3rem)]",
 };
 
 export default function Modal({
@@ -35,12 +37,18 @@ export default function Modal({
   children,
   footer,
   size = "default",
+  description,
 }: ModalProps) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className={`${sizeClasses[size]} max-h-[90vh] overflow-y-auto`}>
-        <DialogHeader className="border-b border-border/70 pb-4">
-          <DialogTitle className="text-xl font-bold text-foreground">{title}</DialogTitle>
+        <DialogHeader>
+          <DialogTitle className="app-heading text-3xl font-bold text-foreground">{title}</DialogTitle>
+          {description ? (
+            <DialogDescription className="text-sm text-muted-foreground">
+              {description}
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
         <div className="py-4">{children}</div>
         {footer ? <DialogFooter className="border-t border-border/70 pt-4">{footer}</DialogFooter> : null}

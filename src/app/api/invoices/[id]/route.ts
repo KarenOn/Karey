@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { InvoiceUpdateSchema } from "@/lib/validators/invoice";
 import { calcInvoiceTotals } from "@/lib/invoices/calc";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { zodDetails } from "@/lib/zodDetails";
 import { Prisma, InvoiceStatus } from "@/generated/prisma/client";
+import { notifyInvoiceEvent } from "@/lib/in-app-notifications";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("invoices.read");
   const id = Number((await params).id);
 
   const inv = await prisma.invoice.findFirst({
@@ -17,6 +18,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       clinic: { select: { name: true } },
       number: true,
       status: true,
+      appointmentId: true,
+      todayTurnId: true,
       issueDate: true,
       dueDate: true,
       paidAt: true,
@@ -65,7 +68,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("invoices.edit");
   const id = Number((await params).id);
 
   const body = await req.json().catch(() => null);
@@ -152,6 +155,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       select: { id: true },
     });
   });
+
+  if (current.status !== (data.status ?? current.status)) {
+    const nextStatus = data.status;
+    if (nextStatus === InvoiceStatus.DRAFT || nextStatus === InvoiceStatus.ISSUED || nextStatus === InvoiceStatus.PAID) {
+      await notifyInvoiceEvent(updated.id, nextStatus === InvoiceStatus.DRAFT ? "DRAFT" : nextStatus === InvoiceStatus.PAID ? "PAID" : "ISSUED");
+    }
+  }
 
   return NextResponse.json(updated);
 }

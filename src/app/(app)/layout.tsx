@@ -4,13 +4,36 @@ import SignOutButton from "@/components/shared/SignOutButton";
 import { readCurrentUserProfile } from "@/lib/current-user-profile";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const currentUser = await readCurrentUserProfile().catch(() => null);
+  let currentUser;
+
+  try {
+    currentUser = await readCurrentUserProfile();
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "UNAUTHORIZED") {
+      redirect("/login");
+    }
+    if (code === "ACCESS_REVOKED") {
+      redirect("/login?error=access-revoked");
+    }
+    if (code === "NO_CLINIC") {
+      redirect("/login?error=no-clinic");
+    }
+    throw error;
+  }
 
   if (currentUser?.isGlobalAdmin && !currentUser.clinicId) {
     redirect("/admin/clinics");
   }
 
-  if (currentUser?.clinicId && currentUser.clinicIsActive === false) {
+  if (currentUser?.mustChangePassword) {
+    redirect("/onboarding/change-password");
+  }
+
+  if (
+    currentUser?.clinicId &&
+    (currentUser.clinicIsActive === false || currentUser.subscriptionStatus === "inactive")
+  ) {
     return (
       <div className="app-shell-bg min-h-screen">
         <div className="app-grid pointer-events-none fixed inset-0 opacity-70" />

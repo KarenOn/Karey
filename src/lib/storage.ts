@@ -129,7 +129,7 @@ function buildStorageKey(params: CreateUploadUrlParams) {
       ? `clinic/${params.clinicId}/branding`
       : params.scope === "user-avatar"
         ? `clinic/${params.clinicId}/users/avatars`
-      : `clinic/${params.clinicId}/visits/${params.visitId}/attachments`;
+      : `clinic/${params.clinicId}/visits/${params.visitId ?? "pending"}/attachments`;
 
   return `${prefix}/${randomUUID()}-${safeFileName}`;
 }
@@ -238,6 +238,13 @@ export async function deleteStoredFile(ref?: string | null) {
       Key: fromS3StorageRef(ref),
     })
   );
+}
+
+export async function storeGeneratedReport(params: { clinicId: number; fileName: string; body: Uint8Array }) {
+  const config = readStorageConfig();
+  const key = `clinic/${params.clinicId}/reports/${randomUUID()}-${sanitizeFileName(params.fileName)}`;
+  await getS3Client().send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: params.body, ContentType: "application/pdf" }));
+  return toS3StorageRef(key);
 }
 
 export async function serializeAttachment<T extends { fileName: string; fileType?: string | null; url: string }>(

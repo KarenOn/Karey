@@ -5,6 +5,8 @@ export type InvoiceListRow = {
   id: number;
   number: string;
   status: string;
+  appointmentId: number | null;
+  todayTurnId: number | null;
   issueDate: string;
   dueDate: string | null;
   paidAt: string | null;

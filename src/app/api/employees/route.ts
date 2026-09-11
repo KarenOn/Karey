@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const { clinicId, member } = await requireClinicPermission("employees.read");
     const members = await prisma.clinicMember.findMany({
-      where: { clinicId, isActive: true },
+      where: { clinicId },
       include: {
         user: { select: { id: true, name: true, email: true } },
         role: { select: { id: true, key: true, name: true } },
@@ -16,8 +16,11 @@ export async function GET() {
     });
 
     const invites = await prisma.employeeInvite.findMany({
-      where: { clinicId, acceptedAt: null, expiresAt: { gt: new Date() } },
-      include: { role: { select: { id: true, name: true } } },
+      where: { clinicId, acceptedAt: null, revokedAt: null },
+      include: {
+        role: { select: { id: true, name: true } },
+        invitedUser: { select: { name: true } },
+      },
       orderBy: [{ createdAt: "desc" }],
     });
 
@@ -29,10 +32,14 @@ export async function GET() {
       capabilities: {
         canInviteEmployees: elevated || hasPermission(member?.role.permissions, "employees.invite"),
         canUpdateEmployees: elevated || hasPermission(member?.role.permissions, "employees.update"),
+        canChangeRole: elevated || hasPermission(member?.role.permissions, "employees.changeRole"),
+        canActivate: elevated || hasPermission(member?.role.permissions, "employees.activate"),
+        canDeactivate: elevated || hasPermission(member?.role.permissions, "employees.deactivate"),
+        canResendInvite: elevated || hasPermission(member?.role.permissions, "employees.resendInvite"),
         canManageRoles: elevated || hasPermission(member?.role.permissions, "roles.manage"),
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 }

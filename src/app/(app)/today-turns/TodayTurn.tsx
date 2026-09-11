@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import SearchableSelect from "@/components/shared/SearchableSelect";
+import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
 import { useCurrentUserProfile } from "@/components/layout/current-user-context";
 
 import { Button } from "@/components/ui/button";
@@ -53,19 +55,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert";
-
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-
-import { Check, ChevronsUpDown, UserRound, X } from "lucide-react";
-
 
 /** =========================
  * Types (client-safe)
@@ -433,7 +422,7 @@ export default function TodayTurnsClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Turnos sin cita</h1>
+          <h1 className="app-heading text-3xl text-foreground sm:text-4xl">Turnos sin cita</h1>
           <p className="text-muted-foreground">Registra y organiza los pacientes que llegan sin cita previa.</p>
         </div>
 
@@ -502,7 +491,7 @@ export default function TodayTurnsClient({
                 </div>
               </div>
 
-              <div className={cn("flex-1 rounded-b-2xl p-3 space-y-3 min-h-[400px]", config.columnBg)}>
+              <div className={cn("flex-1 rounded-b-2xl p-3 space-y-3 min-h-100", config.columnBg)}>
                 {columnTurns.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 text-muted-foreground opacity-50">
                     <PawPrint className="w-8 h-8 mb-2" />
@@ -909,7 +898,6 @@ function AddTurnForm({
   const [mode, setMode] = useState<"EXISTING" | "WALKIN">("EXISTING");
 
   // combobox (existing)
-  const [open, setOpen] = useState(false);
   const [selectedPetId, setSelectedPetId] = useState<string>(""); // string for shadcn
 
   const selectedPet = useMemo(() => {
@@ -939,12 +927,6 @@ function AddTurnForm({
     const def = serviceTypes.find((s) => s.value === value)?.defaultName ?? "";
     setServiceName(def);
   };
-
-  const selectedPetLabel = useMemo(() => {
-    if (!selectedPet) return "";
-    const phone = selectedPet.client.phone ? ` â€¢ ${selectedPet.client.phone}` : "";
-    return `${selectedPet.name} â€¢ ${selectedPet.client.fullName}${phone}`;
-  }, [selectedPet]);
 
   const canSubmit =
     mode === "EXISTING"
@@ -1016,83 +998,17 @@ function AddTurnForm({
         <div className="space-y-2">
           <Label>Buscar cliente o paciente</Label>
 
-          <Popover open={open} onOpenChange={setOpen}>
-            <div className="flex gap-2">
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={open}
-                        className="w-full justify-between bg-input"
-                >
-                  <span className="truncate flex items-center gap-2">
-                    <UserRound className="w-4 h-4 text-muted-foreground" />
-                    {selectedPet ? selectedPetLabel : "Escribe para buscar un cliente o paciente..."}
-                  </span>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="bg-transparent"
-                disabled={!selectedPetId}
-                onClick={() => setSelectedPetId("")}
-                title="Limpiar"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Buscar por mascota o cliente..." />
-                <CommandList>
-                  <CommandEmpty>
-                    <div className="p-3 text-sm text-muted-foreground space-y-2">
-                      <p>No encontramos coincidencias.</p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="bg-transparent w-full"
-                        onClick={() => {
-                          setMode("WALKIN");
-                          setOpen(false);
-                          setSelectedPetId("");
-                        }}
-                      >
-                        Registrar paciente sin cita
-                      </Button>
-                    </div>
-                  </CommandEmpty>
-
-                  <CommandGroup>
-                    {pets.map((p) => {
-                      const value = String(p.id);
-                      const label = `${p.name} â€¢ ${p.client.fullName}${p.client.phone ? ` â€¢ ${p.client.phone}` : ""}`;
-                      const isSelected = selectedPetId === value;
-
-                      return (
-                        <CommandItem
-                          key={p.id}
-                          value={`${p.name} ${p.client.fullName} ${p.client.phone ?? ""}`}
-                          onSelect={() => {
-                            setSelectedPetId(value);
-                            setOpen(false);
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                          <span className="truncate">{label}</span>
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+          <SearchableSelect
+            options={pets.map((pet) => ({
+              value: String(pet.id),
+              label: `${pet.name} • ${pet.client.fullName}`,
+              keywords: [pet.client.fullName, pet.client.phone ?? "", pet.name],
+            }))}
+            value={selectedPetId}
+            onValueChange={setSelectedPetId}
+            placeholder="Selecciona un cliente o paciente..."
+            searchPlaceholder="Buscar por mascota o cliente..."
+          />
 
           {selectedPet && (
             <div className="text-xs text-muted-foreground bg-muted rounded-lg p-2">
@@ -1129,13 +1045,7 @@ function AddTurnForm({
                   <SelectTrigger className="bg-input">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DOG">Perro</SelectItem>
-                  <SelectItem value="CAT">Gato</SelectItem>
-                  <SelectItem value="BIRD">Ave</SelectItem>
-                  <SelectItem value="RABBIT">Conejo</SelectItem>
-                  <SelectItem value="OTHER">Otro</SelectItem>
-                </SelectContent>
+                <SelectContent>{PET_SPECIES_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>

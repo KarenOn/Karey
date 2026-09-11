@@ -2,9 +2,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { KeyRound, LoaderCircle, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import AppPageHero from "@/components/shared/AppPageHero";
+import DataTablePagination from "@/components/shared/DataTablePagination";
+import SearchableSelect from "@/components/shared/SearchableSelect";
+import SearchInput from "@/components/shared/SearchInput";
+import StatusBadge from "@/components/shared/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,15 +22,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCurrentUserProfile } from "@/components/layout/current-user-context";
+import { PERMISSION_CATALOG } from "@/lib/permissions";
 
 type PermissionMap = Record<string, string[]>;
 type Role = {
@@ -41,27 +41,23 @@ type Role = {
 };
 type Member = {
   id: number;
+  userId: string;
   isActive: boolean;
   user: { name: string | null; email: string };
   role: { id: number; name: string };
 };
-type Invite = { id: number; email: string; expiresAt: string; role: { name: string } };
+type Invite = { id: number; email: string; expiresAt: string; role: { name: string }; invitedUser?: { name: string | null } | null };
 type Capabilities = {
   canInviteEmployees: boolean;
   canUpdateEmployees: boolean;
+  canChangeRole: boolean;
+  canActivate: boolean;
+  canDeactivate: boolean;
+  canResendInvite: boolean;
   canManageRoles: boolean;
 };
 
-const permissionCatalog = [
-  { module: "clinic", label: "Clinica", actions: ["update"] },
-  { module: "employees", label: "Empleados", actions: ["read", "invite", "update"] },
-  { module: "roles", label: "Roles", actions: ["read", "manage"] },
-  { module: "appointments", label: "Citas", actions: ["read", "create", "update", "delete"] },
-  { module: "clients", label: "Clientes", actions: ["read", "create", "update", "delete"] },
-  { module: "services", label: "Servicios", actions: ["read", "create", "update", "delete"] },
-  { module: "inventory", label: "Inventario", actions: ["read", "create", "update", "delete"] },
-  { module: "invoices", label: "Facturas", actions: ["read", "create", "update", "delete"] },
-] as const;
+const permissionCatalog = PERMISSION_CATALOG;
 
 const emptyInvite = { name: "", email: "", roleId: "" };
 const emptyRole = {
@@ -78,13 +74,35 @@ function normalizePermissions(value: unknown): PermissionMap {
   return Object.entries(value as Record<string, unknown>).reduce<PermissionMap>(
     (acc, [key, actions]) => {
       if (Array.isArray(actions)) {
-        acc[key] = actions.filter((item): item is string => typeof item === "string");
+        const normalized = actions.filter((item): item is string => typeof item === "string");
+        const canonicalModules = new Set(["appointments", "clients", "pets", "visits", "vaccines", "services", "inventory", "invoices"]);
+        acc[key] = canonicalModules.has(key)
+          ? [...new Set(normalized.map((item) => item === "update" ? "edit" : item))]
+          : normalized;
       }
       return acc;
     },
     {}
   );
 }
+
+const actionLabels: Record<string, string> = {
+  read: "Ver",
+  create: "Crear",
+  edit: "Editar",
+  delete: "Eliminar",
+  manage: "Gestionar",
+  update: "Editar (compatibilidad)",
+  invite: "Invitar",
+  changeRole: "Cambiar rol",
+  activate: "Activar",
+  deactivate: "Desactivar",
+  resendInvite: "Reenviar invitación",
+  viewClinicalHistory: "Ver historial clínico",
+  viewDrafts: "Ver borradores",
+  attachDocuments: "Adjuntar documentos",
+  receiveUnassignedNowAlerts: "Recibir alertas de citas sin asignar",
+};
 
 function slugify(value: string) {
   return value
@@ -109,40 +127,69 @@ function togglePermission(perms: PermissionMap, moduleKey: string, action: strin
   return { ...perms, [moduleKey]: next.sort() };
 }
 
+function setVisibleGroupPermissions(perms: PermissionMap, moduleKey: string, visibleActions: readonly string[], enabled: boolean) {
+  const current = perms[moduleKey] ?? [];
+  const next = enabled
+    ? [...new Set([...current, ...visibleActions])]
+    : current.filter((action) => !visibleActions.includes(action));
+  if (!next.length) {
+    const rest = { ...perms };
+    delete rest[moduleKey];
+    return rest;
+  }
+  return { ...perms, [moduleKey]: next.sort() };
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
 export default function EmployeesPage() {
+  const currentUser = useCurrentUserProfile();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [membersPage, setMembersPage] = useState(0);
+  const [membersPageSize, setMembersPageSize] = useState(10);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [permissionSearch, setPermissionSearch] = useState("");
+  const [memberStatus, setMemberStatus] = useState("ALL");
+  const [pendingMemberId, setPendingMemberId] = useState<number | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ member: Member; roleId: number; roleName: string } | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Member | null>(null);
+  const [resendTarget, setResendTarget] = useState<Invite | null>(null);
+  const [resendingInvite, setResendingInvite] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<Invite | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [capabilities, setCapabilities] = useState<Capabilities>({
     canInviteEmployees: false,
     canUpdateEmployees: false,
+    canChangeRole: false,
+    canActivate: false,
+    canDeactivate: false,
+    canResendInvite: false,
     canManageRoles: false,
   });
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState(emptyInvite);
-  const [inviteResult, setInviteResult] = useState<{
-    inviteUrl: string;
-    tempPassword: string | null;
-  } | null>(null);
 
   const [roleOpen, setRoleOpen] = useState(false);
   const [roleForm, setRoleForm] = useState(emptyRole);
   const [roleKeyTouched, setRoleKeyTouched] = useState(false);
+  const [roleSubmitting, setRoleSubmitting] = useState(false);
+  const editingOwner = roleForm.key === "owner";
 
   const roleOptions = useMemo(
     () => roles.filter((role) => role.id && role.isActive),
     [roles]
   );
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadAll(showLoading = true) {
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [employeesRes, rolesRes] = await Promise.all([
@@ -170,6 +217,10 @@ export default function EmployeesPage() {
       setCapabilities({
         canInviteEmployees: !!employeesData.capabilities?.canInviteEmployees,
         canUpdateEmployees: !!employeesData.capabilities?.canUpdateEmployees,
+        canChangeRole: !!employeesData.capabilities?.canChangeRole,
+        canActivate: !!employeesData.capabilities?.canActivate,
+        canDeactivate: !!employeesData.capabilities?.canDeactivate,
+        canResendInvite: !!employeesData.capabilities?.canResendInvite,
         canManageRoles:
           !!employeesData.capabilities?.canManageRoles ||
           !!rolesData.capabilities?.canManageRoles,
@@ -186,27 +237,73 @@ export default function EmployeesPage() {
   }, []);
 
   async function submitInvite() {
+    if (inviteSubmitting) return;
+    const email = inviteForm.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Ingresa un correo electrónico válido.");
+      return;
+    }
+    setInviteSubmitting(true);
     try {
       const res = await fetch("/api/employees/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: inviteForm.name.trim(),
-          email: inviteForm.email.trim(),
+          email,
           roleId: Number(inviteForm.roleId),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Error creando empleado");
-      setInviteResult({ inviteUrl: data.inviteUrl, tempPassword: data.tempPassword ?? null });
+      setInviteForm(emptyInvite);
+      setInviteOpen(false);
       toast.success("Empleado creado");
-      await loadAll();
+      await loadAll(false);
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error creando empleado"));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  }
+
+  async function resendInvite() {
+    if (!resendTarget || resendingInvite) return;
+    setResendingInvite(true);
+    try {
+      const response = await fetch(`/api/employees/invite/${resendTarget.id}/resend`, { method: "POST" });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error ?? "No se pudo reenviar la invitación");
+      setResendTarget(null);
+      await loadAll(false);
+      toast.success("Invitación reenviada correctamente");
+    } catch (resendError) {
+      toast.error(errorMessage(resendError, "No se pudo reenviar la invitación"));
+    } finally {
+      setResendingInvite(false);
+    }
+  }
+
+  async function cancelInvite() {
+    if (!cancelTarget || cancelSubmitting) return;
+    setCancelSubmitting(true);
+    try {
+      const response = await fetch(`/api/employees/invite/${cancelTarget.id}/cancel`, { method: "POST" });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error ?? "No se pudo anular la invitación");
+      setInvites((current) => current.filter((invite) => invite.id !== cancelTarget.id));
+      setCancelTarget(null);
+      toast.success("Invitación anulada correctamente.");
+    } catch (cancelError) {
+      toast.error(errorMessage(cancelError, "No se pudo anular la invitación"));
+    } finally {
+      setCancelSubmitting(false);
     }
   }
 
   async function updateMember(memberId: number, patch: { roleId?: number; isActive?: boolean }) {
+    if (pendingMemberId === memberId) return;
+    setPendingMemberId(memberId);
     try {
       const res = await fetch(`/api/employees/${memberId}`, {
         method: "PATCH",
@@ -215,16 +312,30 @@ export default function EmployeesPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Error actualizando empleado");
+      setMembers((current) => current.map((member) => member.id === memberId ? {
+        ...member,
+        isActive: data.isActive ?? member.isActive,
+        role: roleOptions.find((role) => role.id === (data.roleId ?? member.role.id)) ?? member.role,
+      } : member));
       toast.success("Empleado actualizado");
-      await loadAll();
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error actualizando empleado"));
+    } finally {
+      setPendingMemberId(null);
     }
+  }
+
+  async function confirmRoleChange() {
+    if (!pendingRoleChange) return;
+    const { member, roleId } = pendingRoleChange;
+    await updateMember(member.id, { roleId });
+    setPendingRoleChange(null);
   }
 
   function openCreateRole() {
     setRoleKeyTouched(false);
     setRoleForm(emptyRole);
+    setPermissionSearch("");
     setRoleOpen(true);
   }
 
@@ -238,10 +349,13 @@ export default function EmployeesPage() {
       isActive: role.isActive,
       permissions: normalizePermissions(role.permissions),
     });
+    setPermissionSearch("");
     setRoleOpen(true);
   }
 
   async function submitRole() {
+    if (roleSubmitting) return;
+    setRoleSubmitting(true);
     try {
       const res = await fetch(roleForm.id ? `/api/roles/${roleForm.id}` : "/api/roles", {
         method: roleForm.id ? "PUT" : "POST",
@@ -258,23 +372,30 @@ export default function EmployeesPage() {
       if (!res.ok) throw new Error(data?.error ?? "Error guardando rol");
       toast.success(roleForm.id ? "Rol actualizado" : "Rol creado");
       setRoleOpen(false);
-      await loadAll();
+      await loadAll(false);
     } catch (err: unknown) {
       toast.error(errorMessage(err, "Error guardando rol"));
+    } finally {
+      setRoleSubmitting(false);
     }
   }
 
-  async function copyText(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success("Copiado");
-    } catch {
-      toast.error("No se pudo copiar");
-    }
-  }
 
   const activeMembers = members.filter((member) => member.isActive).length;
   const activeRoles = roles.filter((role) => role.isActive).length;
+  const filteredMembers = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    return members.filter((member) => {
+      const statusMatches = memberStatus === "ALL" || (memberStatus === "ACTIVE" ? member.isActive : !member.isActive);
+      const searchMatches = !query || [member.user.name, member.user.email].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+      return statusMatches && searchMatches;
+    });
+  }, [memberSearch, memberStatus, members]);
+  const visibleMembers = filteredMembers.slice(membersPage * membersPageSize, (membersPage + 1) * membersPageSize);
+
+  useEffect(() => {
+    setMembersPage(0);
+  }, [membersPageSize, memberSearch, memberStatus, members.length]);
 
   return (
     <div className="space-y-6">
@@ -296,7 +417,6 @@ export default function EmployeesPage() {
                 className="gap-2"
                 onClick={() => {
                   setInviteForm(emptyInvite);
-                  setInviteResult(null);
                   setInviteOpen(true);
                 }}
               >
@@ -328,13 +448,27 @@ export default function EmployeesPage() {
               Administra acceso, rol y estado operativo del equipo.
             </p>
           </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <SearchInput value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} onClear={() => setMemberSearch("")} placeholder="Buscar por nombre o correo..." className="sm:max-w-md" />
+            <Select value={memberStatus} onValueChange={setMemberStatus}>
+              <SelectTrigger className="sm:w-44"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="ACTIVE">Activos</SelectItem>
+                <SelectItem value="INACTIVE">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {!capabilities.canUpdateEmployees ? <Badge variant="outline">Solo lectura</Badge> : null}
         </div>
         {loading ? (
-          <div className="p-5 text-sm text-muted-foreground">Cargando...</div>
+          // <div className="p-5 text-sm text-muted-foreground">Cargando...</div>
+          <div className="flex min-h-60 items-center justify-center">
+            <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+          </div>
         ) : (
           <div className="overflow-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-190 text-sm">
               <thead className="bg-muted/45 text-xs uppercase tracking-[0.16em] text-muted-foreground">
                 <tr>
                   <th className="px-5 py-3 text-left font-extrabold">Empleado</th>
@@ -345,14 +479,14 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {members.map((member) => (
+                {visibleMembers.map((member) => (
                   <tr
                     key={member.id}
                     className="border-t border-border/50 transition-colors hover:bg-muted/35"
                   >
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="app-stat-icon h-10 w-10 rounded-[1rem]">
+                        <div className="app-stat-icon h-10 w-10 rounded-lg">
                           <Users className="h-4 w-4" />
                         </div>
                         <div>
@@ -365,47 +499,36 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-5 py-4 text-muted-foreground">{member.user.email}</td>
                     <td className="px-5 py-4">
-                      <Select
+                      <SearchableSelect
+                        options={roleOptions.map((role) => ({ value: String(role.id), label: role.name }))}
                         value={String(member.role.id)}
-                        onValueChange={(value) =>
-                          updateMember(member.id, { roleId: Number(value) })
-                        }
-                        disabled={!capabilities.canUpdateEmployees}
-                      >
-                        <SelectTrigger className="w-[220px] rounded-xl bg-input/60">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roleOptions.map((role) => (
-                            <SelectItem key={role.id} value={String(role.id)}>
-                              {role.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onValueChange={(value) => {
+                          const nextRole = roleOptions.find((role) => role.id === Number(value));
+                          if (nextRole && nextRole.id !== member.role.id) setPendingRoleChange({ member, roleId: nextRole.id, roleName: nextRole.name });
+                        }}
+                        disabled={!capabilities.canChangeRole || currentUser?.userId === member.userId || pendingMemberId === member.id}
+                        loading={pendingMemberId === member.id}
+                        title={currentUser?.userId === member.userId ? "No puedes cambiar tu propio rol" : undefined}
+                        buttonClassName="w-[220px] rounded-lg bg-input/60"
+                        searchPlaceholder="Buscar rol..."
+                      />
                     </td>
                     <td className="px-5 py-4">
-                      <Badge
-                        variant="outline"
-                        className={
-                          member.isActive
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : "border-border/70 bg-muted text-muted-foreground"
-                        }
-                      >
-                        {member.isActive ? "Activo" : "Inactivo"}
-                      </Badge>
+                      <StatusBadge active={member.isActive} />
                     </td>
                     <td className="px-5 py-4 text-right">
                       <Button
                         variant="secondary"
                         size="sm"
-                        disabled={!capabilities.canUpdateEmployees}
-                        onClick={() =>
-                          updateMember(member.id, { isActive: !member.isActive })
-                        }
+                        disabled={(member.isActive ? !capabilities.canDeactivate : !capabilities.canActivate)}
+                        onClick={() => {
+                          if (currentUser?.userId === member.userId) return;
+                          if (member.isActive) setDeactivateTarget(member);
+                          else void updateMember(member.id, { isActive: true });
+                        }}
+                        title={currentUser?.userId === member.userId ? "No puedes desactivar tu propio usuario" : undefined}
                       >
-                        {member.isActive ? "Desactivar" : "Activar"}
+                        {pendingMemberId === member.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : member.isActive ? "Desactivar" : "Activar"}
                       </Button>
                     </td>
                   </tr>
@@ -414,7 +537,84 @@ export default function EmployeesPage() {
             </table>
           </div>
         )}
+        {!loading && filteredMembers.length > 0 ? <DataTablePagination page={membersPage} pageSize={membersPageSize} total={filteredMembers.length} onPageChange={setMembersPage} pageSizeOptions={[10, 20, 50]} onPageSizeChange={(pageSize) => { setMembersPageSize(pageSize); setMembersPage(0); }} /> : null}
       </Card>
+
+      <Dialog open={!!pendingRoleChange} onOpenChange={(open) => { if (!open) setPendingRoleChange(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar rol del empleado</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas cambiar el rol de &quot;{pendingRoleChange?.member.user.name || pendingRoleChange?.member.user.email}&quot; de &quot;{pendingRoleChange?.member.role.name}&quot; a &quot;{pendingRoleChange?.roleName}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingRoleChange(null)}>Cancelar</Button>
+            <Button onClick={() => void confirmRoleChange()} disabled={pendingMemberId !== null}>
+              {pendingMemberId !== null ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Cambiar rol
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deactivateTarget} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Desactivar empleado</DialogTitle>
+            <DialogDescription>
+              Este empleado ya no podrá operar normalmente en la plataforma hasta que sea activado nuevamente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeactivateTarget(null)}>Cancelar</Button>
+            <Button onClick={async () => {
+                if (!deactivateTarget) return;
+                const target = deactivateTarget;
+                await updateMember(target.id, { isActive: false });
+                setDeactivateTarget(null);
+              }}>
+              {pendingMemberId === deactivateTarget?.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Desactivar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resendTarget} onOpenChange={(open) => { if (!open) setResendTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reenviar invitación</DialogTitle>
+            <DialogDescription>
+              Se generará una nueva contraseña temporal y la invitación anterior dejará de ser válida. Se enviará un nuevo correo a {resendTarget?.email ?? "la cuenta invitada"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResendTarget(null)}>Cancelar</Button>
+            <Button onClick={async () => {
+                // if (!deactivateTarget) return;
+                // const target = deactivateTarget;
+                // await updateMember(target.id, { isActive: false });
+                // setDeactivateTarget(null);
+                resendInvite();
+              }}>
+              {pendingMemberId === resendTarget?.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {resendingInvite ? "Reenviando..." : "Reenviar invitación"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* <ModalDelete
+        open={!!resendTarget}
+        onOpenChange={(open) => { if (!open && !resendingInvite) setResendTarget(null); }}
+        title="Reenviar invitación"
+        itemName={resendTarget?.invitedUser?.name || resendTarget?.email}
+        description={`Se generará una nueva contraseña temporal y la invitación anterior dejará de ser válida. Se enviará un nuevo correo a ${resendTarget?.email ?? "la cuenta invitada"}.`}
+        dangerText={resendingInvite ? "Reenviando..." : "Reenviar invitación"}
+        loading={resendingInvite}
+        onConfirm={resendInvite}
+      /> */}
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="app-panel-strong p-5 shadow-none">
@@ -430,7 +630,10 @@ export default function EmployeesPage() {
             </div>
           </div>
           {loading ? (
-            <div className="text-sm text-muted-foreground">Cargando...</div>
+            // <div className="text-sm text-muted-foreground">Cargando...</div>
+            <div className="flex min-h-60 items-center justify-center">
+              <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+            </div>
           ) : (
             <div className="space-y-3">
               {roles.map((role) => (
@@ -486,7 +689,10 @@ export default function EmployeesPage() {
             </p>
           </div>
           {loading ? (
-            <div className="text-sm text-muted-foreground">Cargando...</div>
+            // <div className="text-sm text-muted-foreground">Cargando...</div>
+            <div className="flex min-h-60 items-center justify-center">
+              <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+            </div>
           ) : invites.length === 0 ? (
             <div className="app-panel-muted p-4 text-sm text-muted-foreground">
               No hay invitaciones pendientes.
@@ -499,14 +705,19 @@ export default function EmployeesPage() {
                   className="app-panel-muted flex items-start justify-between gap-3 p-4"
                 >
                   <div>
-                    <p className="font-medium text-foreground">{invite.email}</p>
+                    <p className="font-medium text-foreground">{invite.invitedUser?.name || "Nombre no disponible"}</p>
+                    <p className="text-sm text-muted-foreground">{invite.email}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{invite.role.name}</p>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <p className="font-semibold uppercase tracking-[0.16em]">Expira</p>
+                  <div className="flex shrink-0 flex-col items-end gap-2 text-right text-xs text-muted-foreground">
+                    <p className="font-semibold uppercase tracking-[0.16em]">{new Date(invite.expiresAt) > new Date() ? "Expira" : "Expirada"}</p>
                     <p className="mt-1 text-sm normal-case tracking-normal text-foreground">
                       {new Date(invite.expiresAt).toLocaleString("es-BO")}
                     </p>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {capabilities.canResendInvite ? <Button variant="outline" size="sm" onClick={() => setResendTarget(invite)}>Reenviar invitación</Button> : null}
+                      {capabilities.canDeactivate ? <Button variant="outline" size="sm" onClick={() => setCancelTarget(invite)}>Anular invitación</Button> : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -545,25 +756,18 @@ export default function EmployeesPage() {
             </div>
             <div className="space-y-2">
               <Label>Rol</Label>
-              <Select
+              <SearchableSelect
+                options={roleOptions.map((role) => ({ value: String(role.id), label: role.name }))}
                 value={inviteForm.roleId}
                 onValueChange={(value) =>
                   setInviteForm((current) => ({ ...current, roleId: value }))
                 }
-              >
-                <SelectTrigger className="rounded-xl bg-input/60">
-                  <SelectValue placeholder="Selecciona un rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((role) => (
-                    <SelectItem key={role.id} value={String(role.id)}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Selecciona un rol"
+                searchPlaceholder="Buscar rol..."
+                buttonClassName="rounded-lg bg-input/60"
+              />
             </div>
-            {inviteResult ? (
+            {/* {inviteResult ? (
               <Card className="app-panel-muted space-y-3 p-4 text-sm shadow-none">
                 <div className="break-all">
                   <span className="text-muted-foreground">Link:</span> {inviteResult.inviteUrl}
@@ -593,7 +797,7 @@ export default function EmployeesPage() {
                   ) : null}
                 </div>
               </Card>
-            ) : null}
+            ) : null} */}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>
@@ -601,15 +805,40 @@ export default function EmployeesPage() {
             </Button>
             <Button
               onClick={submitInvite}
-              disabled={!inviteForm.name || !inviteForm.email || !inviteForm.roleId}
+              disabled={!inviteForm.name || !inviteForm.email || !inviteForm.roleId || inviteSubmitting}
             >
-              Crear empleado
+              {inviteSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {inviteSubmitting ? "Creando..." : "Crear empleado"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={roleOpen} onOpenChange={setRoleOpen}>
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Anular invitación</DialogTitle>
+            <DialogDescription>
+              El enlace actual dejará de funcionar inmediatamente y la invitación se conservará en el historial.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelTarget(null)}>Cancelar</Button>
+            <Button onClick={async () => {
+                if (!cancelTarget) return;
+                // const target = cancelTarget;
+                // await updateMember(target.id, { isActive: false });
+                await cancelInvite();
+                setCancelTarget(null);
+              }}>
+              {pendingMemberId === cancelTarget?.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Anular invitación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={roleOpen} onOpenChange={(open) => { if (!roleSubmitting) setRoleOpen(open); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{roleForm.id ? "Editar rol" : "Nuevo rol"}</DialogTitle>
@@ -622,6 +851,7 @@ export default function EmployeesPage() {
               <div className="space-y-2">
                 <Label>Nombre</Label>
                 <Input
+                  disabled={roleSubmitting}
                   value={roleForm.name}
                   onChange={(e) =>
                     setRoleForm((current) => ({
@@ -636,6 +866,7 @@ export default function EmployeesPage() {
                 <Label>Clave</Label>
                 <Input
                   disabled={!!roleForm.id}
+                  readOnly={roleSubmitting}
                   value={roleForm.key}
                   onChange={(e) => {
                     setRoleKeyTouched(true);
@@ -647,6 +878,7 @@ export default function EmployeesPage() {
             <div className="space-y-2">
               <Label>Descripcion</Label>
               <Textarea
+                disabled={roleSubmitting}
                 value={roleForm.description}
                 onChange={(e) =>
                   setRoleForm((current) => ({ ...current, description: e.target.value }))
@@ -662,16 +894,82 @@ export default function EmployeesPage() {
               </div>
               <Switch
                 checked={roleForm.isActive}
+                disabled={roleSubmitting}
                 onCheckedChange={(checked) =>
                   setRoleForm((current) => ({ ...current, isActive: checked }))
                 }
               />
             </div>
+            {(() => {
+              const query = permissionSearch.trim().toLowerCase();
+              const visibleGroups = permissionCatalog.filter((group) => {
+                if (!query) return true;
+                return [group.module, group.label, ...group.actions.map((action) => actionLabels[action] ?? action)].some((value) => value.toLowerCase().includes(query));
+              });
+              const selectedActions = visibleGroups.flatMap((group) => roleForm.permissions[group.module] ?? []);
+              const allSelected = visibleGroups.length > 0 && visibleGroups.every((group) =>
+                group.actions.every((action) => (roleForm.permissions[group.module] ?? []).includes(action))
+              );
+              const partiallySelected = selectedActions.length > 0 && !allSelected;
+              return (
+                <div className="space-y-3 rounded-lg border border-border bg-background px-4 py-3">
+                  <SearchInput placeholder="Buscar permiso, módulo o descripción..." value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} onClear={() => setPermissionSearch("")} />
+                  <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium text-foreground">Permisos</div>
+                    <p className="text-sm text-muted-foreground">
+                      {partiallySelected ? "Hay permisos seleccionados parcialmente." : "Configura el acceso del rol por grupo."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    role="checkbox"
+                    aria-checked={partiallySelected ? "mixed" : allSelected}
+                    disabled={roleSubmitting || editingOwner}
+                    onClick={() => setRoleForm((current) => ({
+                      ...current,
+                      permissions: visibleGroups.reduce((permissions, group) => setVisibleGroupPermissions(permissions, group.module, group.actions, !allSelected), current.permissions),
+                    }))}
+                  >
+                    {allSelected ? "Desmarcar visibles" : "Marcar permisos visibles"}
+                  </Button>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid gap-3 md:grid-cols-2">
-              {permissionCatalog.map((group) => (
+              {(() => {
+                const query = permissionSearch.trim().toLowerCase();
+                return permissionCatalog.filter((group) => !query || [group.module, group.label, ...group.actions.map((action) => actionLabels[action] ?? action)].some((value) => value.toLowerCase().includes(query))).map((group) => (
                 <div key={group.module} className="app-panel-muted p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <div className="font-medium text-foreground">{group.label}</div>
+                    <div>
+                      <div className="font-medium text-foreground">{group.label}</div>
+                      {(() => {
+                        const selected = roleForm.permissions[group.module] ?? [];
+                        const allSelected = group.actions.every((action) => selected.includes(action));
+                        const partiallySelected = selected.length > 0 && !allSelected;
+                        return (
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="h-auto px-0 text-xs"
+                            disabled={roleSubmitting || editingOwner}
+                            role="checkbox"
+                            aria-checked={partiallySelected ? "mixed" : allSelected}
+                            onClick={() => setRoleForm((current) => ({
+                              ...current,
+                              permissions: setVisibleGroupPermissions(current.permissions, group.module, group.actions.filter((action) => !query || [group.module, group.label, actionLabels[action] ?? action].some((value) => value.toLowerCase().includes(query))), !allSelected),
+                            }))}
+                          >
+                            {partiallySelected ? "Marcar todos" : allSelected ? "Desmarcar todos" : "Marcar todos"}
+                          </Button>
+                        );
+                      })()}
+                    </div>
                     <Badge variant="outline">
                       {(roleForm.permissions[group.module] ?? []).length}/{group.actions.length}
                     </Badge>
@@ -685,6 +983,7 @@ export default function EmployeesPage() {
                           type="button"
                           size="sm"
                           variant={active ? "default" : "outline"}
+                          disabled={roleSubmitting || editingOwner}
                           onClick={() =>
                             setRoleForm((current) => ({
                               ...current,
@@ -696,21 +995,23 @@ export default function EmployeesPage() {
                             }))
                           }
                         >
-                          {action}
+                          {actionLabels[action] ?? action}
                         </Button>
                       );
                     })}
                   </div>
                 </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRoleOpen(false)}>
+            <Button variant="outline" disabled={roleSubmitting} onClick={() => setRoleOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={submitRole} disabled={!roleForm.name || !roleForm.key}>
-              Guardar
+            <Button onClick={submitRole} disabled={!roleForm.name || !roleForm.key || roleSubmitting}>
+              {roleSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {roleSubmitting ? "Guardando..." : "Guardar"}
             </Button>
           </DialogFooter>
         </DialogContent>

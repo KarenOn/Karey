@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { differenceInMonths, differenceInYears, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Edit, Eye, PawPrint, Plus, Trash2, User as UserIcon } from "lucide-react";
+import { Edit, Eye, FileText, PawPrint, Plus, Trash2, User as UserIcon } from "lucide-react";
 import AppPageHero from "@/components/shared/AppPageHero";
 import DataTable from "@/components/shared/Datatable";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
@@ -23,6 +23,9 @@ import { apiListVaccinations, type VaccinationRow } from "@/lib/api/vaccinations
 import { ClientFormSchema } from "@/lib/validators/client";
 import { PetCreateSchema, PetUpdateSchema } from "@/lib/validators/pet";
 import { toast } from "sonner";
+import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
+import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
+import ClinicalReportDialog from "@/components/shared/ClinicalReportDialog";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -32,19 +35,19 @@ const speciesEmoji: Record<string, string> = {
   OTHER: "🐾",
 };
 
-const speciesOptions = [
-  { value: "DOG", label: "🐕 Perro", keywords: ["dog", "canino"] },
-  { value: "CAT", label: "🐱 Gato", keywords: ["cat", "felino"] },
-  { value: "BIRD", label: "🦜 Ave", keywords: ["bird", "pajaro"] },
-  { value: "RABBIT", label: "🐰 Conejo", keywords: ["rabbit"] },
-  { value: "OTHER", label: "🐾 Otro", keywords: ["other", "otro"] },
-];
+const speciesOptions = PET_SPECIES_OPTIONS;
 
 const sexOptions = [
   { value: "MALE", label: "Macho" },
   { value: "FEMALE", label: "Hembra" },
   { value: "UNKNOWN", label: "Desconocido" },
 ];
+
+function formatSpecies(species: string) {
+  const option = speciesOptions.find((item) => item.value === species);
+  if (!option) return species;
+  return option.label.replace(/^[^\s]+\s/, "");
+}
 
 type PatientFormState = {
   name: string;
@@ -106,6 +109,8 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [savingPatient, setSavingPatient] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
+  const [selectedPetIds, setSelectedPetIds] = useState<number[]>([]);
+  const [clinicalReportOpen, setClinicalReportOpen] = useState(false);
 
   const [patientModalOpen, setPatientModalOpen] = useState(false);
   const [quickClientOpen, setQuickClientOpen] = useState(false);
@@ -118,8 +123,10 @@ export default function PatientsPage() {
   const [deleteTarget, setDeleteTarget] = useState<PetRow | null>(null);
 
   const canCreatePets = !!access?.actions.pets.create;
+  const canCreateClients = !!access?.actions.clients.create;
   const canUpdatePets = !!access?.actions.pets.update;
   const canDeletePets = !!access?.actions.pets.delete;
+  const canGenerateClinicalReports = !!access?.actions.pets.viewClinicalHistory;
 
   async function refreshAll() {
     setLoading(true);
@@ -193,6 +200,7 @@ export default function PatientsPage() {
   }
 
   async function submitQuickClient() {
+    if (!canCreateClients) return;
     const parsed = ClientFormSchema.safeParse(quickClientForm);
     if (!parsed.success) {
       const nextErrors: Record<string, string> = {};
@@ -293,17 +301,18 @@ export default function PatientsPage() {
   }
 
   const petColumns = [
-    {
-      header: "Paciente",
-      cell: (row: PetRow) => (
-        <div className="flex items-center gap-3">
-          <div>
-            <p className="font-semibold text-foreground">{row.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {row.species} - {row.breed || "Sin raza"}
-            </p>
+      {
+        header: "Paciente",
+        cell: (row: PetRow) => (
+          <div className="flex items-center gap-3">
+            {canGenerateClinicalReports ? <input type="checkbox" checked={selectedPetIds.includes(row.id)} onChange={() => setSelectedPetIds((current) => current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id])} onClick={(event) => event.stopPropagation()} aria-label={`Seleccionar ${row.name} para informe clínico`} /> : null}
+            <div>
+              <p className="font-semibold text-foreground">{row.name}</p>
+              <p className="text-sm text-muted-foreground">
+                {formatSpecies(row.species)} - {row.breed || "Sin raza"}
+              </p>
+            </div>
           </div>
-        </div>
       ),
     },
     {
@@ -340,21 +349,38 @@ export default function PatientsPage() {
       ),
     },
     {
-      header: "Acciones",
-      cell: (row: PetRow) => (
-        <div className="flex items-center gap-2">
-          <Link href={`/pets/${row.id}`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground">
+        header: "Acciones",
+        cell: (row: PetRow) => (
+          <div className="flex items-center gap-2">
+            <Link href={`/pets/${row.id}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label={`Ver paciente ${row.name}`}
+            >
               <Eye className="h-4 w-4" />
             </Button>
           </Link>
           {canUpdatePets ? (
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground" onClick={() => openEdit(row)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => openEdit(row)}
+              aria-label={`Editar paciente ${row.name}`}
+            >
               <Edit className="h-4 w-4" />
             </Button>
           ) : null}
           {canDeletePets ? (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDelete(row)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => confirmDelete(row)}
+              aria-label={`Eliminar paciente ${row.name}`}
+            >
               <Trash2 className="h-4 w-4 text-red-500" />
             </Button>
           ) : null}
@@ -393,9 +419,7 @@ export default function PatientsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-teal-500" />
-      </div>
+      <DataTableSkeleton />
     );
   }
 
@@ -405,14 +429,9 @@ export default function PatientsPage() {
         badgeIcon={<PawPrint className="size-3.5" />}
         badgeLabel="Pacientes y vacunas"
         title="Pacientes"
-        description="Gestiona pacientes, propietarios y su historial"
+        description="Consulta pacientes, propietarios y seguimiento clínico desde una misma vista."
         actions={
-          canCreatePets ? (
-            <Button className="gap-2" onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              Nuevo paciente
-            </Button>
-          ) : null
+          <div className="flex flex-wrap gap-2">{canGenerateClinicalReports ? <Button variant="outline" className="gap-2" onClick={() => setClinicalReportOpen(true)} disabled={!selectedPetIds.length}><FileText className="h-4 w-4" />Generar informe{selectedPetIds.length ? ` (${selectedPetIds.length})` : ""}</Button> : null}{canCreatePets ? <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" />Nuevo paciente</Button> : null}</div>
         }
         stats={[
           { label: "Pacientes", value: pets.length, hint: "Total de pacientes" },
@@ -434,6 +453,8 @@ export default function PatientsPage() {
           <DataTable
             columns={petColumns}
             data={pets}
+            title="Pacientes"
+            description={`${pets.length} ${pets.length === 1 ? "paciente registrado" : "pacientes registrados"}`}
             searchKey="name"
             searchPlaceholder="Buscar paciente..."
             emptyMessage="No hay pacientes registrados"
@@ -442,11 +463,15 @@ export default function PatientsPage() {
           <DataTable
             columns={vaccinationColumns}
             data={vaccinations}
-            emptyMessage="No hay vacunaciones registradas"
+            title="Vacunas"
+            description={`${vaccinations.length} ${vaccinations.length === 1 ? "registro aplicado" : "registros aplicados"}`}
+            emptyMessage="No hay vacunas registradas"
             searchKey={undefined}
           />
         )}
       </div>
+
+      {canGenerateClinicalReports ? <ClinicalReportDialog open={clinicalReportOpen} onClose={() => setClinicalReportOpen(false)} pets={pets} clients={clients} initialPetIds={selectedPetIds} /> : null}
 
       <Modal
         open={patientModalOpen}
@@ -497,6 +522,15 @@ export default function PatientsPage() {
                 searchPlaceholder="Buscar por nombre, teléfono o correo..."
                 value={formData.clientId}
               />
+              {canCreateClients ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">¿El cliente todavía no existe?</span>
+                  <Button type="button" size="sm" variant="outline" onClick={() => openQuickClient()}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Crear cliente
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <FormField

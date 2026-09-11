@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { ProductUpdateSchema } from "@/lib/validators/product";
+import { parse } from "date-fns";
+import { syncInventoryNotifications } from "@/lib/in-app-notifications";
 
 function zodDetails(err: z.ZodError) {
   const flat = err.flatten();
@@ -29,6 +31,7 @@ async function findProductOrFail(id: number, clinicId: number) {
       trackStock: true,
       stockOnHand: true,
       minStock: true,
+      expirationDate: true,
       isActive: true,
       description: true,
       requiresPrescription: true,
@@ -69,9 +72,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const data = parsed.data;
 
-  const updated = await prisma.product.update({
-    where: { id: exists.id },
-    data: {
+  const updated = await prisma.$transaction(async (tx) => {
+    const product = await tx.product.update({
+      where: { id: exists.id },
+      data: {
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.sku !== undefined ? { sku: data.sku } : {}),
       ...(data.category !== undefined ? { category: data.category } : {}),
@@ -81,12 +85,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       ...(data.trackStock !== undefined ? { trackStock: data.trackStock } : {}),
       ...(data.stockOnHand !== undefined ? { stockOnHand: data.stockOnHand } : {}),
       ...(data.minStock !== undefined ? { minStock: data.minStock } : {}),
+      ...(data.expirationDate !== undefined ? { expirationDate: data.expirationDate ? parse(data.expirationDate, "yyyy-MM-dd", new Date()) : null } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(data.description !== undefined ? { description: data.description } : {}),
       ...(data.requiresPrescription !== undefined
         ? { requiresPrescription: data.requiresPrescription }
         : {}),
-    },
+      },
     select: {
       id: true,
       clinicId: true,
@@ -99,13 +104,38 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       trackStock: true,
       stockOnHand: true,
       minStock: true,
+      expirationDate: true,
       isActive: true,
       description: true,
       requiresPrescription: true,
       createdAt: true,
       updatedAt: true,
     },
+    });
+
+    if (data.category?.trim().toLocaleLowerCase() === "vacuna") {
+      const existingCatalog = await tx.vaccineCatalog.findFirst({
+        where: { clinicId, name: product.name },
+        select: { id: true, productId: true },
+      });
+      if (existingCatalog && !existingCatalog.productId) {
+        await tx.vaccineCatalog.update({ where: { id: existingCatalog.id }, data: { productId: product.id, isActive: product.isActive } });
+      } else if (!existingCatalog) {
+        await tx.vaccineCatalog.create({ data: { clinicId, productId: product.id, name: product.name, isActive: product.isActive } });
+      }
+    }
+
+    if (data.isActive !== undefined) {
+      await tx.vaccineCatalog.updateMany({
+        where: { clinicId, productId: product.id },
+        data: { isActive: product.isActive },
+      });
+    }
+
+    return product;
   });
+
+  await syncInventoryNotifications(clinicId);
 
   return NextResponse.json(updated);
 }
@@ -118,6 +148,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const exists = await prisma.product.findFirst({ where: { id, clinicId }, select: { id: true } });
   if (!exists) return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
 
-  await prisma.product.delete({ where: { id: exists.id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.vaccineCatalog.updateMany({
+      where: { clinicId, productId: exists.id },
+      data: { isActive: false },
+    });
+    await tx.product.delete({ where: { id: exists.id } });
+  });
   return NextResponse.json({ ok: true });
 }

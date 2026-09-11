@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getClinicIdOrFail } from "@/lib/auth";
+import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { createSignedUploadUrl } from "@/lib/storage";
 
@@ -21,12 +21,12 @@ const UploadSignSchema = z.discriminatedUnion("scope", [
     scope: z.literal("medical-attachment"),
     fileName: z.string().trim().min(1).max(255),
     fileType: z.string().trim().max(120).optional(),
-    visitId: z.coerce.number().int().positive(),
+    visitId: z.coerce.number().int().positive().optional(),
   }),
 ]);
 
 export async function POST(req: Request) {
-  const clinicId = await getClinicIdOrFail();
+  const { clinicId } = await requireClinicPermission("visits.attachDocuments");
   if (!clinicId) {
     return NextResponse.json(
       { error: "No se pudo identificar la clínica activa" },
@@ -46,12 +46,12 @@ export async function POST(req: Request) {
 
   try {
     if (parsed.data.scope === "medical-attachment") {
-      const visit = await prisma.clinicalVisit.findFirst({
+      const visit = parsed.data.visitId ? await prisma.clinicalVisit.findFirst({
         where: { id: parsed.data.visitId, clinicId },
         select: { id: true },
-      });
+      }) : null;
 
-      if (!visit) {
+      if (parsed.data.visitId && !visit) {
         return NextResponse.json(
           { error: "La visita no existe o no pertenece a la clínica activa" },
           { status: 404 }

@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import SearchableSelect from "@/components/shared/SearchableSelect";
 import { cn } from "@/lib/utils";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import FormSkeleton from "@/components/shared/FormSkeleton";
 
 import {
   Save,
@@ -24,6 +26,7 @@ import {
   Banknote,
   Building2,
   Receipt,
+  LoaderCircle,
 } from "lucide-react";
 
 import {
@@ -118,18 +121,75 @@ export default function NewInvoicePOSPage() {
   const [payNow, setPayNow] = useState<boolean>(false);
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "TRANSFER">("CASH");
   const [payRef, setPayRef] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [draftPetId, setDraftPetId] = useState<number | null>(null);
+  const [draftAppointmentId, setDraftAppointmentId] = useState<number | null>(null);
+  const [draftTodayTurnId, setDraftTodayTurnId] = useState<number | null>(null);
 
   const prefilledClientId = searchParams.get("clientId");
   const prefilledPetId = searchParams.get("petId");
   const prefilledAppointmentId = searchParams.get("appointmentId");
   const prefilledTodayTurnId = searchParams.get("todayTurnId");
+  const prefilledDraftId = searchParams.get("draftId");
+  const prefilledEncounterId = searchParams.get("encounterId") ?? prefilledAppointmentId;
   const prefilledPetName = searchParams.get("petName");
   const prefilledOwnerName = searchParams.get("ownerName");
   const prefilledServiceName = searchParams.get("serviceName");
   const returnTo = searchParams.get("returnTo");
   const servicePrefillAppliedRef = useRef(false);
+  const encounterPrefillAppliedRef = useRef(false);
+  const draftPrefillAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (draftPrefillAppliedRef.current || !prefilledDraftId || loading) return;
+    draftPrefillAppliedRef.current = true;
+    void (async () => {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(prefilledDraftId)}`, { cache: "no-store" });
+      const draft = await response.json().catch(() => null);
+      if (!response.ok || draft?.status !== "DRAFT") throw new Error(draft?.error ?? "No se pudo cargar el borrador.");
+      setClientId(String(draft.client.id));
+      setDraftPetId(draft.pet?.id ?? null);
+      setDraftAppointmentId(draft.appointmentId ?? null);
+      setDraftTodayTurnId(draft.todayTurnId ?? null);
+      setItems(draft.items.map((item: { id: number; type: ItemType; serviceId: number | null; productId: number | null; description: string; quantity: string; unitPrice: string; taxRate: string }) => ({
+        key: `DRAFT-${item.id}`,
+        type: item.type,
+        serviceId: item.serviceId ?? undefined,
+        productId: item.productId ?? undefined,
+        name: item.description,
+        description: item.description,
+        quantity: num(item.quantity),
+        unitPrice: num(item.unitPrice),
+        taxRate: num(item.taxRate),
+        lineTotal: num(item.quantity) * num(item.unitPrice),
+      })));
+    })().catch((error) => setErr(error instanceof Error ? error.message : "No se pudo cargar el borrador."));
+  }, [loading, prefilledDraftId]);
 
   // Load base catalog
+  useEffect(() => {
+    if (encounterPrefillAppliedRef.current || (!prefilledAppointmentId && !prefilledTodayTurnId) || loading || services.length === 0 || products.length === 0) return;
+    encounterPrefillAppliedRef.current = true;
+    void (async () => {
+      const link = prefilledTodayTurnId ? `todayTurnId=${encodeURIComponent(prefilledTodayTurnId)}` : `appointmentId=${encodeURIComponent(prefilledAppointmentId ?? prefilledEncounterId ?? "")}`;
+      const response = await fetch(`/api/encounter-items?${link}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const draftItems = (await response.json()) as Array<{ id: number; type: ItemType; serviceId: number | null; productId: number | null; description: string; quantity: string; unitPrice: string }>;
+      setItems(draftItems.map((item) => ({
+        key: `ENCOUNTER-${item.id}`,
+        type: item.type,
+        serviceId: item.serviceId ?? undefined,
+        productId: item.productId ?? undefined,
+        name: item.description,
+        description: item.description,
+        quantity: num(item.quantity),
+        unitPrice: num(item.unitPrice),
+        taxRate: 0,
+        lineTotal: num(item.quantity) * num(item.unitPrice),
+      })));
+    })().catch(() => undefined);
+  }, [loading, prefilledAppointmentId, prefilledEncounterId, prefilledTodayTurnId, products.length, services.length]);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -217,6 +277,11 @@ export default function NewInvoicePOSPage() {
 
     setPetId(String(nextPetId));
   }, [pets, prefilledPetId]);
+
+  useEffect(() => {
+    if (!draftPetId || pets.length === 0 || !pets.some((pet) => pet.id === draftPetId)) return;
+    setPetId(String(draftPetId));
+  }, [draftPetId, pets]);
 
   const subtotal = useMemo(() => items.reduce((acc, it) => acc + it.lineTotal, 0), [items]);
   const discountApplied = useMemo(() => Math.min(discount, subtotal), [discount, subtotal]);
@@ -384,6 +449,7 @@ export default function NewInvoicePOSPage() {
   const removeItem = (key: string) => setItems((prev) => prev.filter((it) => it.key !== key));
 
   const submit = async (mode: "SAVE" | "SAVE_AND_PAY") => {
+    if (submitting) return;
     setErr(null);
 
     if (!clientId) {
@@ -395,11 +461,12 @@ export default function NewInvoicePOSPage() {
       return;
     }
 
+    setSubmitting(true);
     const payload = {
       clientId: Number(clientId),
       petId: petId ? Number(petId) : null,
-      appointmentId: prefilledAppointmentId ? Number(prefilledAppointmentId) : null,
-      todayTurnId: prefilledTodayTurnId ? Number(prefilledTodayTurnId) : null,
+      appointmentId: prefilledAppointmentId ? Number(prefilledAppointmentId) : draftAppointmentId,
+      todayTurnId: prefilledTodayTurnId ? Number(prefilledTodayTurnId) : draftTodayTurnId,
 
       discount: discountApplied,
       invoiceTaxRate: applyTax ? taxRate : 0,
@@ -430,6 +497,7 @@ export default function NewInvoicePOSPage() {
       mode === "SAVE_AND_PAY" && printSettings.autoOpenReceiptAfterPayment;
     const preparedWindow = shouldAutoPrint ? preparePrintWindow() : null;
 
+    try {
     const res = await fetch("/api/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -440,6 +508,7 @@ export default function NewInvoicePOSPage() {
       closePreparedPrintWindow(preparedWindow);
       const data = await res.json().catch(() => null);
       setErr(data?.error ?? "Error creando factura");
+      setSubmitting(false);
       return;
     }
 
@@ -465,14 +534,16 @@ export default function NewInvoicePOSPage() {
         ? `/invoices/${created.id}?payment=registered`
         : `/invoices/${created.id}`
     );
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "No se pudo crear la factura");
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="h-6 w-60 bg-muted rounded animate-pulse" />
-        <div className="h-40 bg-muted rounded-2xl animate-pulse" />
-        <div className="h-64 bg-muted rounded-2xl animate-pulse" />
+        <FormSkeleton />
       </div>
     );
   }
@@ -489,7 +560,7 @@ export default function NewInvoicePOSPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">POS • Nueva Factura</h1>
+              <h1 className="app-heading text-3xl text-foreground sm:text-4xl">POS • Nueva Factura</h1>
               <p className="text-muted-foreground">Rápido, para caja: busca por código y cobra en segundos</p>
             </div>
           </div>
@@ -575,25 +646,16 @@ export default function NewInvoicePOSPage() {
                     </Tooltip>
                   </div>
 
-                  <Select
+                  <SearchableSelect
+                    options={clients.map((client) => ({ value: String(client.id), label: client.fullName, keywords: [client.phone ?? "", client.email ?? ""] }))}
+                    placeholder="Seleccionar cliente"
+                    searchPlaceholder="Buscar cliente..."
                     value={clientId}
                     onValueChange={(v) => {
                       setClientId(v);
                       setPetId("");
                     }}
-                  >
-                    <SelectTrigger className="mt-1.5 w-full">
-                      <SelectValue placeholder="Seleccionar cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.fullName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
+                  />
                   {selectedClient ? (
                     <p className="text-xs text-muted-foreground mt-2">
                       {selectedClient.phone ? `📞 ${selectedClient.phone}` : ""}{" "}
@@ -613,18 +675,14 @@ export default function NewInvoicePOSPage() {
                     </Tooltip>
                   </div>
 
-                  <Select value={petId} onValueChange={setPetId} disabled={!clientId}>
-                    <SelectTrigger className="mt-1.5 w-full">
-                      <SelectValue placeholder={clientId ? "Seleccionar paciente" : "Selecciona un cliente primero"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pets.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>
-                          {p.name} {p.breed ? `- ${p.breed}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={pets.map((pet) => ({ value: String(pet.id), label: `${pet.name}${pet.breed ? ` - ${pet.breed}` : ""}`, keywords: [pet.name, pet.breed ?? ""] }))}
+                    placeholder={clientId ? "Seleccionar paciente" : "Selecciona un cliente primero"}
+                    searchPlaceholder="Buscar paciente..."
+                    value={petId}
+                    disabled={!clientId}
+                    onValueChange={setPetId}
+                  />
                 </div>
               </div>
             </div>
@@ -714,28 +772,17 @@ export default function NewInvoicePOSPage() {
                   <Label>
                     {selectedType === "SERVICE" ? "Servicios" : "Productos"}
                   </Label>
-                  <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                    <SelectTrigger className="mt-1.5 w-full">
-                      <SelectValue
-                        placeholder={`Seleccionar ${selectedType === "SERVICE" ? "servicio" : "producto"}`}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectedType === "SERVICE"
-                        ? services.map((s) => (
-                            <SelectItem key={s.id} value={String(s.id)}>
-                              {s.name} • {money(num(s.price))}
-                            </SelectItem>
-                          ))
-                        : products.map((p) => (
-                            <SelectItem key={p.id} value={String(p.id)}>
-                              {(p.sku ? `${p.sku} • ` : "")}
-                              {p.name} • {money(num(p.price))}
-                              {p.trackStock ? ` (${p.stockOnHand} disp.)` : ""}
-                            </SelectItem>
-                          ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={(selectedType === "SERVICE" ? services : products).map((item) => ({
+                      value: String(item.id),
+                      label: `${"sku" in item && item.sku ? `${item.sku} • ` : ""}${item.name} • ${money(num(item.price))}${"trackStock" in item && item.trackStock ? ` (${item.stockOnHand} disp.)` : ""}`,
+                      keywords: [item.name, "sku" in item && item.sku ? item.sku : ""].filter(Boolean),
+                    }))}
+                    placeholder={`Seleccionar ${selectedType === "SERVICE" ? "servicio" : "producto"}`}
+                    searchPlaceholder={`Buscar ${selectedType === "SERVICE" ? "servicio" : "producto"}...`}
+                    value={selectedItemId}
+                    onValueChange={setSelectedItemId}
+                  />
                 </div>
 
                 <div className="w-full md:w-38">
@@ -895,39 +942,18 @@ export default function NewInvoicePOSPage() {
                 </div>
 
                 <div className="rounded-xl border bg-muted/30 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">
-                      ITBIS
-                      <span className="text-xs text-muted-foreground ml-2">(opcional)</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setApplyTax((v) => !v)}
-                      className={cn(
-                        "text-xs px-2 py-1 rounded-full border",
-                        applyTax ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20"
-                      )}
-                    >
-                      {applyTax ? "Aplicado" : "No"}
-                    </button>
-                  </div>
-
-                  {applyTax ? (
-                    <div className="mt-2">
-                      <Label className="text-xs text-muted-foreground">Tasa %</Label>
-                      <Input
-                        className="mt-1.5"
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={taxRate}
-                        onChange={(e) => setTaxRate(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                      />
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Impuesto: <span className="text-foreground/90 font-medium">{money(tax)}</span>
-                      </p>
+                  <div className="flex items-start gap-3">
+                    <Checkbox id="apply-tax" checked={applyTax} onChange={(event) => setApplyTax(event.target.checked)} className="mt-0.5" />
+                    <div className="min-w-0">
+                      <Label htmlFor="apply-tax" className="cursor-pointer text-sm font-medium text-foreground">Aplicar ITBIS</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">Calcula el impuesto utilizando la tasa indicada.</p>
                     </div>
-                  ) : null}
+                  </div>
+                  <div className="mt-3">
+                    <Label htmlFor="tax-rate" className="text-xs text-muted-foreground">Tasa %</Label>
+                    <Input id="tax-rate" className="mt-1.5" type="number" min={0} max={100} disabled={!applyTax} value={taxRate} onChange={(e) => setTaxRate(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} />
+                    <p className="mt-2 text-xs text-muted-foreground">Impuesto: <span className="font-medium text-foreground/90">{money(tax)}</span></p>
+                  </div>
                 </div>
 
                 <div className="pt-3 border-t flex justify-between text-lg font-bold">
@@ -941,16 +967,13 @@ export default function NewInvoicePOSPage() {
             <div className="bg-card rounded-2xl p-6 border border-border space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-foreground">Cobro</h3>
-                <button
-                  type="button"
-                  onClick={() => setPayNow((v) => !v)}
-                  className={cn(
-                    "text-xs px-2 py-1 rounded-full border",
-                    payNow ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-300 dark:border-zinc-500/20"
-                  )}
-                >
-                  {payNow ? "Cobrar ahora" : "Solo guardar"}
-                </button>
+                <div className="flex items-start gap-3">
+                  <Checkbox id="pay-now" checked={payNow} onChange={(event) => setPayNow(event.target.checked)} className="mt-0.5" />
+                  <div className="min-w-0">
+                    <Label htmlFor="pay-now" className="cursor-pointer text-sm font-medium text-foreground">Registrar pago ahora</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Si no seleccionas esta opción, la factura se guardará como pendiente y podrás registrar el pago más adelante.</p>
+                  </div>
+                </div>
               </div>
 
               {payNow ? (
@@ -1004,11 +1027,11 @@ export default function NewInvoicePOSPage() {
 
               <Button
                 className="flex-1 gap-2"
-                disabled={!clientId || items.length === 0}
+                disabled={!clientId || items.length === 0 || submitting}
                 onClick={() => submit(payNow ? "SAVE_AND_PAY" : "SAVE")}
               >
-                <Save className="w-4 h-4" />
-                {payNow ? "Crear y cobrar" : "Crear factura"}
+                {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {submitting ? "Generando..." : payNow ? "Crear y cobrar" : "Crear factura"}
               </Button>
             </div>
           </div>

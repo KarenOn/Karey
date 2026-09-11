@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClinic, listAdminClinics } from "@/lib/admin-clinics";
 import { getAppUrl, sendClinicWelcomeEmail } from "@/lib/email";
 import { requireSuperAdmin } from "@/lib/server-auth";
+import { notifyClinicCreated } from "@/lib/in-app-notifications";
 
 const createClinicSchema = z.object({
   clinicName: z.string().trim().min(2).max(160),
@@ -38,7 +39,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    await requireSuperAdmin();
+    const { session } = await requireSuperAdmin();
 
     const body = await req.json().catch(() => null);
     const parsed = createClinicSchema.safeParse(body);
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     }
 
     const result = await createAdminClinic(parsed.data);
+    await notifyClinicCreated({ clinicId: result.clinic.id, clinicName: result.clinic.name, createdByUserId: session.user.id }).catch(() => undefined);
 
     let emailWarning: string | null = null;
 

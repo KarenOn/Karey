@@ -69,6 +69,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isSessionUserGlobalAdmin } from "@/lib/server-auth";
+import { readCurrentUserProfile } from "@/lib/current-user-profile";
+import { getFirstAllowedRoute } from "@/lib/allowed-routes";
 
 export const runtime = "nodejs";
 
@@ -79,7 +81,11 @@ export default async function Home() {
       session.user.id,
       session.user.role
     );
-    redirect(isGlobalAdmin ? "/admin/clinics" : "/today");
+    if (isGlobalAdmin) {
+      redirect("/admin/clinics");
+    }
+    const profile = await readCurrentUserProfile();
+    redirect(getFirstAllowedRoute(profile.access.modules) ?? "/no-access");
   }
   redirect("/login");
 
