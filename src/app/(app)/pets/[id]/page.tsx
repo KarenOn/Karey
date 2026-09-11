@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ArrowLeft,
   User as UserIcon,
   Phone,
   Calendar,
@@ -21,6 +20,8 @@ import {
   ChevronDown,
   LoaderCircle,
   FileText,
+  Eye,
+  Info,
 } from "lucide-react";
 import { format, parseISO, differenceInYears, differenceInMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -39,6 +40,11 @@ import DataTablePagination from "@/components/shared/DataTablePagination";
 import { useCurrentUserProfile } from "@/components/layout/current-user-context";
 import { safeDate } from "@/lib/utility";
 import ClinicalReportDialog from "@/components/shared/ClinicalReportDialog";
+import { apiUpdatePet } from "@/lib/api/pets";
+import { PetUpdateSchema } from "@/lib/validators/pet";
+import { toast } from "sonner";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
+import BackButton from "@/components/shared/BackButton";
 
 type PetDTO = any; // si quieres, luego lo tipamos con Prisma types
 type VisitDTO = any;
@@ -130,6 +136,10 @@ function PatientDetailContent() {
   // modales
   const [visitModalOpen, setVisitModalOpen] = useState(false);
   const [editingVisit, setEditingVisit] = useState<VisitDTO | null>(null);
+  const [selectedVisit, setSelectedVisit] = useState<VisitDTO | null>(null);
+  const [patientEditOpen, setPatientEditOpen] = useState(false);
+  const [savingPatient, setSavingPatient] = useState(false);
+  const [patientEditForm, setPatientEditForm] = useState<Record<string, string>>({});
   const [vaccineModalOpen, setVaccineModalOpen] = useState(false);
   const [editingVaccination, setEditingVaccination] = useState<VaccDTO | null>(null);
   const [visitDateFilter, setVisitDateFilter] = useState("");
@@ -209,6 +219,25 @@ function PatientDetailContent() {
   }
 
   const client = pet?.client;
+  const canEditPatient = !!currentUser?.access.actions.pets.update;
+  const canViewVisit = !!currentUser?.access.actions.visits.read;
+  const canEditVisit = !!currentUser?.access.actions.visits.edit;
+
+  function openPatientEdit() {
+    if (!pet || !canEditPatient) return;
+    setPatientEditForm({ name: pet.name, species: pet.species, sex: pet.sex, breed: pet.breed ?? "", birthDate: dateOnly(pet.birthDate), weightKg: pet.weightKg == null ? "" : String(pet.weightKg), color: pet.color ?? "", microchip: pet.microchip ?? "", notes: pet.notes ?? "" });
+    setPatientEditOpen(true);
+  }
+
+  async function savePatientEdit() {
+    if (!pet) return;
+    const parsed = PetUpdateSchema.safeParse({ ...patientEditForm, weightKg: patientEditForm.weightKg === "" ? undefined : Number(patientEditForm.weightKg), birthDate: patientEditForm.birthDate || undefined });
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message ?? "Revisa los datos del paciente."); return; }
+    setSavingPatient(true);
+    try { const updated = await apiUpdatePet(pet.id, parsed.data); setPet(updated); setPatientEditOpen(false); toast.success("El paciente fue actualizado."); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "No se pudo actualizar el paciente."); }
+    finally { setSavingPatient(false); }
+  }
 
   const calculateAge = (birthDate?: string) => {
     if (!birthDate) return "-";
@@ -343,11 +372,7 @@ function PatientDetailContent() {
   }
 
   if (loading || !pet) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <PatientDetailSkeleton />;
   }
 
   async function handleCreateVisit() {
@@ -477,18 +502,21 @@ function PatientDetailContent() {
     <div className="space-y-6">
       {/* Header */}
       <div className="app-page-hero flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={() => history.back()}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <BackButton />
 
-        <div className="flex-1">
-          <p className="app-kicker mb-3 inline-flex border-0">
-            Paciente y seguimiento
-          </p>
-          <h2 className="app-heading text-3xl sm:text-4xl">{pet.name}</h2>
-          <p className="mt-2 text-muted-foreground">
-            {pet.species} • {pet.breed || "Sin raza especificada"}
-          </p>
+        <div className="flex-1 justify-between flex">
+          <div>
+            <p className="app-kicker mb-3 inline-flex border-0">
+              Paciente y seguimiento
+            </p>
+            <h2 className="app-heading text-3xl sm:text-4xl">{pet.name}</h2>
+            <p className="mt-2 text-muted-foreground">
+              {pet.species} • {pet.breed || "Sin raza especificada"}
+            </p>
+          </div>
+          <div className="self-end">
+            {canEditPatient ? <Button size="sm" variant="outline" onClick={openPatientEdit}><Pencil className="mr-1 h-4 w-4" />Editar paciente</Button> : null}
+          </div>
         </div>
       </div>
 
@@ -547,7 +575,7 @@ function PatientDetailContent() {
             {!!pet.notes && (
               <div className="border-t border-border/70 pt-4">
                 <p className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
-                  <AlertTriangle className="w-3 h-3" /> Notas
+                  <Info className="w-3 h-3" /> Notas
                 </p>
                 <p className="text-sm text-foreground">{pet.notes}</p>
               </div>
@@ -651,23 +679,31 @@ function PatientDetailContent() {
                               </div>
 
                               <div className="flex gap-2">
-                                <Button
+                                {canViewVisit ? <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedVisit(v)}
+                                >
+                                  <Eye className="mr-1 h-4 w-4" />
+                                  Ver detalle
+                                </Button> : null}
+                                {canEditVisit ? <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setEditingVisit(v)}
                                 >
                                   <Pencil className="w-4 h-4 mr-1" />
                                   Editar
-                                </Button>
+                                </Button> : null}
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() =>
+                                  onClick={() => {
                                     setAttachModal({
                                       open: true,
                                       visitId: v.id,
-                                    })
-                                  }
+                                    });
+                                  }}
                                 >
                                   <Paperclip className="w-4 h-4 mr-1" />
                                   Adjuntar
@@ -874,6 +910,17 @@ function PatientDetailContent() {
       </div>
 
       {currentUser?.access.actions.pets.viewClinicalHistory ? <ClinicalReportDialog open={clinicalReportOpen} onClose={() => setClinicalReportOpen(false)} pets={[pet]} clients={client ? [client] : []} initialPetIds={[pet.id]} /> : null}
+
+      <Modal open={patientEditOpen} onClose={setPatientEditOpen} title="Editar paciente" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setPatientEditOpen(false)}>Cancelar</Button><Button disabled={savingPatient} onClick={() => void savePatientEdit()}>{savingPatient ? "Guardando..." : "Guardar cambios"}</Button></div>}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {([['name','Nombre','text'],['species','Especie','select'],['sex','Sexo','select'],['breed','Raza','text'],['birthDate','Fecha de nacimiento','date'],['weightKg','Peso (kg)','number'],['color','Color / pelaje','text'],['microchip','Microchip','text']] as const).map(([name,label,type]) => <FormField key={name} label={label} name={name} type={type} options={name === 'species' ? [{ value: 'DOG', label: 'Perro' }, { value: 'CAT', label: 'Gato' }, { value: 'BIRD', label: 'Ave' }, { value: 'RABBIT', label: 'Conejo' }, { value: 'OTHER', label: 'Otro' }] : name === 'sex' ? [{ value: 'MALE', label: 'Macho' }, { value: 'FEMALE', label: 'Hembra' }, { value: 'UNKNOWN', label: 'Desconocido' }] : undefined} value={patientEditForm[name] ?? ''} onChange={(event) => setPatientEditForm((current) => ({ ...current, [name]: String(event.target.value) }))} />)}
+          <FormField label="Notas" name="notes" type="textarea" value={patientEditForm.notes ?? ''} onChange={(event) => setPatientEditForm((current) => ({ ...current, notes: String(event.target.value) }))} className="sm:col-span-2" />
+        </div>
+      </Modal>
+
+      <Modal open={!!selectedVisit} onClose={(open) => { if (!open) setSelectedVisit(null); }} title="Detalle de visita clínica" size="lg" footer={<div className="flex gap-3">{canEditVisit && selectedVisit ? <Button onClick={() => { setEditingVisit(selectedVisit); setSelectedVisit(null); }}><Pencil className="mr-1 h-4 w-4" />Editar</Button> : null}<Button variant="outline" onClick={() => setSelectedVisit(null)}>Cerrar</Button></div>}>
+        {selectedVisit ? <div className="space-y-4 text-sm"><div className="grid grid-cols-2 gap-4"><Detail label="Fecha" value={formatClinicalDate(selectedVisit.visitAt)} /><Detail label="Veterinario" value={selectedVisit.vet?.name ?? "No registrado"} /><Detail label="Peso" value={selectedVisit.weightKg == null ? "-" : `${selectedVisit.weightKg} kg`} /><Detail label="Temperatura" value={selectedVisit.temperatureC == null ? "-" : `${selectedVisit.temperatureC} °C`} /></div>{[['Motivo', selectedVisit.appointment?.reason], ['Diagnóstico', selectedVisit.diagnosis], ['Tratamiento / notas', [selectedVisit.treatment, selectedVisit.notes].filter(Boolean).join("\n")]].map(([label,value]) => value ? <div key={label}><p className="font-semibold text-foreground">{label}</p><p className="whitespace-pre-wrap text-muted-foreground">{value}</p></div> : null)}{selectedVisit.attachments?.length ? <div><p className="mb-2 font-semibold text-foreground">Adjuntos</p><div className="space-y-2">{selectedVisit.attachments.map((attachment: AttachmentDTO) => <DocumentAttachment key={attachment.id} fileName={attachment.fileName} fileType={attachment.fileType} url={attachment.url} downloadUrl={attachment.downloadUrl} />)}</div></div> : <p className="text-muted-foreground">Sin adjuntos.</p>}</div> : null}
+      </Modal>
 
       {/* Modal: Nueva Visita */}
       <Modal
@@ -1130,10 +1177,26 @@ function PatientDetailContent() {
   );
 }
 
+function Detail({ label, value }: { label: string; value: string }) { return <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-medium text-foreground">{value}</p></div>; }
+
 export default function PatientDetail() {
   return (
-    <Suspense fallback={<div className="app-panel-strong p-6 text-sm text-muted-foreground">Cargando paciente...</div>}>
+    <Suspense fallback={<PatientDetailSkeleton />}>
       <PatientDetailContent />
     </Suspense>
+  );
+}
+
+function PatientDetailSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Cargando paciente">
+      <div className="app-panel-strong p-5 sm:p-6">
+        <div className="flex items-center gap-4"><LoadingSkeleton className="h-10 w-10" /><div className="space-y-2"><LoadingSkeleton className="h-8 w-64" /><LoadingSkeleton className="h-4 w-40" /></div></div>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+        <LoadingSkeleton className="h-72 w-full" />
+        <div className="space-y-6"><LoadingSkeleton className="h-56 w-full" /><LoadingSkeleton className="h-72 w-full" /></div>
+      </div>
+    </div>
   );
 }

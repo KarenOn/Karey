@@ -440,6 +440,7 @@ export default function TodayWorkspace({
   const canCreateTurns = !!access?.actions.todayTurns.create;
   const canUpdateTurns = !!access?.actions.todayTurns.update;
   const canUpdateAppointments = !!access?.actions.appointments.attend;
+  const canManageEncounter = !!access?.actions.encounters.manage;
   const canSendToBilling = !!access?.actions.invoices.create || !!access?.actions.invoices.sendToBilling;
 
   const showAlert = useCallback(
@@ -514,13 +515,13 @@ export default function TodayWorkspace({
         ownerLabel: appointment.clientName,
         petId: appointment.petId,
         petName: appointment.petName,
-        primaryActionLabel: canUpdateAppointments ? "Atender" : null,
+        primaryActionLabel: canUpdateAppointments && canManageEncounter ? "Atender" : null,
         serviceLabel: formatAppointmentType(appointment.type),
         source: "appointment",
         state: "waiting",
         timeLabel: formatClinicTime(appointment.startAt, initialTimeZone),
       })),
-    [canUpdateAppointments, initialTimeZone, upcomingAppointments]
+    [canManageEncounter, canUpdateAppointments, initialTimeZone, upcomingAppointments]
   );
 
   const waitingTurnCards = useMemo(
@@ -532,13 +533,13 @@ export default function TodayWorkspace({
         ownerLabel: turn.ownerName,
         petId: turn.petId,
         petName: turn.petName,
-        primaryActionLabel: canUpdateTurns ? "Atender" : null,
+        primaryActionLabel: canUpdateTurns && canManageEncounter ? "Atender" : null,
         serviceLabel: turn.serviceName || formatTurnService(turn.service),
         source: "turn",
         state: "waiting",
         timeLabel: formatClinicTime(turn.arrivalAt, initialTimeZone),
       })),
-    [canUpdateTurns, initialTimeZone, waitingTurns]
+    [canManageEncounter, canUpdateTurns, initialTimeZone, waitingTurns]
   );
 
   const inProgressCards = useMemo(
@@ -561,7 +562,7 @@ export default function TodayWorkspace({
               : canSendToBilling
                 ? "Facturar"
                 : null,
-            secondaryActionLabel: canUpdateAppointments ? "Gestionar atención" : null,
+            secondaryActionLabel: canManageEncounter ? "Gestionar atención" : null,
             serviceLabel: formatAppointmentType(appointment.type),
             source: "appointment",
             state: "in_progress",
@@ -577,7 +578,7 @@ export default function TodayWorkspace({
             petId: turn.petId,
             petName: turn.petName,
             primaryActionLabel: canSendToBilling ? "Facturar" : null,
-            secondaryActionLabel: canUpdateTurns ? "Gestionar atención" : null,
+            secondaryActionLabel: canManageEncounter ? "Gestionar atención" : null,
             serviceLabel: turn.serviceName || formatTurnService(turn.service),
             source: "turn",
             state: "in_progress",
@@ -586,7 +587,7 @@ export default function TodayWorkspace({
       ].sort((left, right) =>
         (left.timeLabel ?? "").localeCompare(right.timeLabel ?? "")
       ),
-    [appointments, canSendToBilling, canUpdateAppointments, canUpdateTurns, initialTimeZone, turns]
+    [appointments, canManageEncounter, canSendToBilling, initialTimeZone, turns]
   );
 
   const doneCards = useMemo(
@@ -904,7 +905,7 @@ export default function TodayWorkspace({
                 });
               }}
               onSecondaryAction={
-                item.source === "appointment" && canUpdateAppointments
+                item.source === "appointment" && canManageEncounter
                   ? () => {
                       const appointment = appointments.find(
                         (entry) => entry.id === item.id,
@@ -916,7 +917,7 @@ export default function TodayWorkspace({
                         clientId: appointment.clientId,
                       });
                     }
-                  : item.source === "turn" && canUpdateTurns
+                  : item.source === "turn" && canManageEncounter
                     ? () => {
                         const turn = turns.find(
                           (entry) => entry.id === item.id,

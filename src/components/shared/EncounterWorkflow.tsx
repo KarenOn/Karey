@@ -44,6 +44,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function EncounterWorkflow({ petId, clientId, appointmentId, todayTurnId, walkInOwnerName = "", walkInOwnerPhone = "", walkInPetName = "", walkInSpecies = "DOG", assignedVetId, vets = [], vaccines = [], products = [], services = [], onSaved, onLinked, onFinish, onBilling, onViewInvoice }: EncounterWorkflowProps) {
   const access = useCurrentUserAccess();
   const canCreateInvoice = !!access?.actions.invoices.create;
+  const canManageEncounter = !!access?.actions.encounters.manage;
   const canAddConsumptions = !!access?.actions.encounters.addConsumptions;
   const link = appointmentId ? `appointmentId=${appointmentId}` : todayTurnId ? `todayTurnId=${todayTurnId}` : "";
   const [linkedPetId, setLinkedPetId] = useState<number | null>(petId);
@@ -208,6 +209,10 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
   }
 
   const registered = Boolean(linkedPetId && linkedClientId);
+
+  if (access && !canManageEncounter) {
+    return <p className="text-sm text-muted-foreground">No tienes permiso para gestionar esta atención.</p>;
+  }
 
   return (
     <div className="space-y-4">

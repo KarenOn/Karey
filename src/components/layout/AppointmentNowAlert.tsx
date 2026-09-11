@@ -6,7 +6,7 @@ import { CalendarClock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { APPOINTMENT_GRACE_PERIOD_MS, formatAppointmentCountdown, getAppointmentGraceDeadline } from "@/lib/appointment-time";
-import { isAppointmentEligibleForNowAlert } from "@/lib/appointment-helpers";
+import { invalidateAppointmentSurfaces, isAppointmentEligibleForNowAlert } from "@/lib/appointment-helpers";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -56,18 +56,17 @@ export default function AppointmentNowAlert() {
   const [frozenRemaining, setFrozenRemaining] = useState<Map<number, number>>(new Map());
   const [reconciledIds, setReconciledIds] = useState<Set<number>>(new Set());
   const [assignmentVets, setAssignmentVets] = useState<SearchableSelectOption[]>([]);
+  const [currentUserIsVet, setCurrentUserIsVet] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const reconcilingId = useRef<number | null>(null);
   const knownStatuses = useRef<Map<number, string>>(new Map());
   const noShowToasts = useRef<Set<number>>(new Set());
-  function invalidateAppointmentSurfaces() {
-    window.dispatchEvent(new Event("karey:appointments-invalidated"));
-  }
-
   async function load() {
     const response = await fetch("/api/appointments?surface=now-alert", { cache: "no-store" });
     if (!response.ok) return;
-    const data = (await response.json()) as AppointmentNow[];
+    const payload = await response.json() as AppointmentNow[] | { appointments: AppointmentNow[]; currentUserIsVet: boolean };
+    const data = Array.isArray(payload) ? payload : payload.appointments;
+    if (!Array.isArray(payload)) setCurrentUserIsVet(payload.currentUserIsVet);
     const newlyReconciled = data.filter((appointment) =>
       appointment.status === "NO_SHOW" && knownStatuses.current.get(appointment.id) !== undefined &&
       knownStatuses.current.get(appointment.id) !== "NO_SHOW" && !noShowToasts.current.has(appointment.id)
@@ -90,6 +89,18 @@ export default function AppointmentNowAlert() {
   }, []);
 
   useEffect(() => {
+    const handleInvalidation = (event: Event) => {
+      const detail = (event as CustomEvent<{ appointmentId?: number; status?: string }>).detail;
+      if (detail?.appointmentId && detail.status && !isAppointmentEligibleForNowAlert(detail.status)) {
+        setAppointments((items) => items.filter((item) => item.id !== detail.appointmentId));
+      }
+      void load().catch(() => undefined);
+    };
+    window.addEventListener("karey:appointments-invalidated", handleInvalidation);
+    return () => window.removeEventListener("karey:appointments-invalidated", handleInvalidation);
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(timer);
   }, []);
@@ -106,8 +117,9 @@ export default function AppointmentNowAlert() {
   const current = queue.find((appointment) => appointment.id === selectedId) ?? queue[0];
   const currentProcessing = current ? processingIds.has(current.id) : false;
   const canReceiveUnassignedAlerts = Boolean(access?.actions.appointments.receiveUnassignedNowAlerts);
+  const canManageEncounter = Boolean(access?.actions.encounters.manage);
   const canAssignAppointments = Boolean(access?.actions.appointments.assign);
-  const canAssignSelf = Boolean(current && !current.vet && profile?.roleKey === "vet" && canReceiveUnassignedAlerts);
+  const canAssignSelf = Boolean(current && !current.vet && profile?.userId && currentUserIsVet && canReceiveUnassignedAlerts && canAssignAppointments);
 
   useEffect(() => {
     if (!current || current.vet || !canAssignAppointments) {
@@ -175,7 +187,7 @@ export default function AppointmentNowAlert() {
   if (!current) return null;
 
   async function attend() {
-    if (busy || !current) return;
+    if (busy || !current || !canManageEncounter) return;
     freeze(current.id);
     setBusy(true);
     try {
@@ -287,7 +299,7 @@ export default function AppointmentNowAlert() {
             type="button"
             className="relative h-24 w-24 shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer hover:bg-accent disabled:cursor-wait"
             onClick={() => void attend()}
-            disabled={busy || currentProcessing}
+            disabled={busy || currentProcessing || !canManageEncounter}
             aria-label="Atender cita"
           >
             <svg
@@ -347,7 +359,7 @@ export default function AppointmentNowAlert() {
                 {assigning ? "Asignando..." : "Asignarme esta cita"}
               </Button>
             ) : null}
-            {!current.vet && canAssignAppointments ? (
+            {!current.vet && !currentUserIsVet && canAssignAppointments ? (
               <div className="mt-3 space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground">Asignar veterinario</p>
                 <SearchableSelect
@@ -532,6 +544,7 @@ export default function AppointmentNowAlert() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ status: "COMPLETED" }),
                 });
+                invalidateAppointmentSurfaces({ appointmentId: encounter.id, status: "COMPLETED" });
                 setEncounter(null);
               }}
               onBilling={() =>

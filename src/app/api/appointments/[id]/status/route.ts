@@ -28,11 +28,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       : "appointments.edit";
   const { clinicId } = await requireClinicPermission(permission);
 
-  const exists = await prisma.appointment.findFirst({ where: { id, clinicId }, select: { id: true, status: true, startAt: true } });
+  const exists = await prisma.appointment.findFirst({ where: { id, clinicId }, select: { id: true, status: true, startAt: true, notes: true } });
   if (!exists) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
   const allowed = exists.status === AppointmentStatus.IN_PROGRESS
-    ? parsed.data.status === AppointmentStatus.COMPLETED
+    ? parsed.data.status === AppointmentStatus.COMPLETED || (parsed.data.status === AppointmentStatus.CANCELLED && Boolean(parsed.data.reason?.trim()))
     : ([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] as AppointmentStatus[]).includes(exists.status)
       ? ([AppointmentStatus.IN_PROGRESS, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW, AppointmentStatus.CONFIRMED, AppointmentStatus.SCHEDULED] as AppointmentStatus[]).includes(parsed.data.status)
       : false;
@@ -53,7 +53,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ? { status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] } }
         : { status: exists.status }),
     },
-    data: { status: parsed.data.status },
+    data: {
+      status: parsed.data.status,
+      ...(exists.status === AppointmentStatus.IN_PROGRESS && parsed.data.status === AppointmentStatus.CANCELLED
+        ? { notes: `${exists.notes ? `${exists.notes}\n` : ""}Atención cancelada: ${parsed.data.reason!.trim()}` }
+        : {}),
+    },
   });
   if (!result.count) {
     const current = await prisma.appointment.findFirst({ where: { id, clinicId }, select: { status: true } });

@@ -1,8 +1,9 @@
 import crypto from "crypto";
-import { hashPassword } from "better-auth/crypto";
 import { Prisma, SubscriptionStatus, Weekday } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { resolveStoredFileUrl } from "@/lib/storage";
+import { setTemporaryPasswordForUser } from "@/lib/temporary-password";
+import { formatKareyPhone } from "@/lib/phone";
 import type {
   AdminClinicContact,
   AdminClinicRecord,
@@ -44,16 +45,16 @@ const DEFAULT_CLINIC_ROLES = [
       clinic: ["read", "update"],
       employees: ["read", "invite", "create", "update", "delete", "changeRole", "activate", "deactivate", "resendInvite"],
       roles: ["read", "manage", "create", "update", "delete"],
-      appointments: ["read", "create", "update", "edit", "attend", "cancel", "reschedule", "delete"],
+      appointments: ["read", "create", "edit", "attend", "cancel", "reschedule", "delete"],
       encounters: ["manage", "addConsumptions"],
-      visits: ["read", "create", "update", "edit", "attachDocuments"],
-      vaccines: ["read", "create", "update", "edit"],
-      invoices: ["read", "viewDrafts", "create", "update", "edit", "issue", "annul", "sendToBilling", "download", "print", "delete"],
+      visits: ["read", "create", "edit", "attachDocuments"],
+      vaccines: ["read", "create", "edit"],
+      invoices: ["read", "viewDrafts", "create", "edit", "issue", "annul", "sendToBilling", "download", "print", "delete"],
       payments: ["read", "register"],
-      inventory: ["read", "create", "update", "delete"],
-      clients: ["read", "create", "update", "delete"],
-      pets: ["read", "create", "update", "delete"],
-      services: ["read", "create", "update", "delete"],
+      inventory: ["read", "create", "edit", "delete"],
+      clients: ["read", "create", "edit", "delete"],
+      pets: ["read", "create", "edit", "delete"],
+      services: ["read", "create", "edit", "delete"],
       today: ["read", "create", "update", "delete"],
       todayTurn: ["read", "create", "update", "delete"],
       reports: ["read"],
@@ -67,16 +68,16 @@ const DEFAULT_CLINIC_ROLES = [
       clinic: ["read"],
       employees: ["read", "invite", "create", "update", "changeRole", "activate", "deactivate", "resendInvite"],
       roles: ["read", "manage"],
-      appointments: ["read", "create", "update", "edit", "attend", "cancel", "reschedule"],
+      appointments: ["read", "create", "edit", "attend", "cancel", "reschedule"],
       encounters: ["manage", "addConsumptions"],
-      visits: ["read", "create", "update", "edit", "attachDocuments"],
-      vaccines: ["read", "create", "update", "edit"],
-      invoices: ["read", "viewDrafts", "create", "update", "edit", "issue", "annul", "sendToBilling", "download", "print"],
+      visits: ["read", "create", "edit", "attachDocuments"],
+      vaccines: ["read", "create", "edit"],
+      invoices: ["read", "viewDrafts", "create", "edit", "issue", "annul", "sendToBilling", "download", "print"],
       payments: ["read", "register"],
-      inventory: ["read", "create", "update"],
-      clients: ["read", "create", "update"],
-      pets: ["read", "create", "update"],
-      services: ["read", "create", "update"],
+      inventory: ["read", "create", "edit"],
+      clients: ["read", "create", "edit"],
+      pets: ["read", "create", "edit"],
+      services: ["read", "create", "edit"],
       today: ["read", "create", "update"],
       todayTurn: ["read", "create", "update"],
       reports: ["read"],
@@ -87,8 +88,8 @@ const DEFAULT_CLINIC_ROLES = [
     name: "Veterinarian",
     description: "Gestiona citas y visitas clinicas",
     permissions: {
-      appointments: ["read", "update", "attend"],
-      visits: ["read", "create", "update", "edit", "attachDocuments"],
+      appointments: ["read", "edit", "attend"],
+      visits: ["read", "create", "edit", "attachDocuments"],
       clients: ["read"],
       pets: ["read"],
       inventory: ["read"],
@@ -105,9 +106,9 @@ const DEFAULT_CLINIC_ROLES = [
     name: "Reception",
     description: "Agenda y atencion al cliente",
     permissions: {
-      appointments: ["read", "create", "update", "edit", "cancel", "reschedule"],
-      clients: ["read", "create", "update"],
-      pets: ["read", "create", "update"],
+      appointments: ["read", "create", "edit", "cancel", "reschedule"],
+      clients: ["read", "create", "edit"],
+      pets: ["read", "create", "edit"],
       today: ["read", "create", "update"],
       todayTurn: ["read", "create", "update"],
       invoices: ["read", "viewDrafts", "create", "sendToBilling", "download", "print"],
@@ -159,13 +160,14 @@ function toNullishString(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+export function normalizeAdminPhone(value?: string | null) {
+  const formatted = formatKareyPhone(value ?? "");
+  return formatted || null;
+}
+
 function toDateOnly(value?: string | null) {
   if (!value) return null;
   return new Date(`${value}T00:00:00.000Z`);
-}
-
-function createRandomPassword() {
-  return `${crypto.randomBytes(6).toString("hex")}Aa1!`;
 }
 
 export function buildInitialClinicName(ownerName: string) {
@@ -222,14 +224,22 @@ const clinicAdminSelect = {
   isActive: true,
   subscriptionStatus: true,
   subscriptionEndDate: true,
+  subscriptionPaymentStatus: true,
+  subscriptionPaidAt: true,
+  subscriptionReminderDays: true,
+  subscriptionGraceDays: true,
+  timezone: true,
   createdAt: true,
+  _count: { select: { members: { where: { isActive: true } } } },
   members: {
     where: { isActive: true },
     select: {
       user: {
         select: {
+          id: true,
           name: true,
           email: true,
+          mustChangePassword: true,
           profile: { select: { phone: true } },
         },
       },
@@ -250,9 +260,15 @@ async function serializeClinic(clinic: {
   isActive: boolean;
   subscriptionStatus: SubscriptionStatus;
   subscriptionEndDate: Date | null;
+  subscriptionPaymentStatus: "PAID" | "PENDING";
+  subscriptionPaidAt: Date | null;
+  subscriptionReminderDays: number;
+  subscriptionGraceDays: number;
+  timezone: string;
   createdAt: Date;
+  _count: { members: number };
   members: Array<{
-    user: { name: string | null; email: string; profile: { phone: string | null } | null };
+    user: { id: string; name: string | null; email: string; mustChangePassword: boolean; profile: { phone: string | null } | null };
     role: { key: string; name: string };
   }>;
 }): Promise<AdminClinicRecord> {
@@ -269,8 +285,25 @@ async function serializeClinic(clinic: {
     isActive: clinic.isActive,
     subscriptionStatus: toClientSubscriptionStatus(clinic.subscriptionStatus),
     subscriptionEndDate: clinic.subscriptionEndDate?.toISOString().slice(0, 10) ?? null,
+    subscriptionPaymentStatus: clinic.subscriptionPaymentStatus,
+    subscriptionPaidAt: clinic.subscriptionPaidAt?.toISOString() ?? null,
+    subscriptionReminderDays: clinic.subscriptionReminderDays,
+    subscriptionGraceDays: clinic.subscriptionGraceDays,
+    timezone: clinic.timezone,
     createdAt: clinic.createdAt.toISOString(),
+    employeeCount: clinic._count.members,
     responsible: pickResponsible(clinic.members),
+    owner: (() => {
+      const owner = clinic.members.find((member) => member.role.key === "owner");
+      return owner
+        ? {
+            id: owner.user.id,
+            name: owner.user.name,
+            email: owner.user.email,
+            onboardingPending: owner.user.mustChangePassword,
+          }
+        : null;
+    })(),
   };
 }
 
@@ -320,7 +353,7 @@ export async function createClinicWithOwner(
     subscriptionStatus = SubscriptionStatus.ACTIVE;
   }
 
-  const ownerPassword = toNullishString(input.ownerPassword) ?? createRandomPassword();
+  const ownerPassword = toNullishString(input.ownerPassword);
 
   const created = await prisma.$transaction(async (tx) => {
     const existingOwner = await tx.user.findUnique({
@@ -336,7 +369,7 @@ export async function createClinicWithOwner(
       data: {
         name: clinicName,
         email: toNullishString(input.clinicEmail),
-        phone: toNullishString(input.clinicPhone),
+        phone: normalizeAdminPhone(input.clinicPhone),
         owner: ownerName,
         plan: toNullishString(input.plan),
         isActive,
@@ -377,9 +410,7 @@ export async function createClinicWithOwner(
     }
 
     const userId = crypto.randomBytes(16).toString("hex");
-    const passwordHash = await hashPassword(ownerPassword);
-
-    await tx.user.create({
+    const user = await tx.user.create({
       data: {
         id: userId,
         name: ownerName,
@@ -389,21 +420,13 @@ export async function createClinicWithOwner(
       },
     });
 
-    await tx.account.create({
-      data: {
-        id: crypto.randomBytes(16).toString("hex"),
-        accountId: userId,
-        providerId: "credential",
-        userId,
-        password: passwordHash,
-      },
-    });
+    const temporaryPassword = await setTemporaryPasswordForUser(tx, user.id, ownerPassword ?? undefined);
 
     if (toNullishString(input.ownerPhone)) {
       await tx.userProfile.create({
         data: {
           userId,
-          phone: toNullishString(input.ownerPhone),
+          phone: normalizeAdminPhone(input.ownerPhone),
         },
       });
     }
@@ -422,7 +445,7 @@ export async function createClinicWithOwner(
       },
     });
 
-    return { clinicId: clinic.id };
+    return { clinicId: clinic.id, temporaryPassword };
   });
 
   const clinic = await getAdminClinicById(created.clinicId);
@@ -434,7 +457,7 @@ export async function createClinicWithOwner(
     clinic,
     ownerAccess: {
       email: ownerEmail,
-      password: ownerPassword,
+      password: created.temporaryPassword,
     },
   };
 }

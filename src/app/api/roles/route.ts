@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
-import { hasPermission, isElevatedClinicRole } from "@/lib/permissions";
+import { hasPermission, isElevatedClinicRole, normalizePermissions } from "@/lib/permissions";
 
 const RoleCreateSchema = z.object({
-  key: z.string().min(2),
+  key: z.string().trim().min(2).max(60).refine((key) => !["owner", "superadmin"].includes(key.toLowerCase()), "Clave reservada"),
   name: z.string().min(2),
   description: z.string().optional(),
   permissions: z.record(z.string(), z.array(z.string())),
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
         key: body.key,
         name: body.name,
         description: body.description,
-        permissions: JSON.parse(JSON.stringify(body.permissions)),
+        permissions: JSON.parse(JSON.stringify(normalizePermissions(body.permissions))),
         isSystem: false,
       },
     });

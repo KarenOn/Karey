@@ -4,14 +4,24 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, CircleHelp, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { useCurrentUserProfile } from "@/components/layout/current-user-context";
 
 type TourStep = { id: string; title: string; description: string; icon: typeof Search };
 
 export default function ProductTour({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const access = useCurrentUserAccess();
+  const profile = useCurrentUserProfile();
+  const access = profile?.access ?? null;
   const [index, setIndex] = useState(0);
   const steps = useMemo<TourStep[]>(() => {
+    if (profile?.isClinicOwner) {
+      return [
+        { id: "module-clinicProfile", title: "Mi Clínica", description: "Configura identidad, horarios y datos operativos.", icon: CheckCircle2 },
+        ...(access?.actions.services.read || access?.actions.inventory.read ? [{ id: "module-services", title: "Servicios e inventario", description: "Prepara lo que tu clínica ofrece y utiliza diariamente.", icon: CheckCircle2 }] : []),
+        ...(access?.actions.employees.read ? [{ id: "module-employees", title: "Equipo", description: "Invita empleados y controla sus permisos.", icon: CheckCircle2 }] : []),
+        ...(access?.actions.appointments.read || access?.actions.today.read ? [{ id: "module-operation", title: "Agenda y Hoy", description: "Organiza citas y la operación diaria.", icon: CheckCircle2 }] : []),
+        { id: "quick-help", title: "Ayuda", description: "Puedes volver a consultar estas guías cuando lo necesites.", icon: CircleHelp },
+      ].slice(0, 5);
+    }
     const result: TourStep[] = [
       { id: "global-search", title: "Busca en toda la clínica", description: "Encuentra clientes, pacientes y secciones rápidamente desde la búsqueda global.", icon: Search },
     ];
@@ -28,7 +38,7 @@ export default function ProductTour({ open, onOpenChange }: { open: boolean; onO
           : null;
     if (mainModule) result.push(mainModule);
     return result.slice(0, 5);
-  }, [access]);
+  }, [access, profile?.isClinicOwner]);
   const step = steps[index] ?? steps[0];
   const Icon = step.icon;
 

@@ -33,6 +33,8 @@ export async function GET(
     orderBy: { visitAt: "desc" },
     include: {
       attachments: true,
+      vet: { select: { id: true, name: true, email: true } },
+      appointment: { select: { reason: true } },
     },
     skip: page * pageSize,
     take: pageSize,

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import { Badge } from "../ui/badge";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { Syringe, AlertTriangle, ChevronRight } from "lucide-react";
@@ -39,7 +40,7 @@ export default function VaccineReminders({ vaccinations, patients }: Props) {
       <div className="flex items-center justify-between border-b border-border/70 p-6">
         <div className="flex items-center gap-2">
           <Syringe className="w-5 h-5 text-(--brand-gold)" />
-          <h3 className="font-display text-2xl font-semibold text-foreground">Próximas Vacunas</h3>
+          <h3 className="font-display text-2xl font-semibold text-foreground">Próximas Vacunas</h3><Badge variant="secondary">{upcomingVaccinations.length}</Badge>
         </div>
 
         <Link href="/pets?tab=vaccinations" className="text-sm text-primary hover:text-primary/80 font-semibold flex items-center gap-1">

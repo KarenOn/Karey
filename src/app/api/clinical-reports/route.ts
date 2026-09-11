@@ -19,7 +19,12 @@ export async function GET(req: Request) {
     return NextResponse.json(await getClinicalReportData({ clinicId, ...input }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo generar el informe.";
-    const status = ["UNAUTHORIZED", "FORBIDDEN", "ACCESS_REVOKED"].includes(message) ? (message === "UNAUTHORIZED" ? 401 : 403) : 422;
-    return NextResponse.json({ error: status === 403 ? "No tienes permiso para generar informes clínicos." : message }, { status });
+    if (message === "UNAUTHORIZED") return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
+    if (["FORBIDDEN", "ACCESS_REVOKED", "CLINIC_INACTIVE"].includes(message)) {
+      return NextResponse.json({ error: "No tienes permiso para generar informes clínicos." }, { status: 403 });
+    }
+    if (message === "Rango de fechas inválido") return NextResponse.json({ error: message }, { status: 422 });
+    console.error("[clinical-reports] request failed", message);
+    return NextResponse.json({ error: "No se pudo generar el informe." }, { status: 500 });
   }
 }

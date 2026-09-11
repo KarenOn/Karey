@@ -32,10 +32,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.roleId !== undefined) {
       const role = await prisma.role.findFirst({
         where: { id: body.roleId, clinicId, isActive: true },
-        select: { id: true },
+        select: { id: true, key: true },
       });
 
-      if (!role) {
+      if (!role || role.key === "owner" || role.key === "superadmin") {
         return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
       }
     }

@@ -463,9 +463,9 @@ export default function PatientsPage() {
           <DataTable
             columns={vaccinationColumns}
             data={vaccinations}
-            title="Vacunaciones"
+            title="Vacunas"
             description={`${vaccinations.length} ${vaccinations.length === 1 ? "registro aplicado" : "registros aplicados"}`}
-            emptyMessage="No hay vacunaciones registradas"
+            emptyMessage="No hay vacunas registradas"
             searchKey={undefined}
           />
         )}

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { InvoiceStatus, NotificationChannel, NotificationStatus } from "@/generated/prisma/client";
-import { hasAnyPermission, isElevatedClinicRole } from "@/lib/permissions";
+import { hasAnyPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 type NotificationInput = {
@@ -48,7 +48,7 @@ async function getMembersWithPermission(clinicId: number, permissions: string[])
     where: { clinicId, isActive: true, role: { is: { isActive: true } } },
     select: { userId: true, role: { select: { key: true, permissions: true } } },
   });
-  return members.filter((member) => isElevatedClinicRole(member.role.key) || hasAnyPermission(member.role.permissions, permissions));
+  return members.filter((member) => hasAnyPermission(member.role.permissions, permissions));
 }
 
 async function getAdminIds(clinicId: number) {
@@ -59,7 +59,24 @@ async function getAdminIds(clinicId: number) {
   return members.map((member) => member.userId);
 }
 
-export async function notifyAppointmentAssigned(params: { appointmentId: number; assignedVetId: string; assignedByUserId: string }) {
+async function getGlobalAdminIds(excludeUserId?: string) {
+  const users = await prisma.user.findMany({ where: { role: "superadmin", ...(excludeUserId ? { id: { not: excludeUserId } } : {}) }, select: { id: true } });
+  return users.map((user) => user.id);
+}
+
+export async function notifyClinicCreated(params: { clinicId: number; clinicName: string; createdByUserId?: string | null }) {
+  await createInAppNotification({
+    clinicId: params.clinicId,
+    eventKey: `clinic-created:${params.clinicId}`,
+    type: "CLINIC_CREATED",
+    title: "Nueva clínica registrada",
+    message: `Se creó la clínica ${params.clinicName}.`,
+    targetUrl: "/admin/clinics",
+    userIds: await getGlobalAdminIds(params.createdByUserId ?? undefined),
+  });
+}
+
+export async function notifyAppointmentAssigned(params: { appointmentId: number; assignedVetId: string; assignedByUserId: string; selfAssigned?: boolean }) {
   const appointment = await prisma.appointment.findUnique({
     where: { id: params.appointmentId },
     select: { id: true, clinicId: true, startAt: true, pet: { select: { name: true } }, vet: { select: { name: true } } },
@@ -68,7 +85,7 @@ export async function notifyAppointmentAssigned(params: { appointmentId: number;
 
   const time = new Intl.DateTimeFormat("es-DO", { hour: "numeric", minute: "2-digit" }).format(appointment.startAt);
   const date = new Intl.DateTimeFormat("es-DO", { day: "numeric", month: "long" }).format(appointment.startAt);
-  if (params.assignedByUserId === params.assignedVetId) {
+  if (params.selfAssigned) {
     await createInAppNotification({
       clinicId: appointment.clinicId,
       eventKey: `appointment-self-assigned:${appointment.id}:${params.assignedVetId}`,

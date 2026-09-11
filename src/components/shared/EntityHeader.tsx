@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { ArrowLeft, PawPrint } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { PawPrint } from "lucide-react";
+import BackButton from "@/components/shared/BackButton";
 import { cn } from "@/lib/utils";
 
 type EntityHeaderProps = {
@@ -19,7 +18,7 @@ export default function EntityHeader({ title, subtitle, meta, badges, actions, b
     <section className={cn("app-panel-strong p-5 sm:p-6", className)}>
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-4">
-          {backHref ? <Button asChild size="icon" type="button" variant="outline"><Link href={backHref} aria-label="Volver"><ArrowLeft className="h-4 w-4" /></Link></Button> : null}
+          {backHref ? <BackButton href={backHref} /> : null}
           <div className="app-stat-icon h-14 w-14 shrink-0">{avatar ?? <PawPrint className="h-6 w-6" />}</div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">

@@ -126,27 +126,27 @@ export default function LoginPage() {
               <Sparkles className="size-3.5" />
               Karey Vet Suite
             </div>
-            <h1 className="app-heading max-w-xl text-5xl leading-[1.05]">La operacion veterinaria puede sentirse premium sin perder calidez.</h1>
+            <h1 className="app-heading max-w-xl text-5xl leading-[1.05]">Todo lo que pasa en tu clínica, en un solo lugar.</h1>
             <p className="mt-5 max-w-xl text-base leading-8 text-muted-foreground">
-              Disenado para clinicas que necesitan mas informacion visible, mejor jerarquia y una experiencia agradable tanto en escritorio como en jornadas largas.
+              Organiza tus pacientes, citas, inventario y facturación para que tu equipo pueda enfocarse en lo más importante: brindar una buena atención.
             </p>
           </div>
 
           <div className="relative grid gap-4 sm:grid-cols-3">
             <div className="app-panel-muted p-4">
               <PawPrint className="mb-3 size-5 text-primary" />
-              <p className="text-sm font-extrabold text-foreground">Pacientes al centro</p>
-              <p className="mt-1 text-sm text-muted-foreground">Todo mantiene contexto clinico y humano.</p>
+              <p className="text-sm font-extrabold text-foreground">Tu clínica al día</p>
+              <p className="mt-1 text-sm text-muted-foreground">Consulta rápidamente lo que necesita tu atención.</p>
             </div>
             <div className="app-panel-muted p-4">
               <MoonStar className="mb-3 size-5 text-(--brand-gold)" />
-              <p className="text-sm font-extrabold text-foreground">Dark mode real</p>
-              <p className="mt-1 text-sm text-muted-foreground">Contraste comodo para jornadas extensas.</p>
+              <p className="text-sm font-extrabold text-foreground">Todo conectado</p>
+              <p className="mt-1 text-sm text-muted-foreground">Pacientes, citas, servicios y pagos siempre a mano.</p>
             </div>
             <div className="app-panel-muted p-4">
               <Sparkles className="mb-3 size-5 text-primary" />
-              <p className="text-sm font-extrabold text-foreground">Diseno uniforme</p>
-              <p className="mt-1 text-sm text-muted-foreground">Mismos patrones en tablas, cards y formularios.</p>
+              <p className="text-sm font-extrabold text-foreground">Hecho para tu equipo</p>
+              <p className="mt-1 text-sm text-muted-foreground">Una forma sencilla de trabajar juntos cada día.</p>
             </div>
           </div>
         </section>
@@ -158,9 +158,9 @@ export default function LoginPage() {
               <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
             </div>
 
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">Bienvenida de regreso</p>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">Bienvenido de nuevo</p>
             <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">Inicia sesión en Karey Vet</h1>
-            <p className="mt-3 text-muted-foreground">Accede a clientes, pacientes, agenda y facturacion con una interfaz mas clara y expresiva.</p>
+            <p className="mt-3 text-muted-foreground">Tu clínica te espera. Continúa donde lo dejaste.</p>
           </div>
 
           <button type="button" onClick={onGoogle} className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-border/80 bg-background/70 transition hover:bg-background">
@@ -198,7 +198,7 @@ export default function LoginPage() {
           <div className="mt-6 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <Link className="text-left transition hover:text-foreground" href="/forgot-password">Olvidé mi contraseña</Link>
             <span>
-              ¿Necesitas una cuenta? <Link className="font-semibold text-foreground" href="/register">Crear cuenta</Link>
+              ¿Necesitas acceso? <Link className="font-semibold text-foreground" href="/register">Solicítalo</Link>
             </span>
           </div>
         </div>

@@ -6,6 +6,8 @@ import {
 } from "@/lib/admin-clinics";
 import { getFriendlyAuthMessage, getFriendlyWelcomeEmailWarning } from "@/lib/auth-feedback";
 import { getAppUrl, sendAppWelcomeEmail } from "@/lib/email";
+import { notifyClinicCreated } from "@/lib/in-app-notifications";
+import { isPublicSignupEnabled } from "@/lib/runtime-config";
 
 const registerSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
@@ -17,6 +19,13 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    if (!isPublicSignupEnabled()) {
+      return NextResponse.json(
+        { error: "El registro público está deshabilitado. Solicita acceso a Karey Vet." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => null);
     const parsed = registerSchema.safeParse(body);
 
@@ -37,6 +46,7 @@ export async function POST(req: Request) {
       ownerPassword: parsed.data.password,
       emailVerified: false,
     });
+    await notifyClinicCreated({ clinicId: result.clinic.id, clinicName: result.clinic.name }).catch(() => undefined);
 
     let emailWarning: string | null = null;
 

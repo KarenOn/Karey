@@ -2,6 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { FileText, ChevronRight, CheckCircle, Clock, XCircle } from "lucide-react";
@@ -30,7 +31,7 @@ export default function RecentInvoices({ invoices, clients }: Props) {
       <div className="flex items-center justify-between border-b border-border/70 p-6">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
-          <h3 className="font-display text-2xl font-semibold text-foreground">Facturas Recientes</h3>
+          <h3 className="font-display text-2xl font-semibold text-foreground">Facturas Recientes</h3><Badge variant="secondary">{invoices.length}</Badge>
         </div>
 
         <Link href="/invoices" className="text-sm text-primary hover:text-primary/80 font-semibold flex items-center gap-1">

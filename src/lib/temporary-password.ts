@@ -7,8 +7,9 @@ type DatabaseClient = Pick<typeof prisma, "account" | "user">;
 export async function setTemporaryPasswordForUser(
   db: DatabaseClient,
   userId: string,
+  providedPassword?: string,
 ) {
-  const temporaryPassword = crypto.randomBytes(10).toString("hex");
+  const temporaryPassword = providedPassword?.trim() || crypto.randomBytes(10).toString("hex");
   const password = await hashPassword(temporaryPassword);
   const account = await db.account.findFirst({
     where: { userId, providerId: "credential" },

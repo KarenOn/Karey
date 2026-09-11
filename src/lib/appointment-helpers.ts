@@ -2,17 +2,24 @@ import { format, parse } from "date-fns";
 import { getClinicDateKey } from "./appointment-time";
 import { safeDate, addMinutes as utilAddMinutes } from "./utility";
 
+export function invalidateAppointmentSurfaces(detail?: { appointmentId?: number; status?: string }) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("karey:appointments-invalidated", { detail }));
+  }
+}
+
 /**
  * Canonical helper: Get appointment end time
  * Handles missing endAt by using duration
  */
 export function getAppointmentEnd(
-  appointment: { startAt: string; endAt?: string | null },
+  appointment: { startAt: string | Date; endAt?: string | Date | null },
   defaultDurationMinutes = 30
 ): Date | null {
-  const start = safeDate(appointment.startAt);
+  const start = appointment.startAt instanceof Date ? appointment.startAt : safeDate(appointment.startAt);
   if (!start) return null;
-  return safeDate(appointment.endAt) ?? utilAddMinutes(start, defaultDurationMinutes);
+  const end = appointment.endAt instanceof Date ? appointment.endAt : appointment.endAt ? safeDate(appointment.endAt) : null;
+  return end ?? utilAddMinutes(start, defaultDurationMinutes);
 }
 
 /**
@@ -68,7 +75,7 @@ export function canPerformAction(
     case "reschedule":
       return ["SCHEDULED", "CONFIRMED", "WAITING"].includes(status);
     case "cancel":
-      return ["SCHEDULED", "CONFIRMED", "WAITING"].includes(status);
+      return ["SCHEDULED", "CONFIRMED", "WAITING", "IN_PROGRESS"].includes(status);
     case "finalize":
       return status === "IN_PROGRESS";
     case "view":
@@ -188,7 +195,7 @@ export function getAppointmentActions(
     case "WAITING":
       return ["attend", "reschedule", "cancel", "view"];
     case "IN_PROGRESS":
-      return ["finalize", "view"];
+      return ["finalize", "cancel", "view"];
     case "COMPLETED":
     case "ATTENDED":
       return ["view"];

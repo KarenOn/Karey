@@ -87,6 +87,13 @@ enum NotificationStatus {
   CANCELLED
 }
 
+enum ClinicalReportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum VaccineIntervalUnit {
   DAYS
   WEEKS
@@ -132,6 +139,11 @@ enum SubscriptionStatus {
   PAST_DUE
 }
 
+enum SubscriptionPaymentStatus {
+  PAID
+  PENDING
+}
+
 //
 // =========================
 // BETTER AUTH
@@ -167,6 +179,7 @@ model User {
   createdPayments    Payment[]       @relation("PaymentCreatedBy")
   stockMovements     StockMovement[] @relation("StockMovementCreatedBy")
   clinicalVisits     ClinicalVisit[] @relation("ClinicalVisitVet")
+  clinicalReportJobs ClinicalReportJob[]
 
   notificationRecipients  NotificationRecipient[]
   createdNotifications    Notification[]   @relation("NotificationCreatedBy")
@@ -331,6 +344,11 @@ model Clinic {
   isActive            Boolean            @default(true)
   subscriptionStatus  SubscriptionStatus @default(ACTIVE)
   subscriptionEndDate DateTime?          @db.Date
+  subscriptionPaymentStatus SubscriptionPaymentStatus @default(PAID)
+  subscriptionPaidAt DateTime?
+  subscriptionReminderDays Int @default(3)
+  subscriptionGraceDays Int @default(2)
+  subscriptionIntervalMonths Int @default(1)
   plan                String?
 
   createdAt DateTime @default(now())
@@ -349,6 +367,7 @@ model Clinic {
   products           Product[]
   invoices           Invoice[]
   visits             ClinicalVisit[]
+  clinicalReportJobs ClinicalReportJob[]
   vaccines           VaccineCatalog[]
   vaccinations       VaccinationRecord[]
   notifications      Notification[]
@@ -951,6 +970,30 @@ model Notification {
   @@index([scheduledAt])
   @@index([createdById])
   @@map("notification")
+}
+
+model ClinicalReportJob {
+  id            Int                   @id @default(autoincrement())
+  clinicId      Int
+  requestedById String
+  dedupeKey     String
+  petIds        Json
+  clientId      Int?
+  range         Json
+  status        ClinicalReportJobStatus @default(PENDING)
+  storageRef    String?               @db.Text
+  error         String?               @db.Text
+  completedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  clinic      Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, dedupeKey])
+  @@index([status, createdAt])
+  @@index([clinicId, requestedById])
+  @@map("clinicalreportjob")
 }
 
 model NotificationRecipient {

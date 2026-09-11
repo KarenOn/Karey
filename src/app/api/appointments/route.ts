@@ -7,6 +7,8 @@ import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentCreateSchema } from "@/lib/validators/appointments";
 import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 import { hasPermission, isElevatedClinicRole } from "@/lib/permissions";
+import { notifyAppointmentAssigned } from "@/lib/in-app-notifications";
+import { getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -20,6 +22,8 @@ const appointmentInclude = {
   pet: { select: { id: true, name: true, species: true, clientId: true } },
   client: { select: { id: true, fullName: true, phone: true } },
   vet: { select: { id: true, name: true, email: true } },
+  visit: { select: { id: true, _count: { select: { vaccinations: true } } } },
+  encounterItems: { select: { id: true } },
 } as const;
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 
@@ -57,10 +61,6 @@ function combineDateAndTime(date: Date, time: string) {
   return next;
 }
 
-function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
-  return startA < endB && startB < endA;
-}
-
 async function findOverlappingAppointment(params: {
   clinicId: number;
   startAt: Date;
@@ -75,7 +75,6 @@ async function findOverlappingAppointment(params: {
   const candidates = await prisma.appointment.findMany({
     where: {
       clinicId,
-      status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
       ...(ignoreId ? { NOT: { id: ignoreId } } : {}),
       startAt: {
         gte: searchFrom,
@@ -86,6 +85,7 @@ async function findOverlappingAppointment(params: {
       id: true,
       startAt: true,
       endAt: true,
+      status: true,
       type: true,
       vetId: true,
       pet: { select: { name: true } },
@@ -97,6 +97,7 @@ async function findOverlappingAppointment(params: {
 
   return (
     candidates.find((appointment) => {
+      if (!isAppointmentActive(appointment.status)) return false;
       // Check based on vet assignment
       if (vetId) {
         // For assigned vet: only conflict with same vet
@@ -106,8 +107,8 @@ async function findOverlappingAppointment(params: {
         if (appointment.vetId !== null) return false;
       }
 
-      const appointmentEnd = appointment.endAt ?? addMinutes(appointment.startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
-      return rangesOverlap(startAt, endAt, appointment.startAt, appointmentEnd);
+      const appointmentEnd = getAppointmentEnd(appointment, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+      return Boolean(appointmentEnd && rangesOverlap(startAt, endAt, appointment.startAt, appointmentEnd));
     }) ?? null
   );
 }
@@ -271,11 +272,13 @@ export async function GET(req: Request) {
     include: appointmentInclude,
   });
 
-  return NextResponse.json(appointments);
+  return url.searchParams.get("surface") === "now-alert"
+    ? NextResponse.json({ appointments, currentUserIsVet: member?.role.key === "vet" })
+    : NextResponse.json(appointments);
 }
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("appointments.create");
+  const { clinicId, session } = await requireClinicPermission("appointments.create");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -295,6 +298,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No puedes agendar una cita en un horario que ya pasó." }, { status: 422 });
   }
   const effectiveEndAt = input.endAt ?? addMinutes(input.startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+  if (effectiveEndAt <= input.startAt) {
+    return NextResponse.json({ error: "La hora final debe ser posterior a la inicial" }, { status: 422 });
+  }
 
   const scheduleError = await validateAppointmentSchedule({
     clinicId,
@@ -354,6 +360,9 @@ export async function POST(req: Request) {
   });
 
   await syncAppointmentReminderNotifications(created.id);
+  if (created.vetId) {
+    await notifyAppointmentAssigned({ appointmentId: created.id, assignedVetId: created.vetId, assignedByUserId: session.user.id });
+  }
 
   return NextResponse.json(created, { status: 201 });
 }

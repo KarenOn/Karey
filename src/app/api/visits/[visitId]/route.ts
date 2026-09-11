@@ -14,7 +14,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ visitId:
   const updated = await prisma.clinicalVisit.update({
     where: { id: visitId },
     data: { visitAt: data.visitAt, weightKg: data.weightKg, temperatureC: data.temperatureC, diagnosis: data.diagnosis || null, treatment: data.treatment || null, notes: data.notes || null, vetId: data.vetId || null },
-    include: { attachments: true },
+    include: { attachments: true, vet: { select: { id: true, name: true, email: true } }, appointment: { select: { reason: true } } },
   });
   if (data.attachment) {
     await prisma.medicalAttachment.create({ data: { clinicId, visitId, fileName: data.attachment.fileName, fileType: data.attachment.fileType || null, url: data.attachment.storageRef ?? data.attachment.url ?? "" } });

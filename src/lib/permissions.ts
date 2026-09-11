@@ -1,6 +1,7 @@
 export type PermissionAction =
   | "read"
   | "create"
+  | "edit"
   | "update"
   | "delete"
   | "invite"
@@ -18,18 +19,18 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogGroup[] = [
   { module: "clinic", label: "Clínica", actions: ["read", "update"] },
   { module: "employees", label: "Empleados", actions: ["read", "invite", "create", "changeRole", "activate", "deactivate", "resendInvite"] },
   { module: "roles", label: "Roles y permisos", actions: ["read", "manage", "create", "update", "delete"] },
-  { module: "appointments", label: "Citas", actions: ["read", "create", "update", "edit", "attend", "cancel", "reschedule", "delete", "receiveUnassignedNowAlerts", "assign"] },
-  { module: "clients", label: "Clientes", actions: ["read", "create", "update", "edit", "delete"] },
-  { module: "pets", label: "Pacientes", actions: ["read", "create", "update", "edit", "delete", "viewClinicalHistory"] },
+  { module: "appointments", label: "Citas", actions: ["read", "create", "edit", "attend", "cancel", "reschedule", "delete", "receiveUnassignedNowAlerts", "assign"] },
+  { module: "clients", label: "Clientes", actions: ["read", "create", "edit", "delete"] },
+  { module: "pets", label: "Pacientes", actions: ["read", "create", "edit", "delete", "viewClinicalHistory"] },
   { module: "today", label: "Hoy", actions: ["read", "manageWalkIns", "manageEncounter"] },
   { module: "todayTurn", label: "Turnos sin cita", actions: ["read", "create", "edit", "delete"] },
   { module: "encounters", label: "Atenciones", actions: ["manage", "addConsumptions"] },
-  { module: "visits", label: "Visitas clínicas", actions: ["read", "create", "update", "edit", "attachDocuments"] },
-  { module: "vaccines", label: "Vacunas", actions: ["read", "create", "update", "edit"] },
-  { module: "services", label: "Servicios", actions: ["read", "create", "update", "edit", "delete"] },
-  { module: "inventory", label: "Inventario", actions: ["read", "create", "update", "edit", "delete"] },
+  { module: "visits", label: "Visitas clínicas", actions: ["read", "create", "edit", "attachDocuments"] },
+  { module: "vaccines", label: "Vacunas", actions: ["read", "create", "edit"] },
+  { module: "services", label: "Servicios", actions: ["read", "create", "edit", "delete"] },
+  { module: "inventory", label: "Inventario", actions: ["read", "create", "edit", "delete"] },
   { module: "inventoryMovements", label: "Movimientos de inventario", actions: ["read", "create"] },
-  { module: "invoices", label: "Facturación", actions: ["read", "viewDrafts", "create", "update", "edit", "issue", "annul", "sendToBilling", "download", "print", "delete"] },
+  { module: "invoices", label: "Facturación", actions: ["read", "viewDrafts", "create", "edit", "issue", "annul", "sendToBilling", "download", "print", "delete"] },
   { module: "payments", label: "Pagos", actions: ["read", "create", "register"] },
 ] as const;
 
@@ -87,6 +88,18 @@ export type ClinicAccess = {
 const ELEVATED_CLINIC_ROLE_KEYS = new Set(["owner", "admin"]);
 const GLOBAL_ADMIN_ROLE_KEYS = new Set(["superadmin"]);
 
+/** Notification permissions. Missing entry means targeted/admin event. */
+export const NOTIFICATION_REQUIRED_PERMISSIONS: Record<string, readonly string[]> = {
+  INVENTORY_LOW_STOCK: ["inventory.read"],
+  INVENTORY_EXPIRING: ["inventory.read"],
+  INVOICE_DRAFT: ["invoices.viewDrafts", "invoices.sendToBilling"],
+  INVOICE_ISSUED: ["invoices.issue"],
+  INVOICE_PARTIAL_PAYMENT: ["payments.register"],
+  INVOICE_PAID: ["payments.register"],
+};
+
+const LEGACY_UPDATE_MODULES = new Set(["appointments", "clients", "pets", "visits", "vaccines", "services", "inventory", "invoices"]);
+
 export function isElevatedClinicRole(roleKey?: string | null) {
   return !!roleKey && ELEVATED_CLINIC_ROLE_KEYS.has(roleKey);
 }
@@ -103,7 +116,10 @@ export function normalizePermissions(perms: unknown): PermissionMap {
   return Object.entries(perms as Record<string, unknown>).reduce<PermissionMap>(
     (acc, [module, actions]) => {
       if (Array.isArray(actions)) {
-        acc[module] = actions.filter((action): action is string => typeof action === "string");
+        const normalized = actions.filter((action): action is string => typeof action === "string");
+        acc[module] = LEGACY_UPDATE_MODULES.has(module)
+          ? [...new Set(normalized.map((action) => action === "update" ? "edit" : action))]
+          : normalized;
       }
       return acc;
     },
@@ -119,11 +135,22 @@ export function hasPermission(perms: unknown, key: string) {
   const [module, ...actionParts] = key.split(".");
   const action = actionParts.join(".");
   const actions = obj[module] ?? [];
-  return actions.includes(action) || actions.includes("*");
+  if (actions.includes(action) || actions.includes("*")) return true;
+  // `update` was the legacy name. Accept both names at trust boundary.
+  if (LEGACY_UPDATE_MODULES.has(module) && (action === "update" || action === "edit")) {
+    return actions.includes(action === "update" ? "edit" : "update");
+  }
+  return false;
 }
 
 export function hasAnyPermission(perms: unknown, keys: string[]) {
   return keys.some((key) => hasPermission(perms, key));
+}
+
+export function canReceiveNotification(type: string, perms: unknown) {
+  const required = NOTIFICATION_REQUIRED_PERMISSIONS[type] ??
+    (type.startsWith("CLINICAL_REPORT_") ? ["visits.read"] : undefined);
+  return !required || hasAnyPermission(perms, [...required]);
 }
 
 export function canActAsVeterinarian(roleKey?: string | null, perms?: unknown) {
@@ -207,8 +234,8 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   const invoicesDelete = allow("invoices.delete");
   const paymentsRead = allow("payments.read", ["invoices.read"]);
   const paymentsRegister = allow("payments.register", ["payments.create"]);
-  const encountersManage = allow("encounters.manage", ["visits.create", "visits.update"]);
-  const encountersAddConsumptions = allow("encounters.addConsumptions", ["visits.create", "visits.update"]);
+  const encountersManage = allow("encounters.manage");
+  const encountersAddConsumptions = allow("encounters.addConsumptions");
 
   const servicesRead = allow("services.read");
   const servicesCreate = allow("services.create");

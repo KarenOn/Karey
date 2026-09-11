@@ -8,7 +8,7 @@ export async function POST() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const profile = await readCurrentUserProfile();
-  const ownerReady = profile.roleKey === "owner" && Boolean(profile.clinicId);
+  const ownerReady = profile.isClinicOwner && Boolean(profile.clinicId);
   const employeeReady = Boolean(
     profile.roleKey &&
       profile.roleKey !== "owner" &&

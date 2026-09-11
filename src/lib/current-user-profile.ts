@@ -41,6 +41,7 @@ export type CurrentUserProfile = {
   bio: string | null;
   roleKey: string | null;
   roleLabel: string | null;
+  isClinicOwner: boolean;
   access: ClinicAccess;
 };
 
@@ -195,6 +196,7 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
     bio: row.user.profile?.bio ?? null,
     roleKey,
     roleLabel,
+    isClinicOwner: row.membership?.role.key === "owner",
     access,
   };
 }

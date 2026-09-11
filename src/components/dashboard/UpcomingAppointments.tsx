@@ -13,6 +13,7 @@ import type {
   PetSpecies,
   AppointmentStatus,
 } from "@/types/common";
+import { Badge } from "../ui/badge";
 
 const statusUI: Record<AppointmentStatus, { label: string; className: string }> = {
   SCHEDULED: { label: "Programada", className: "bg-blue-100 text-blue-700" },
@@ -47,7 +48,7 @@ export default function UpcomingAppointments({ appointments, patients, clients }
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-success" />
           {/* <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Agenda viva</p> */}
-          <h3 className="font-display text-2xl font-semibold text-foreground">Próximas Citas</h3>
+          <h3 className="font-display text-2xl font-semibold text-foreground">Próximas Citas</h3><Badge variant="secondary">{appointments.length}</Badge>
         </div>
 
         <Link href="/appointments" className="text-sm text-primary hover:text-primary/80 font-semibold flex items-center gap-1">

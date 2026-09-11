@@ -8,7 +8,8 @@ import { Edit, Eye, FileText, Mail, MapPin, PawPrint, Phone, Plus, Trash2 } from
 import AppPageHero from "@/components/shared/AppPageHero";
 import { AppAlert } from "@/components/shared/AppAlert";
 import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
-import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
+import type { FormFieldChangeEvent } from "@/components/shared/FormField";
+import ClientForm from "@/components/shared/ClientForm";
 import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import { Button } from "@/components/ui/button";
@@ -313,7 +314,7 @@ function ClientsPageContent() {
                 <Eye className="h-4 w-4" />
               </Button>
             </Link>
-            {canUpdateClients ? (
+            {canUpdateClients && row.fullName !== "VENTA GENERAL" ? (
               <Button
                 variant="ghost"
                 size="icon"
@@ -328,7 +329,7 @@ function ClientsPageContent() {
                 <Edit className="h-4 w-4" />
               </Button>
             ) : null}
-            {canDeleteClients ? (
+            {canDeleteClients && row.fullName !== "VENTA GENERAL" ? (
               <Button
                 variant="ghost"
                 size="icon"
@@ -418,50 +419,7 @@ function ClientsPageContent() {
         }
       >
         <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField
-              label="Nombre completo"
-              name="fullName"
-              value={formData.fullName}
-              onChange={handleChange}
-              required
-              className="sm:col-span-2"
-              error={errors.fullName}
-            />
-            <FormField
-              label="Teléfono"
-              name="phone"
-              type="tel"
-              value={formData.phone}
-              onChange={handleChange}
-              required
-              error={errors.phone}
-            />
-            <FormField
-              label="Email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-              error={errors.email}
-            />
-            <FormField
-              label="Dirección"
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              error={errors.address}
-            />
-            <FormField
-              label="Notas"
-              name="notes"
-              type="textarea"
-              value={formData.notes}
-              onChange={handleChange}
-              className="sm:col-span-2"
-              error={errors.notes}
-            />
-          </div>
+          <ClientForm values={formData} errors={errors} onChange={handleChange} lockName={editingClient?.fullName === "VENTA GENERAL"} />
         </form>
       </Modal>
 

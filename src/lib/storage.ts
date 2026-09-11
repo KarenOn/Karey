@@ -240,6 +240,13 @@ export async function deleteStoredFile(ref?: string | null) {
   );
 }
 
+export async function storeGeneratedReport(params: { clinicId: number; fileName: string; body: Uint8Array }) {
+  const config = readStorageConfig();
+  const key = `clinic/${params.clinicId}/reports/${randomUUID()}-${sanitizeFileName(params.fileName)}`;
+  await getS3Client().send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: params.body, ContentType: "application/pdf" }));
+  return toS3StorageRef(key);
+}
+
 export async function serializeAttachment<T extends { fileName: string; fileType?: string | null; url: string }>(
   attachment: T
 ) {

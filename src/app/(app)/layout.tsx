@@ -30,7 +30,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/onboarding/change-password");
   }
 
-  if (currentUser?.clinicId && currentUser.clinicIsActive === false) {
+  if (
+    currentUser?.clinicId &&
+    (currentUser.clinicIsActive === false || currentUser.subscriptionStatus === "inactive")
+  ) {
     return (
       <div className="app-shell-bg min-h-screen">
         <div className="app-grid pointer-events-none fixed inset-0 opacity-70" />

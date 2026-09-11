@@ -11,6 +11,7 @@ import {
 } from "@/lib/email";
 import { sendPasswordResetEmail as sendPasswordResetEmailMessage } from "@/lib/password-reset-email";
 import { prisma } from "@/lib/prisma";
+import { isPublicSignupEnabled } from "@/lib/runtime-config";
 
 export const auth = betterAuth({
   baseURL: getAppBaseUrl(),
@@ -51,6 +52,7 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    disableSignUp: !isPublicSignupEnabled(),
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     async sendResetPassword({ token, user }) {
@@ -146,7 +148,7 @@ export const getClinicIdOrFail = async () => {
 
   const membership = await getActiveClinicMembershipForUser(user.id);
   if (membership?.clinicId) {
-    if (!membership.clinic.isActive) {
+    if (!membership.clinic.isActive || membership.clinic.subscriptionStatus === "INACTIVE") {
       throw new Error("CLINIC_INACTIVE");
     }
     return membership.clinicId;

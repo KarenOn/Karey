@@ -66,6 +66,14 @@ type PaymentReminderEmailInput = {
   total: string;
 };
 
+type SubscriptionReminderEmailInput = {
+  clinicName: string;
+  date: string;
+  kind: "REMINDER_BEFORE_DUE" | "DUE_TODAY" | "GRACE_REMINDER";
+  recipientName?: string | null;
+  to: string;
+};
+
 export class MailConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -380,7 +388,7 @@ export async function sendClinicWelcomeEmail({
   if (subscriptionEndDate) {
     details.push({
       label: "Próximo vencimiento",
-      value: new Intl.DateTimeFormat("es-BO", { dateStyle: "medium" }).format(subscriptionEndDate),
+      value: new Intl.DateTimeFormat("es-BO", { dateStyle: "medium", timeZone: "UTC" }).format(subscriptionEndDate),
     });
   }
 
@@ -400,7 +408,7 @@ export async function sendClinicWelcomeEmail({
     `Contraseña inicial: ${tempPassword}`,
     plan?.trim() ? `Plan: ${plan.trim()}` : null,
     subscriptionEndDate
-      ? `Próximo vencimiento: ${new Intl.DateTimeFormat("es-BO", { dateStyle: "medium" }).format(subscriptionEndDate)}`
+      ? `Próximo vencimiento: ${new Intl.DateTimeFormat("es-BO", { dateStyle: "medium", timeZone: "UTC" }).format(subscriptionEndDate)}`
       : null,
     `Ingresa aquí: ${loginUrl}`,
   ].filter(Boolean);
@@ -634,6 +642,28 @@ export async function sendPaymentReminderEmail({
     }),
     subject: `Recordatorio de pago ${invoiceNumber}`,
     text: textLines.join("\n"),
+    to,
+  });
+}
+
+export async function sendSubscriptionReminderEmail({ clinicName, date, kind, recipientName, to }: SubscriptionReminderEmailInput) {
+  const introName = recipientName?.trim() || "Hola";
+  const copy = {
+    REMINDER_BEFORE_DUE: `Te recordamos que la suscripción de Karey Vet de ${clinicName} se renueva el ${date}.`,
+    DUE_TODAY: "Tu suscripción de Karey Vet vence hoy. Puedes realizar el pago para mantener tu servicio activo.",
+    GRACE_REMINDER: `Tenemos pendiente la renovación de Karey Vet. Tu clínica continuará disponible hasta el ${date}.`,
+  }[kind];
+
+  await sendEmail({
+    html: buildEmailShell({
+      bodyHtml: `<p style="margin:0;font-size:15px;line-height:1.7;">${escapeHtml(introName)}, ${escapeHtml(copy)}</p>`,
+      ctaHref: getAppBaseUrl(),
+      ctaLabel: "Abrir Karey Vet",
+      intro: "Aviso automático de suscripción.",
+      title: "Renovación de suscripción",
+    }),
+    subject: "Renovación de suscripción Karey Vet",
+    text: `${introName}, ${copy}\n\nAbrir Karey Vet: ${getAppBaseUrl()}`,
     to,
   });
 }

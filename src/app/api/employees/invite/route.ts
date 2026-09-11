@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       }),
     ]);
 
-    if (!role) {
+    if (!role || role.key === "owner" || role.key === "superadmin") {
       return NextResponse.json({ error: "Rol invalido" }, { status: 400 });
     }
 

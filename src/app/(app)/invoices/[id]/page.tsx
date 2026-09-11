@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 import {
-  ArrowLeft,
   Printer,
   Download,
   CheckCircle,
@@ -33,6 +32,7 @@ import {
 } from "lucide-react";
 
 import { apiCreatePayment, apiGetInvoice, apiUpdateInvoiceStatus, InvoiceDetail } from "@/lib/api/invoices";
+import BackButton from "@/components/shared/BackButton";
 import type { PaymentCreateInput } from "@/lib/validators/payment";
 import AppPageHero from "@/components/shared/AppPageHero";
 import Link from "next/link";
@@ -236,9 +236,7 @@ export default function InvoiceDetailPage() {
         <p className="font-semibold text-foreground">No se pudo cargar la factura</p>
         <p className="text-sm text-muted-foreground mt-1">{err ?? "Factura no encontrada"}</p>
         <div className="mt-4">
-          <Button variant="outline" onClick={() => router.back()}>
-            <ArrowLeft className="w-4 h-4 mr-2" /> Volver
-          </Button>
+          <BackButton />
         </div>
       </div>
     );

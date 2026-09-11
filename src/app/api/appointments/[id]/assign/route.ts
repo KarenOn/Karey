@@ -105,7 +105,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
       return tx.appointment.findUniqueOrThrow({ where: { id }, include: { pet: true, client: true, vet: { select: { id: true, name: true, email: true } } } });
     });
-    await notifyAppointmentAssigned({ appointmentId: result.id, assignedVetId: requestedVetId, assignedByUserId: session.user.id });
+    await notifyAppointmentAssigned({ appointmentId: result.id, assignedVetId: requestedVetId, assignedByUserId: session.user.id, selfAssigned: requestedVetId === session.user.id });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AssignmentConflict) {

@@ -7,6 +7,7 @@ import SearchableSelect from "@/components/shared/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import type { PetRow } from "@/lib/api/pets";
 import type { ClientRow } from "@/lib/api/clients";
 
@@ -27,7 +28,7 @@ export default function ClinicalReportDialog({ open, onClose, pets, clients, ini
   function reset() { setSelectedIds(initialPetIds); setClientId(""); setMode(initialPetIds.length ? "patients" : "patients"); setRangeMode("today"); setDate(new Date().toISOString().slice(0, 10)); setFrom(""); setTo(""); }
   function close() { if (busy) return; reset(); onClose(); }
   function toggle(id: number) { setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); }
-  function submit() {
+  async function submit() {
     if (mode === "patients" && !selectedIds.length) return;
     if (mode === "client" && !clientId) return;
     if (rangeMode === "range" && (!from || !to || from > to)) return;
@@ -36,8 +37,15 @@ export default function ClinicalReportDialog({ open, onClose, pets, clients, ini
     if (rangeMode === "date") query.set("date", date);
     if (rangeMode === "range") { query.set("from", from); query.set("to", to); }
     setBusy(true);
-    window.open(`/clinical-report?${query.toString()}`, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => { setBusy(false); close(); }, 250);
+    try {
+      const response = await fetch("/api/clinical-reports/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ petIds: mode === "patients" ? selectedIds : [], clientId: mode === "client" ? Number(clientId) : undefined, range: { mode: rangeMode, date: rangeMode === "date" ? date : undefined, from: rangeMode === "range" ? from : undefined, to: rangeMode === "range" ? to : undefined } }) });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error ?? "No se pudo solicitar el informe.");
+      toast.success("Estamos generando el informe clínico. Puedes continuar trabajando y te notificaremos cuando esté listo.");
+      reset();
+      onClose();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "No se pudo solicitar el informe."); }
+    finally { setBusy(false); }
   }
 
   return <Modal open={open} onClose={close} title="Generar informe clínico" description="Selecciona el alcance y las fechas del historial que quieres revisar o descargar." size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={close}>Cancelar</Button><Button onClick={submit} disabled={busy || (mode === "patients" ? !selectedIds.length : !clientId)}>{busy ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}Generar informe</Button></div>}>

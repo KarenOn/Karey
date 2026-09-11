@@ -94,6 +94,7 @@ export type AppointmentUpdateInput = z.infer<typeof AppointmentUpdateSchema>;
 
 export const AppointmentStatusChangeSchema = z.object({
   status: AppointmentStatusSchema,
+  reason: z.string().trim().max(500).optional(),
 });
 
 export type AppointmentStatusChangeInput = z.infer<typeof AppointmentStatusChangeSchema>;

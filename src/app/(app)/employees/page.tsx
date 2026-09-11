@@ -74,13 +74,35 @@ function normalizePermissions(value: unknown): PermissionMap {
   return Object.entries(value as Record<string, unknown>).reduce<PermissionMap>(
     (acc, [key, actions]) => {
       if (Array.isArray(actions)) {
-        acc[key] = actions.filter((item): item is string => typeof item === "string");
+        const normalized = actions.filter((item): item is string => typeof item === "string");
+        const canonicalModules = new Set(["appointments", "clients", "pets", "visits", "vaccines", "services", "inventory", "invoices"]);
+        acc[key] = canonicalModules.has(key)
+          ? [...new Set(normalized.map((item) => item === "update" ? "edit" : item))]
+          : normalized;
       }
       return acc;
     },
     {}
   );
 }
+
+const actionLabels: Record<string, string> = {
+  read: "Ver",
+  create: "Crear",
+  edit: "Editar",
+  delete: "Eliminar",
+  manage: "Gestionar",
+  update: "Editar (compatibilidad)",
+  invite: "Invitar",
+  changeRole: "Cambiar rol",
+  activate: "Activar",
+  deactivate: "Desactivar",
+  resendInvite: "Reenviar invitación",
+  viewClinicalHistory: "Ver historial clínico",
+  viewDrafts: "Ver borradores",
+  attachDocuments: "Adjuntar documentos",
+  receiveUnassignedNowAlerts: "Recibir alertas de citas sin asignar",
+};
 
 function slugify(value: string) {
   return value
@@ -105,13 +127,17 @@ function togglePermission(perms: PermissionMap, moduleKey: string, action: strin
   return { ...perms, [moduleKey]: next.sort() };
 }
 
-function setGroupPermissions(perms: PermissionMap, moduleKey: string, actions: readonly string[], enabled: boolean) {
-  if (!enabled) {
-    const next = { ...perms };
-    delete next[moduleKey];
-    return next;
+function setVisibleGroupPermissions(perms: PermissionMap, moduleKey: string, visibleActions: readonly string[], enabled: boolean) {
+  const current = perms[moduleKey] ?? [];
+  const next = enabled
+    ? [...new Set([...current, ...visibleActions])]
+    : current.filter((action) => !visibleActions.includes(action));
+  if (!next.length) {
+    const rest = { ...perms };
+    delete rest[moduleKey];
+    return rest;
   }
-  return { ...perms, [moduleKey]: [...actions] };
+  return { ...perms, [moduleKey]: next.sort() };
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -128,6 +154,7 @@ export default function EmployeesPage() {
   const [membersPage, setMembersPage] = useState(0);
   const [membersPageSize, setMembersPageSize] = useState(10);
   const [memberSearch, setMemberSearch] = useState("");
+  const [permissionSearch, setPermissionSearch] = useState("");
   const [memberStatus, setMemberStatus] = useState("ALL");
   const [pendingMemberId, setPendingMemberId] = useState<number | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<{ member: Member; roleId: number; roleName: string } | null>(null);
@@ -308,6 +335,7 @@ export default function EmployeesPage() {
   function openCreateRole() {
     setRoleKeyTouched(false);
     setRoleForm(emptyRole);
+    setPermissionSearch("");
     setRoleOpen(true);
   }
 
@@ -321,6 +349,7 @@ export default function EmployeesPage() {
       isActive: role.isActive,
       permissions: normalizePermissions(role.permissions),
     });
+    setPermissionSearch("");
     setRoleOpen(true);
   }
 
@@ -872,13 +901,20 @@ export default function EmployeesPage() {
               />
             </div>
             {(() => {
-              const selectedActions = permissionCatalog.flatMap((group) => roleForm.permissions[group.module] ?? []);
-              const allSelected = permissionCatalog.every((group) =>
+              const query = permissionSearch.trim().toLowerCase();
+              const visibleGroups = permissionCatalog.filter((group) => {
+                if (!query) return true;
+                return [group.module, group.label, ...group.actions.map((action) => actionLabels[action] ?? action)].some((value) => value.toLowerCase().includes(query));
+              });
+              const selectedActions = visibleGroups.flatMap((group) => roleForm.permissions[group.module] ?? []);
+              const allSelected = visibleGroups.length > 0 && visibleGroups.every((group) =>
                 group.actions.every((action) => (roleForm.permissions[group.module] ?? []).includes(action))
               );
               const partiallySelected = selectedActions.length > 0 && !allSelected;
               return (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3">
+                <div className="space-y-3 rounded-lg border border-border bg-background px-4 py-3">
+                  <SearchInput placeholder="Buscar permiso, módulo o descripción..." value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} onClear={() => setPermissionSearch("")} />
+                  <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="font-medium text-foreground">Permisos</div>
                     <p className="text-sm text-muted-foreground">
@@ -894,18 +930,19 @@ export default function EmployeesPage() {
                     disabled={roleSubmitting || editingOwner}
                     onClick={() => setRoleForm((current) => ({
                       ...current,
-                      permissions: allSelected
-                        ? {}
-                        : Object.fromEntries(permissionCatalog.map((group) => [group.module, [...group.actions]])),
+                      permissions: visibleGroups.reduce((permissions, group) => setVisibleGroupPermissions(permissions, group.module, group.actions, !allSelected), current.permissions),
                     }))}
                   >
-                    {allSelected ? "Desmarcar todos" : "Marcar todos los permisos"}
+                    {allSelected ? "Desmarcar visibles" : "Marcar permisos visibles"}
                   </Button>
+                  </div>
                 </div>
               );
             })()}
             <div className="grid gap-3 md:grid-cols-2">
-              {permissionCatalog.map((group) => (
+              {(() => {
+                const query = permissionSearch.trim().toLowerCase();
+                return permissionCatalog.filter((group) => !query || [group.module, group.label, ...group.actions.map((action) => actionLabels[action] ?? action)].some((value) => value.toLowerCase().includes(query))).map((group) => (
                 <div key={group.module} className="app-panel-muted p-4">
                   <div className="mb-3 flex items-center justify-between">
                     <div>
@@ -925,7 +962,7 @@ export default function EmployeesPage() {
                             aria-checked={partiallySelected ? "mixed" : allSelected}
                             onClick={() => setRoleForm((current) => ({
                               ...current,
-                              permissions: setGroupPermissions(current.permissions, group.module, group.actions, !allSelected),
+                              permissions: setVisibleGroupPermissions(current.permissions, group.module, group.actions.filter((action) => !query || [group.module, group.label, actionLabels[action] ?? action].some((value) => value.toLowerCase().includes(query))), !allSelected),
                             }))}
                           >
                             {partiallySelected ? "Marcar todos" : allSelected ? "Desmarcar todos" : "Marcar todos"}
@@ -958,13 +995,14 @@ export default function EmployeesPage() {
                             }))
                           }
                         >
-                          {action}
+                          {actionLabels[action] ?? action}
                         </Button>
                       );
                     })}
                   </div>
                 </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
           <DialogFooter>

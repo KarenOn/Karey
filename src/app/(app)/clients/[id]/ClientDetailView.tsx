@@ -1,12 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowLeft,
   Phone,
   Mail,
   MapPin,
@@ -18,6 +17,14 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import Modal from "@/components/shared/Modal";
+import ClientForm from "@/components/shared/ClientForm";
+import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { apiUpdateClient } from "@/lib/api/clients";
+import { ClientFormSchema, zodFieldErrors, type ClientFormValues } from "@/lib/validators/client";
+import type { FormFieldChangeEvent } from "@/components/shared/FormField";
+import { toast } from "sonner";
+import BackButton from "@/components/shared/BackButton";
 
 type PetSpecies = "DOG" | "CAT" | "BIRD" | "RABBIT" | "OTHER";
 
@@ -117,21 +124,63 @@ export default function ClientDetailView({
   invoices: InvoiceDTO[];
   totalSpent: number;
 }) {
+  const [clientData, setClientData] = useState(client);
+  const access = useCurrentUserAccess();
+  const canEditClient = !!access?.actions.clients.update;
+  const isReservedClient = clientData.fullName === "VENTA GENERAL";
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formValues, setFormValues] = useState<ClientFormValues>({
+    fullName: clientData.fullName,
+    phone: clientData.phone ?? "",
+    email: clientData.email ?? "",
+    address: clientData.address ?? "",
+    notes: clientData.notes ?? "",
+  });
+
+  function openEdit() {
+    setFormValues({ fullName: clientData.fullName, phone: clientData.phone ?? "", email: clientData.email ?? "", address: clientData.address ?? "", notes: clientData.notes ?? "" });
+    setErrors({});
+    setEditOpen(true);
+  }
+
+  function handleChange(event: FormFieldChangeEvent) {
+    setFormValues((current) => ({ ...current, [event.target.name]: String(event.target.value) }));
+    setErrors((current) => { const next = { ...current }; delete next[event.target.name]; return next; });
+  }
+
+  async function saveEdit() {
+    const parsed = ClientFormSchema.safeParse(formValues);
+    if (!parsed.success) { setErrors(zodFieldErrors(parsed.error)); return; }
+    setSaving(true);
+    try {
+      const updated = await apiUpdateClient(clientData.id, parsed.data);
+      setClientData((current) => ({ ...current, ...updated }));
+      setEditOpen(false);
+      toast.success("El cliente fue actualizado.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo actualizar el cliente.");
+    } finally { setSaving(false); }
+  }
+
   return (
     <div className="space-y-6">
       <div className="app-page-hero flex items-center gap-4">
-        <Button asChild variant="outline" size="icon" className="rounded-2xl">
-          <Link href="/clients">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </Button>
+        <BackButton href="/clients" />
 
-        <div className="flex-1">
-          <p className="app-kicker mb-3 inline-flex border-0">Detalle de cliente</p>
-          <h2 className="app-heading text-3xl sm:text-4xl">{client.fullName}</h2>
-          <p className="mt-2 text-muted-foreground">
-            Cliente desde {format(parseISO(client.createdAt), "MMMM yyyy", { locale: es })}
-          </p>
+        <div className="flex-1 justify-between flex">
+          <div>
+            <p className="app-kicker mb-3 inline-flex border-0">Detalle de cliente</p>
+            <h2 className="app-heading text-3xl sm:text-4xl">{clientData.fullName}</h2>
+            <p className="mt-2 text-muted-foreground">
+              Cliente desde {format(parseISO(client.createdAt), "MMMM yyyy", { locale: es })}
+            </p>
+          </div>
+          
+          <div className="self-end">
+            {canEditClient && !isReservedClient ? <Button size="sm" variant="outline" className="mt-4" onClick={openEdit}><UserRound className="mr-1 h-4 w-4" />Editar cliente</Button> : null}
+          </div>
         </div>
       </div>
 
@@ -143,24 +192,24 @@ export default function ClientDetailView({
         >
           <div className="mb-6 flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--brand-teal)_82%,white_18%),color-mix(in_srgb,var(--brand-navy)_82%,white_18%))] text-2xl font-bold text-white">
-              {client.fullName?.charAt(0).toUpperCase()}
+              {clientData.fullName?.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h3 className="text-xl font-bold text-foreground">{client.fullName}</h3>
+              <h3 className="text-xl font-bold text-foreground">{clientData.fullName}</h3>
               <p className="text-sm text-muted-foreground">Propietario</p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <InfoRow icon={Phone} label="Telefono" value={client.phone ?? "-"} />
-            {client.email ? <InfoRow icon={Mail} label="Email" value={client.email} /> : null}
-            {client.address ? <InfoRow icon={MapPin} label="Dirección" value={client.address} /> : null}
+            <InfoRow icon={Phone} label="Telefono" value={clientData.phone ?? "-"} />
+            {clientData.email ? <InfoRow icon={Mail} label="Email" value={clientData.email} /> : null}
+            {clientData.address ? <InfoRow icon={MapPin} label="Dirección" value={clientData.address} /> : null}
           </div>
 
-          {client.notes ? (
+          {clientData.notes ? (
             <div className="mt-6 border-t border-border/70 pt-4">
               <p className="mb-1 text-xs text-muted-foreground">Notas</p>
-              <p className="text-sm text-foreground">{client.notes}</p>
+              <p className="text-sm text-foreground">{clientData.notes}</p>
             </div>
           ) : null}
 
@@ -285,6 +334,10 @@ export default function ClientDetailView({
           </ActivityPanel>
         </motion.div>
       </div>
+
+      <Modal open={editOpen} onClose={setEditOpen} title="Editar cliente" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button><Button disabled={saving} onClick={() => void saveEdit()}>{saving ? "Guardando..." : "Guardar cambios"}</Button></div>}>
+          <ClientForm values={formValues} errors={errors} onChange={handleChange} lockName={isReservedClient} />
+      </Modal>
     </div>
   );
 }

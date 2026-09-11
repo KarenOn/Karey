@@ -48,7 +48,7 @@ export default function OwnerSetupChecklist({ state }: { state: ChecklistState }
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Primeros pasos</p>
           <h2 className="mt-1 text-lg font-semibold text-foreground">Deja tu clínica lista para operar</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{completed} de {items.length} pasos completados con datos reales.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{completed} de {items.length} pasos completados.</p>
         </div>
         <Button variant="ghost" size="icon" onClick={toggle} aria-label={minimized ? "Expandir checklist" : "Minimizar checklist"}>
           {minimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}

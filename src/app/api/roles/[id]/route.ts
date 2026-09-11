@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
+import { normalizePermissions } from "@/lib/permissions";
 import { z } from "zod";
 
 const RoleUpdateSchema = z.object({
@@ -25,7 +26,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       data: {
         name: body.name,
         description: body.description,
-        permissions: JSON.parse(JSON.stringify(body.permissions)),
+        permissions: JSON.parse(JSON.stringify(normalizePermissions(body.permissions))),
         isActive: body.isActive
       },
     });

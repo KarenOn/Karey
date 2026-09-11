@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { processQueuedNotifications } from "@/lib/reminders";
 import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
+import { processClinicalReportJobs } from "@/lib/clinical-report-jobs";
+import { reconcileSubscriptions } from "@/lib/subscription-lifecycle";
 
 function isAuthorized(req: Request) {
   const cronHeader = req.headers.get("x-vercel-cron");
@@ -24,12 +26,16 @@ async function handle(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const subscriptions = await reconcileSubscriptions();
   const processed = await processQueuedNotifications(100);
+  const reportJobs = await processClinicalReportJobs(2);
   const reconciled = await reconcileOverdueAppointments();
   return NextResponse.json({
     ok: true,
     noShowUpdated: reconciled.count,
     ...processed,
+    ...reportJobs,
+    ...subscriptions,
   });
 }
 

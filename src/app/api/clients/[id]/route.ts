@@ -18,7 +18,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const existing = await prisma.client.findFirst({
     where: { id, clinicId },
-    select: { id: true },
+    select: { id: true, fullName: true },
   });
 
   if (!existing) {
@@ -43,7 +43,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const updated = await prisma.client.update({
     where: { id: existing.id },
     data: {
-      fullName: parsed.data.fullName,
+      fullName: existing.fullName === "VENTA GENERAL" ? existing.fullName : parsed.data.fullName,
       phone: parsed.data.phone,
       email: parsed.data.email ?? null,
       address: parsed.data.address ?? null,
@@ -70,11 +70,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const existing = await prisma.client.findFirst({
     where: { id, clinicId },
-    select: { id: true },
+    select: { id: true, fullName: true },
   });
 
   if (!existing) {
     return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
+  if (existing.fullName === "VENTA GENERAL") {
+    return NextResponse.json({ error: "Venta General es un cliente reservado y no se puede eliminar." }, { status: 409 });
   }
 
   await prisma.client.delete({ where: { id: existing.id } });

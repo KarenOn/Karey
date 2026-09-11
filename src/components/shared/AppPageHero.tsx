@@ -3,9 +3,7 @@
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
-import { Button } from "../ui/button";
-import { ArrowLeft } from "lucide-react";
+import BackButton from "@/components/shared/BackButton";
 
 type HeroStat = {
   label: string;
@@ -54,11 +52,7 @@ export default function AppPageHero({
           <div className="max-w-3xl">
             <div className="flex items-center gap-3">
               {back ? (
-                <Link href={backHref}>
-                  <Button variant="outline" size="icon" className="shrink-0">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <BackButton href={backHref} />
               ) : null}
               {breadcrumb ? <p className="text-xs font-medium text-muted-foreground">{breadcrumb}</p> : null}
               {badgeLabel ? (
