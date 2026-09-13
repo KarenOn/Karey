@@ -82,6 +82,7 @@ enum NotificationChannel {
 
 enum NotificationStatus {
   QUEUED
+  PROCESSING
   SENT
   FAILED
   CANCELLED
@@ -501,6 +502,7 @@ model Appointment {
   petId    Int
 
   type   AppointmentType    @default(CONSULTATION)
+  serviceId Int?
 
   startAt DateTime
   endAt   DateTime?
@@ -522,6 +524,7 @@ model Appointment {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   pet    Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
   visit   ClinicalVisit?
   invoice Invoice?
@@ -534,6 +537,7 @@ model Appointment {
   @@index([petId])
   @@index([clientId])
   @@index([vetId])
+  @@index([serviceId])
   @@map("appointment")
 }
 
@@ -606,6 +610,7 @@ model Service {
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   invoiceItems InvoiceItem[]
   encounterItems EncounterItem[]
+  appointments Appointment[]
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
@@ -639,6 +644,7 @@ model Product {
   isActive Boolean @default(true)
 
   description          String?  @db.Text
+  // Reserved for future veterinary prescription workflow.
   requiresPrescription Boolean  @default(false)
 
   createdAt DateTime @default(now())

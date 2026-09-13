@@ -9,6 +9,7 @@ import {
   Package,
   Syringe,
 } from "lucide-react";
+import type { ClinicAccess } from "@/lib/permissions";
 
 const actions = [
   {
@@ -18,6 +19,7 @@ const actions = [
     params: "?action=new",
     description: "Registrar un nuevo cliente en el sistema",
     color: "bg-linear-to-br from-blue-500 to-blue-600",
+    canShow: (access: ClinicAccess) => access.actions.clients.create,
   },
   {
     name: "Nuevo Paciente",
@@ -26,6 +28,7 @@ const actions = [
     params: "?action=new",
     color: "bg-linear-to-br from-teal-500 to-teal-600",
     description: "Agregar un nuevo paciente a la base de datos",
+    canShow: (access: ClinicAccess) => access.actions.pets.create,
   },
   {
     name: "Agendar Cita",
@@ -34,6 +37,7 @@ const actions = [
     params: "?action=new",
     color: "bg-linear-to-br from-purple-500 to-purple-600",
     description: "Programar una nueva cita para un paciente",
+    canShow: (access: ClinicAccess) => access.actions.appointments.create,
   },
   {
     name: "Nueva Factura",
@@ -42,6 +46,7 @@ const actions = [
     params: "?action=new",
     color: "bg-linear-to-br from-orange-500 to-orange-600",
     description: "Crear una nueva factura en el sistema",
+    canShow: (access: ClinicAccess) => access.actions.invoices.create,
   },
   {
     name: "Vacunacion",
@@ -50,6 +55,7 @@ const actions = [
     params: "?tab=vaccinations",
     color: "bg-linear-to-br from-pink-500 to-pink-600",
     description: "Registrar una nueva vacunación para un paciente",
+    canShow: (access: ClinicAccess) => access.actions.vaccines.create,
   },
   {
     name: "Inventario",
@@ -58,10 +64,12 @@ const actions = [
     params: "",
     color: "bg-linear-to-br from-green-500 to-green-600",
     description: "Gestionar el inventario de la clinica",
+    canShow: (access: ClinicAccess) => access.modules.inventory,
   },
 ];
 
-export default function QuickActions() {
+export default function QuickActions({ access }: { access: ClinicAccess }) {
+  const visibleActions = actions.filter((action) => action.canShow(access));
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -77,7 +85,7 @@ export default function QuickActions() {
         {/* <p className="hidden max-w-sm text-right text-sm text-muted-foreground lg:block">Cada acceso mantiene el mismo lenguaje visual para que la navegacion se sienta consistente y rapida.</p> */}
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {actions.map((action, index) => (
+        {visibleActions.map((action, index) => (
           <Link key={action.name} href={`${action.page}${action.params}`} className="group">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}

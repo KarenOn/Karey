@@ -13,8 +13,10 @@ import AppPageHero from "@/components/shared/AppPageHero";
 import OwnerSetupChecklist from "@/components/layout/onboarding/OwnerSetupChecklist";
 
 import type { DashboardDataDTO } from "@/types/common";
+import type { ClinicAccess } from "@/lib/permissions";
+import { toMoney } from "@/lib/utility";
 
-export default function DashboardClient({ data, showOwnerChecklist = false }: { data: DashboardDataDTO; showOwnerChecklist?: boolean }) {
+export default function DashboardClient({ data, access, showOwnerChecklist = false }: { data: DashboardDataDTO; access: ClinicAccess; showOwnerChecklist?: boolean }) {
   const {
     clients,
     patients,
@@ -39,47 +41,47 @@ export default function DashboardClient({ data, showOwnerChecklist = false }: { 
       {showOwnerChecklist ? <OwnerSetupChecklist state={data.setupChecklist} /> : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <AppMetricCard
+        {access.modules.clients ? <AppMetricCard
           label="Clientes"
           value={clients.length}
           icon={Users}
           hint="Base activa"
-        />
-        <AppMetricCard
+        /> : null}
+        {access.modules.pets ? <AppMetricCard
           label="Pacientes"
           value={patients.length}
           icon={PawPrint}
           hint="Historial clínico"
-        />
-        <AppMetricCard
+        /> : null}
+        {access.modules.appointments ? <AppMetricCard
           label="Citas hoy"
           value={todayAppointmentsCount}
           icon={Calendar}
           hint="Agenda del día"
-        />
-        <AppMetricCard
+        /> : null}
+        {access.actions.payments.read ? <AppMetricCard
           label="Ingresos"
-          value={`$${monthlyRevenue.toLocaleString("es-MX")}`}
+          value={toMoney(monthlyRevenue)}
           icon={DollarSign}
           hint="Mes en curso"
-        />
+        /> : null}
       </div>
 
-      <QuickActions />
+      <QuickActions access={access} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <UpcomingAppointments
+        {access.modules.appointments ? <UpcomingAppointments
           appointments={upcomingAppointments}
           patients={patients}
           clients={clients}
-        />
-        <VaccineReminders vaccinations={vaccinations} patients={patients} />
+        /> : null}
+        {access.modules.vaccines && access.modules.pets ? <VaccineReminders vaccinations={vaccinations} patients={patients} /> : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ExpiringInventoryAlerts products={expiringProducts} />
-        <LowStockAlerts products={products} />
-        <RecentInvoices invoices={invoices} clients={clients} />
+        {access.modules.inventory ? <ExpiringInventoryAlerts products={expiringProducts} /> : null}
+        {access.modules.inventory ? <LowStockAlerts products={products} /> : null}
+        {access.modules.invoices ? <RecentInvoices invoices={invoices} clients={clients} /> : null}
       </div>
     </div>
   );

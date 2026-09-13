@@ -632,7 +632,7 @@ function PatientDetailContent() {
               <div className="app-panel-strong overflow-hidden">
                 <div className="flex flex-col gap-3 border-b border-border/70 p-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-md font-semibold text-foreground">
                       Historial clínico
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -640,7 +640,7 @@ function PatientDetailContent() {
                     </p>
                   </div>
                   <FormField
-                    label="Fecha"
+                    // label="Fecha"
                     name="visitDateFilter"
                     type="date"
                     value={visitDateFilter}
@@ -804,15 +804,15 @@ function PatientDetailContent() {
               <div className="app-panel-strong overflow-hidden">
                 <div className="flex flex-col gap-3 border-b border-border/70 p-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-md font-semibold text-foreground">
                       Vacunas registradas
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Filtra las aplicaciones por día.
+                      Filtra las vacunas por día.
                     </p>
                   </div>
                   <FormField
-                    label="Fecha"
+                    // label="Fecha"
                     name="vaccinationDateFilter"
                     type="date"
                     value={vaccinationDateFilter}
@@ -931,19 +931,19 @@ function PatientDetailContent() {
         }}
         title={editingVisit ? "Editar Visita Clínica" : "Nueva Visita Clínica"}
         size="lg"
-        footer={
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setVisitModalOpen(false);
-                setEditingVisit(null);
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        }
+        // footer={
+        //   <div className="flex gap-3">
+        //     <Button
+        //       variant="outline"
+        //       onClick={() => {
+        //         setVisitModalOpen(false);
+        //         setEditingVisit(null);
+        //       }}
+        //     >
+        //       Cancelar
+        //     </Button>
+        //   </div>
+        // }
       >
         <ClinicalVisitForm
           petId={petId!}
@@ -984,19 +984,19 @@ function PatientDetailContent() {
           setEditingVaccination(null);
         }}
         title={editingVaccination ? "Editar Vacuna" : "Nueva Vacuna"}
-        footer={
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setVaccineModalOpen(false);
-                setEditingVaccination(null);
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        }
+        // footer={
+        //   <div className="flex gap-3">
+        //     <Button
+        //       variant="outline"
+        //       onClick={() => {
+        //         setVaccineModalOpen(false);
+        //         setEditingVaccination(null);
+        //       }}
+        //     >
+        //       Cancelar
+        //     </Button>
+        //   </div>
+        // }
       >
         <VaccinationForm
           petId={petId!}
@@ -1066,7 +1066,7 @@ function PatientDetailContent() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="order-first rounded-[1.5rem] border border-dashed border-border/70 p-4 sm:col-span-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              {/* <div>
                 <p className="font-medium text-foreground">
                   {attachForm.storageRef
                     ? "Documento listo"
@@ -1076,7 +1076,7 @@ function PatientDetailContent() {
                   Al subirlo, el nombre se completa automaticamente y luego
                   puedes ajustarlo si quieres.
                 </p>
-              </div>
+              </div> */}
               <SignedFileUploader
                 accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                 buttonLabel={

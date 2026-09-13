@@ -17,7 +17,6 @@ export const ProductCreateSchema = z.object({
   isActive: z.coerce.boolean().default(true),
 
   description: z.string().trim().optional().nullable(),
-  requiresPrescription: z.coerce.boolean().default(false),
 }).refine((d) => d.price !== null && d.price !== undefined, {
   message: "El precio de venta es obligatorio.",
   path: ["price"],

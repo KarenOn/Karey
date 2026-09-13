@@ -16,6 +16,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
+import Modal from "@/components/shared/Modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
@@ -26,7 +27,6 @@ import { Label } from "@/components/ui/label";
 import { AppAlert } from "@/components/shared/AppAlert";
 import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
 import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
-import Modal from "@/components/shared/Modal";
 import ModalDelete from "@/components/shared/ModalDelete";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
@@ -36,6 +36,8 @@ import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
 import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
 import { getClinicDateKey } from "@/lib/appointment-time";
 import {
+  calculateAppointmentEnd,
+  DEFAULT_APPOINTMENT_DURATION_MINUTES,
   filterAppointmentsByClinicDay,
   canPerformAction,
   isVetAvailableForRange,
@@ -53,6 +55,7 @@ type AppointmentDTO = {
   clientId: number;
   petId: number;
   type: string;
+  serviceId: number | null;
   startAt: string;
   endAt: string | null;
   status: string;
@@ -64,6 +67,7 @@ type AppointmentDTO = {
   pet: PetDTO;
   client: ClientDTO;
   vet: VetDTO | null;
+  service: { id: number; name: string; durationMins: number | null } | null;
   visit?: { id: number; _count: { vaccinations: number } } | null;
   encounterItems?: Array<{ id: number }>;
 };
@@ -76,12 +80,14 @@ type AppointmentMetaResponse = {
   appointmentTypes: string[];
   appointmentStatuses: string[];
   clinicTimezone: string;
+  services: Array<{ id: number; name: string; durationMins: number | null }>;
 };
 
 type AppointmentTableRow = AppointmentDTO & { searchText: string };
 
 type AppointmentFormState = {
   petId: string;
+  serviceId: string;
   type: string;
   date: string;
   time: string;
@@ -150,7 +156,6 @@ const SPECIES_LABELS: Record<string, string> = {
 
 const WEEKDAY_ORDER = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const DEFAULT_SCHEDULE: ScheduleDTO = { day: "monday", open: "09:00", close: "17:00", closed: false };
-const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 const NON_BLOCKING_STATUSES = new Set(["CANCELLED", "NO_SHOW"]);
 const TIMELINE_SLOT_HEIGHT = 86;
 const TIMELINE_CARD_GAP = 8;
@@ -160,6 +165,10 @@ const APPOINTMENT_HOVER_HEIGHT = 196;
 
 function formatAppointmentType(type: string) {
   return TYPE_LABELS[type] ?? type;
+}
+
+function formatAppointmentService(appointment: Pick<AppointmentDTO, "service" | "type">) {
+  return appointment.service?.name ?? formatAppointmentType(appointment.type);
 }
 
 function formatAppointmentStatus(status: string) {
@@ -192,10 +201,10 @@ function buildTimeSlots(open: string | null, close: string | null, stepMinutes =
   return slots;
 }
 
-function getAppointmentEnd(appointment: Pick<AppointmentDTO, "startAt" | "endAt">) {
+function getAppointmentEnd(appointment: Pick<AppointmentDTO, "startAt" | "endAt" | "service">) {
   const start = safeDate(appointment.startAt);
   if (!start) return null;
-  return safeDate(appointment.endAt) ?? addMinutes(start, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+  return safeDate(appointment.endAt) ?? calculateAppointmentEnd(start, appointment.service?.durationMins);
 }
 
 function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
@@ -302,38 +311,213 @@ function AppointmentDetailDialog({
   const end = getAppointmentEnd(appointment);
   const canCancelAppointment = canCancel && canPerformAction(appointment.status, "cancel") && (appointment.status !== "IN_PROGRESS" || !hasAppointmentActivity(appointment));
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader><DialogTitle>Detalle de cita</DialogTitle></DialogHeader>
-        <div className="grid gap-4 text-sm sm:grid-cols-2">
-          <DetailItem label="Paciente" value={appointment.pet?.name ?? "-"} />
-          <DetailItem label="Cliente" value={appointment.client?.fullName ?? "-"} />
-          <DetailItem label="Fecha" value={start ? format(start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : "-"} />
-          <DetailItem label="Inicio / fin" value={`${start ? format(start, "HH:mm") : "-"} - ${end ? format(end, "HH:mm") : "-"}`} />
-          <DetailItem label="Tipo" value={formatAppointmentType(appointment.type)} />
-          <DetailItem label="Estado" value={formatAppointmentStatus(appointment.status)} />
-          <DetailItem label="Veterinario" value={appointment.vet?.name ?? "Sin asignar"} />
-          <DetailItem label="Recordatorio" value={appointment.reminderSent ? "Enviado" : "Pendiente"} />
-          <DetailItem label="Motivo" value={appointment.reason ?? "Sin motivo registrado"} className="sm:col-span-2" />
-          <DetailItem label="Notas" value={appointment.notes ?? "Sin notas registradas"} className="sm:col-span-2" />
-        </div>
-        <DialogFooter className="flex-wrap sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {canEdit && canPerformAction(appointment.status, "reschedule") ? <Button variant="outline" onClick={() => onEdit(appointment)}><Edit className="mr-2 h-4 w-4" />Editar</Button> : null}
-            {canAttend && canManage && canPerformAction(appointment.status, "attend") ? <Button variant="outline" onClick={() => onAttend(appointment)}>Atender</Button> : null}
-            {canManage && appointment.status === "IN_PROGRESS" ? <Button variant="outline" onClick={() => onManage(appointment)}>Gestionar atención</Button> : null}
-            {canReschedule && canPerformAction(appointment.status, "reschedule") ? <Button variant="ghost" onClick={() => onReschedule(appointment)}>Reprogramar</Button> : null}
-            {canCancelAppointment ? <Button variant="ghost" className="text-destructive" onClick={() => onCancel(appointment)}>Cancelar</Button> : null}
-          </div>
-          <Button variant="outline" onClick={onClose}>Cerrar</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    // <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    //   <DialogContent className="max-w-xl">
+    //     <DialogHeader><DialogTitle>Detalle de cita</DialogTitle></DialogHeader>
+    //     <div className="grid gap-4 text-sm sm:grid-cols-2">
+    //       <DetailItem label="Paciente" value={appointment.pet?.name ?? "-"} />
+    //       <DetailItem label="Cliente" value={appointment.client?.fullName ?? "-"} />
+    //       <DetailItem label="Fecha" value={start ? format(start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : "-"} />
+    //       <DetailItem label="Inicio / fin" value={`${start ? format(start, "HH:mm") : "-"} - ${end ? format(end, "HH:mm") : "-"}`} />
+    //       <DetailItem label="Tipo" value={formatAppointmentType(appointment.type)} />
+    //       <DetailItem label="Estado" value={formatAppointmentStatus(appointment.status)} />
+    //       <DetailItem label="Veterinario" value={appointment.vet?.name ?? "Sin asignar"} />
+    //       <DetailItem label="Recordatorio" value={appointment.reminderSent ? "Enviado" : "Pendiente"} />
+    //       <DetailItem label="Motivo" value={appointment.reason ?? "Sin motivo registrado"} className="sm:col-span-2" />
+    //       <DetailItem label="Notas" value={appointment.notes ?? "Sin notas registradas"} className="sm:col-span-2" />
+    //     </div>
+    //     <DialogFooter className="flex-wrap sm:justify-between">
+    //       <div className="flex flex-wrap gap-2">
+    //         {canEdit && canPerformAction(appointment.status, "reschedule") ? <Button variant="outline" onClick={() => onEdit(appointment)}><Edit className="mr-2 h-4 w-4" />Editar</Button> : null}
+    //         {canAttend && canManage && canPerformAction(appointment.status, "attend") ? <Button variant="outline" onClick={() => onAttend(appointment)}>Atender</Button> : null}
+    //         {canManage && appointment.status === "IN_PROGRESS" ? <Button variant="outline" onClick={() => onManage(appointment)}>Gestionar atención</Button> : null}
+    //         {canReschedule && canPerformAction(appointment.status, "reschedule") ? <Button variant="ghost" onClick={() => onReschedule(appointment)}>Reprogramar</Button> : null}
+    //         {canCancelAppointment ? <Button variant="ghost" className="text-destructive" onClick={() => onCancel(appointment)}>Cancelar</Button> : null}
+    //       </div>
+    //       <Button variant="outline" onClick={onClose}>Cerrar</Button>
+    //     </DialogFooter>
+    //   </DialogContent>
+    // </Dialog>
+
+//     <Modal
+//   open
+//   onClose={(open) => { if (!open) onClose(); }}
+//   title="Detalle de cita"
+//   size="xl"
+// >
+//   <div className="grid gap-4 text-sm sm:grid-cols-2 mt-4">
+//     <DetailItem label="Paciente" value={appointment.pet?.name ?? "-"} />
+//     <DetailItem label="Cliente" value={appointment.client?.fullName ?? "-"} />
+//     <DetailItem label="Fecha" value={start ? format(start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : "-"} />
+//     <DetailItem label="Inicio / fin" value={`${start ? format(start, "HH:mm") : "-"} - ${end ? format(end, "HH:mm") : "-"}`} />
+//     <DetailItem label="Tipo" value={formatAppointmentType(appointment.type)} />
+//     <DetailItem label="Estado" value={formatAppointmentStatus(appointment.status)} />
+//     <DetailItem label="Veterinario" value={appointment.vet?.name ?? "Sin asignar"} />
+//     <DetailItem label="Recordatorio" value={appointment.reminderSent ? "Enviado" : "Pendiente"} />
+//     <DetailItem label="Motivo" value={appointment.reason ?? "Sin motivo registrado"} className="sm:col-span-2" />
+//     <DetailItem label="Notas" value={appointment.notes ?? "Sin notas registradas"} className="sm:col-span-2" />
+//   </div>
+
+//   {/* Contenedor de acciones inferior que emula el Footer anterior */}
+//   <div className="flex flex-wrap gap-4 pt-4 mt-6 border-t border-muted sm:justify-between items-center">
+//     <div className="flex flex-wrap gap-2">
+//       {canEdit && canPerformAction(appointment.status, "reschedule") ? (
+//         <Button variant="outline" onClick={() => onEdit(appointment)}>
+//           <Edit className="mr-2 h-4 w-4" />Editar
+//         </Button>
+//       ) : null}
+      
+//       {canAttend && canManage && canPerformAction(appointment.status, "attend") ? (
+//         <Button variant="outline" onClick={() => onAttend(appointment)}>Atender</Button>
+//       ) : null}
+      
+//       {canManage && appointment.status === "IN_PROGRESS" ? (
+//         <Button variant="outline" onClick={() => onManage(appointment)}>Gestionar atención</Button>
+//       ) : null}
+      
+//       {canReschedule && canPerformAction(appointment.status, "reschedule") ? (
+//         <Button variant="ghost" onClick={() => onReschedule(appointment)}>Reprogramar</Button>
+//       ) : null}
+      
+//       {canCancelAppointment ? (
+//         <Button variant="ghost" className="text-destructive" onClick={() => onCancel(appointment)}>
+//           Cancelar
+//         </Button>
+//       ) : null}
+//     </div>
+    
+//     <Button variant="outline" onClick={onClose}>Cerrar</Button>
+//   </div>
+// </Modal>
+
+<Modal
+  open
+  onClose={(open) => { if (!open) onClose(); }}
+  title="Detalle de cita"
+  size="lg"
+>
+  {/* Grid de Información con Diseño Mejorado */}
+  <div className="grid gap-3 text-sm sm:grid-cols-2">
+    
+    {/* Paciente */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Paciente</span>
+      <span className="font-semibold text-foreground text-base">{appointment.pet?.name ?? "-"}</span>
+    </div>
+
+    {/* Cliente */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Propietario</span>
+      <span className="font-semibold text-foreground text-base">{appointment.client?.fullName ?? "-"}</span>
+    </div>
+
+    {/* Fecha */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Fecha</span>
+      <span className="font-medium text-foreground">
+        {start ? format(start, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : "-"}
+      </span>
+    </div>
+
+    {/* Horario */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Horario</span>
+      <span className="font-medium text-foreground">
+        {start ? format(start, "HH:mm") : "-"} - {end ? format(end, "HH:mm") : "-"}
+      </span>
+    </div>
+
+    {/* Tipo de Cita */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Tipo de Atención</span>
+      <div className="mt-0.5">{formatAppointmentService(appointment)}</div>
+    </div>
+
+    {/* Estado */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Estado</span>
+      <div className="mt-0.5">{formatAppointmentStatus(appointment.status)}</div>
+    </div>
+
+    {/* Veterinario */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Especialista</span>
+      <span className="font-medium text-foreground">{appointment.vet?.name ?? "Sin asignar"}</span>
+    </div>
+
+    {/* Recordatorio */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-card shadow-sm">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Recordatorio SMS/Email</span>
+      <span className={`font-medium ${appointment.reminderSent ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+        {appointment.reminderSent ? "Enviado" : "Pendiente"}
+      </span>
+    </div>
+
+    {/* Motivo (Ocupa dos columnas) */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-muted/40 sm:col-span-2">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Motivo de Consulta</span>
+      <p className="text-foreground italic leading-relaxed">{appointment.reason ?? "No se registró un motivo específico."}</p>
+    </div>
+
+    {/* Notas (Ocupa dos columnas) */}
+    <div className="flex flex-col p-3 rounded-lg border border-border bg-muted/40 sm:col-span-2">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Notas Internas</span>
+      <p className="text-foreground leading-relaxed whitespace-pre-line">{appointment.notes ?? "Sin anotaciones médicas adicionales."}</p>
+    </div>
+
+  </div>
+
+  {/* Contenedor de acciones inferior */}
+  <div className="flex flex-wrap gap-4 pt-4 mt-6 border-t border-border sm:justify-between items-center">
+    <div className="flex flex-wrap gap-2">
+      {canEdit && canPerformAction(appointment.status, "reschedule") ? (
+        <Button variant="outline" onClick={() => onEdit(appointment)}>
+          Editar
+        </Button>
+      ) : null}
+      
+      {canAttend && canManage && canPerformAction(appointment.status, "attend") ? (
+        <Button variant="default" onClick={() => onAttend(appointment)}>Atender</Button>
+      ) : null}
+      
+      {canManage && appointment.status === "IN_PROGRESS" ? (
+        <Button variant="default" onClick={() => onManage(appointment)}>Gestionar atención</Button>
+      ) : null}
+      
+      {canReschedule && canPerformAction(appointment.status, "reschedule") ? (
+        <Button variant="ghost" onClick={() => onReschedule(appointment)}>Reprogramar</Button>
+      ) : null}
+      
+      {canCancelAppointment ? (
+        <Button variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => onCancel(appointment)}>
+          Cancelar Cita
+        </Button>
+      ) : null}
+    </div>
+    
+    <Button variant="outline" onClick={onClose}>Cerrar</Button>
+  </div>
+</Modal>
+
+
   );
 }
 
-function DetailItem({ label, value, className }: { label: string; value: string; className?: string }) {
-  return <div className={className}><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-foreground">{value}</p></div>;
+function DetailItem({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={`${className}`}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-foreground">{value}</p>
+    </div>
+  );
 }
 
 export default function AppointmentsPage() {
@@ -355,6 +539,7 @@ export default function AppointmentsPage() {
   const [vets, setVets] = useState<VetDTO[]>([]);
   const [schedules, setSchedules] = useState<ScheduleDTO[]>([]);
   const [appointmentTypes, setAppointmentTypes] = useState<string[]>([]);
+  const [services, setServices] = useState<AppointmentMetaResponse["services"]>([]);
   const [appointmentStatuses, setAppointmentStatuses] = useState<string[]>([]);
   const [clinicTimezone, setClinicTimezone] = useState("America/Santo_Domingo");
   const [slotVetId, setSlotVetId] = useState("__NONE__");
@@ -366,6 +551,7 @@ export default function AppointmentsPage() {
   const [hoveredAppointmentId, setHoveredAppointmentId] = useState<number | null>(null);
   const [formData, setFormData] = useState<AppointmentFormState>({
     petId: "",
+    serviceId: "",
     type: "",
     date: "",
     time: "",
@@ -428,6 +614,7 @@ export default function AppointmentsPage() {
       setVets(meta.vets);
       setSchedules(meta.schedules);
       setAppointmentTypes(meta.appointmentTypes);
+      setServices(meta.services);
       setAppointmentStatuses(meta.appointmentStatuses);
       setClinicTimezone(meta.clinicTimezone || "America/Santo_Domingo");
     } catch (refreshError) {
@@ -496,9 +683,9 @@ export default function AppointmentsPage() {
     [pets]
   );
 
-  const typeOptions = useMemo(
-    () => appointmentTypes.map((type) => ({ value: type, label: formatAppointmentType(type) })),
-    [appointmentTypes]
+  const serviceOptions = useMemo(
+    () => services.map((service) => ({ value: String(service.id), label: `${service.name} — ${service.durationMins && service.durationMins > 0 ? service.durationMins : DEFAULT_APPOINTMENT_DURATION_MINUTES} min` })),
+    [services]
   );
 
   const statusOptions = useMemo(
@@ -508,7 +695,8 @@ export default function AppointmentsPage() {
 
   const vetOptions = useMemo(() => {
     const start = formData.date && formData.time ? combineDateAndTime(formData.date, formData.time) : null;
-    const end = formData.date && formData.endTime ? combineDateAndTime(formData.date, formData.endTime) : start ? addMinutes(start, DEFAULT_APPOINTMENT_DURATION_MINUTES) : null;
+    const selectedService = services.find((service) => service.id === Number(formData.serviceId));
+    const end = formData.date && formData.endTime ? combineDateAndTime(formData.date, formData.endTime) : start ? calculateAppointmentEnd(start, selectedService?.durationMins) : null;
     if (!start || !end || end <= start) {
       return [{ value: "__NONE__", label: "Sin asignar" }, ...vets.map((vet) => ({ value: vet.id, label: vet.name }))];
     }
@@ -520,7 +708,7 @@ export default function AppointmentsPage() {
     }
     const available = vets.filter((vet) => isVetAvailableForRange(appointments, vet.id, start, end, editing?.id));
     return [{ value: "__NONE__", label: "Sin asignar" }, ...available.map((vet) => ({ value: vet.id, label: vet.name }))];
-  }, [appointments, editing?.id, formData.date, formData.endTime, formData.time, scheduleByDay, vets]);
+  }, [appointments, editing?.id, formData.date, formData.endTime, formData.serviceId, formData.time, scheduleByDay, services, vets]);
 
   const currentUserIsVet = !!profile?.userId && vets.some((vet) => vet.id === profile.userId);
   const showSelfAssign = !!editing && formData.vetId === "__NONE__" && currentUserIsVet && canSelfAssignAppointments;
@@ -728,7 +916,7 @@ export default function AppointmentsPage() {
           apt.client?.fullName,
           apt.vet?.name,
           apt.reason,
-          formatAppointmentType(apt.type),
+          formatAppointmentService(apt),
           formatAppointmentStatus(apt.status),
         ]
           .filter(Boolean)
@@ -752,16 +940,17 @@ export default function AppointmentsPage() {
 
   function resetForm(day = selectedDay, time = "09:00", vetId = "__NONE__") {
     const defaultEndTime = format(
-      addMinutes(combineDateAndTime(format(day, "yyyy-MM-dd"), time), DEFAULT_APPOINTMENT_DURATION_MINUTES),
+      calculateAppointmentEnd(combineDateAndTime(format(day, "yyyy-MM-dd"), time), services[0]?.durationMins),
       "HH:mm"
     );
 
     setFormData({
       petId: "",
+      serviceId: String(services[0]?.id ?? ""),
       type: appointmentTypes[0] ?? "",
       date: format(day, "yyyy-MM-dd"),
       time,
-      endTime: defaultEndTime,
+       endTime: services[0] ? format(calculateAppointmentEnd(combineDateAndTime(format(day, "yyyy-MM-dd"), time), services[0].durationMins), "HH:mm") : defaultEndTime,
       status: appointmentStatuses[0] ?? "",
       vetId,
       reason: "",
@@ -784,10 +973,11 @@ export default function AppointmentsPage() {
     setEditing(appointment);
     setFormData({
       petId: String(appointment.petId),
+      serviceId: appointment.serviceId ? String(appointment.serviceId) : "",
       type: appointment.type,
       date: start ? format(start, "yyyy-MM-dd") : format(selectedDay, "yyyy-MM-dd"),
       time: start ? format(start, "HH:mm") : "09:00",
-      endTime: format(end ?? addMinutes(start ?? selectedDay, DEFAULT_APPOINTMENT_DURATION_MINUTES), "HH:mm"),
+       endTime: format(end ?? (start ? calculateAppointmentEnd(start, appointment.service?.durationMins) : addMinutes(selectedDay, DEFAULT_APPOINTMENT_DURATION_MINUTES)), "HH:mm"),
       status: appointment.status,
       vetId: appointment.vetId ?? "__NONE__",
       reason: appointment.reason ?? "",
@@ -800,7 +990,7 @@ export default function AppointmentsPage() {
     if (!canDeleteAppointments) return;
     setDeleteTarget({
       id: appointment.id,
-      label: `${appointment.pet?.name ?? "Cita"} · ${formatAppointmentType(appointment.type)}`,
+      label: `${appointment.pet?.name ?? "Cita"} · ${formatAppointmentService(appointment)}`,
     });
     setDeleteOpen(true);
   }
@@ -907,7 +1097,15 @@ export default function AppointmentsPage() {
 
   function handleChange(event: FormFieldChangeEvent) {
     const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: String(value) }));
+    setFormData((current) => {
+      const next = { ...current, [name]: String(value) };
+      if (name === "serviceId" || name === "time" || name === "date") {
+        const start = next.date && next.time ? combineDateAndTime(next.date, next.time) : null;
+        const service = services.find((item) => item.id === Number(next.serviceId));
+        if (start && service) next.endTime = format(calculateAppointmentEnd(start, service.durationMins), "HH:mm");
+      }
+      return next;
+    });
   }
 
   async function submitAppointment() {
@@ -923,7 +1121,7 @@ export default function AppointmentsPage() {
       return;
     }
 
-    if (!formData.type || !formData.status || !formData.date || !formData.time) {
+    if ((!editing && !formData.serviceId) || !formData.status || !formData.date || !formData.time) {
       showAlert("warning", "Campos obligatorios", "Completa los datos requeridos de la cita.");
       return;
     }
@@ -939,9 +1137,10 @@ export default function AppointmentsPage() {
       return;
     }
 
+    const selectedService = services.find((service) => service.id === Number(formData.serviceId));
     const endDate = formData.endTime
       ? combineDateAndTime(formData.date, formData.endTime)
-      : addMinutes(startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+      : calculateAppointmentEnd(startAt, selectedService?.durationMins);
 
     if (Number.isNaN(endDate.getTime())) {
       showAlert("warning", "Hora inválida", "La hora final no es válida.");
@@ -1024,7 +1223,8 @@ export default function AppointmentsPage() {
     const payload = {
       clientId: pet.clientId,
       petId: pet.id,
-      type: formData.type,
+      type: editing?.type ?? "OTHER",
+      ...(formData.serviceId ? { serviceId: Number(formData.serviceId) } : {}),
       startAt: startAt.toISOString(),
       endAt: endDate.toISOString(),
       status: formData.status,
@@ -1120,7 +1320,7 @@ export default function AppointmentsPage() {
     },
     { header: "Propietario", cell: (row: AppointmentTableRow) => <span className="text-muted-foreground">{row.client?.fullName ?? "-"}</span> },
     { header: "Veterinario", cell: (row: AppointmentTableRow) => <span className="text-muted-foreground">{row.vet?.name ?? "Sin asignar"}</span> },
-    { header: "Tipo", cell: (row: AppointmentTableRow) => formatAppointmentType(row.type) },
+    { header: "Servicio / tipo", cell: (row: AppointmentTableRow) => formatAppointmentService(row) },
     {
       header: "Estado",
       cell: (row: AppointmentTableRow) => {
@@ -1462,7 +1662,7 @@ export default function AppointmentsPage() {
                                       </p>
                                       <div className="flex flex-wrap items-center gap-2">
                                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles.badge}`}>
-                                          {formatAppointmentType(appointment.type)}
+                                          {formatAppointmentService(appointment)}
                                         </span>
                                         <Badge className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
                                           {formatAppointmentStatus(appointment.status)}
@@ -1625,14 +1825,16 @@ export default function AppointmentsPage() {
             </div>
 
             <FormField
-              label="Tipo de Cita"
-              name="type"
+              label="Tipo de cita"
+              name="serviceId"
               type="select"
-              value={formData.type}
+              value={formData.serviceId}
               onChange={handleChange}
-              options={typeOptions}
-              placeholder="Selecciona un tipo"
-              required
+              options={serviceOptions}
+              placeholder="Selecciona un servicio"
+              searchPlaceholder="Buscar servicio..."
+              emptyMessage="No hay servicios activos registrados."
+              required={!editing}
             />
             <FormField
               label="Estado"
@@ -1666,6 +1868,8 @@ export default function AppointmentsPage() {
               type="time"
               value={formData.endTime}
               onChange={handleChange}
+              disabled={Boolean(formData.serviceId)}
+              helperText={formData.serviceId ? "Derivada de la duración del servicio." : "Cita legacy sin servicio vinculado."}
             />
             {showSelfAssign ? <div className="space-y-2"><Label>Veterinario</Label><Button type="button" variant="outline" onClick={() => void assignEditingAppointmentToSelf()} disabled={saving}>Asignarme esta cita</Button></div> : hideVetSelector ? null : <FormField
               label="Veterinario"

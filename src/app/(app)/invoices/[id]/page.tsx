@@ -46,6 +46,7 @@ import {
 import { getManualReceiptPaper } from "@/lib/printing/settings";
 import { usePrintSettings } from "@/lib/printing/usePrintSettings";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { toMoney } from "@/lib/utility";
 
 const speciesEmoji: Record<string, string> = {
   DOG: "🐕",
@@ -75,10 +76,10 @@ const methodUI: Record<string, { label: string; icon: any }> = {
   TRANSFER: { label: "Transferencia", icon: Building2 },
 };
 
-function money(v: unknown) {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : 0;
-  return n.toLocaleString("es-DO", { style: "currency", currency: "DOP" });
-}
+// function money(v: unknown) {
+//   const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : 0;
+//   return n.toLocaleString("es-DO", { style: "currency", currency: "DOP" });
+// }
 
 function safeDate(iso: string | null | undefined) {
   if (!iso) return null;
@@ -425,9 +426,9 @@ export default function InvoiceDetailPage() {
                             </div>
                           </td>
                           <td className="text-center py-4 text-sm text-muted-foreground">{Number(it.quantity)}</td>
-                          <td className="text-right py-4 text-sm text-muted-foreground">{money(it.unitPrice)}</td>
+                          <td className="text-right py-4 text-sm text-muted-foreground">{toMoney(it.unitPrice)}</td>
                           <td className="text-right py-4 text-sm text-muted-foreground">{Number(it.taxRate ?? 0)}%</td>
-                          <td className="text-right py-4 font-semibold text-foreground">{money(it.lineTotal)}</td>
+                          <td className="text-right py-4 font-semibold text-foreground">{toMoney(it.lineTotal)}</td>
                         </tr>
                       );
                     })}
@@ -441,23 +442,23 @@ export default function InvoiceDetailPage() {
                   <div className="w-full max-w-sm space-y-2">
                     <div className="flex justify-between text-sm text-muted-foreground">
                       <span>Subtotal</span>
-                      <span className="text-foreground/90">{money(invoice.subtotal)}</span>
+                      <span className="text-foreground/90">{toMoney(invoice.subtotal)}</span>
                     </div>
                     {Number(invoice.discount) > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-orange-600">Descuento</span>
-                        <span className="text-orange-600">-{money(invoice.discount)}</span>
+                        <span className="text-orange-600">-{toMoney(invoice.discount)}</span>
                       </div>
                     )}
                     {Number(invoice.tax) > 0 && (
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Impuestos</span>
-                        <span className="text-foreground/90">{money(invoice.tax)}</span>
+                        <span className="text-foreground/90">{toMoney(invoice.tax)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-lg font-bold pt-2 border-t">
                       <span>Total</span>
-                      <span>{money(invoice.total)}</span>
+                      <span>{toMoney(invoice.total)}</span>
                     </div>
                   </div>
                 </div>
@@ -537,16 +538,16 @@ export default function InvoiceDetailPage() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Total</span>
-                <span className="text-foreground/90 font-medium">{money(invoice.total)}</span>
+                <span className="text-foreground/90 font-medium">{toMoney(invoice.total)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Pagado</span>
-                <span className="text-foreground/90 font-medium">{money(paidSum)}</span>
+                <span className="text-foreground/90 font-medium">{toMoney(paidSum)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Pendiente</span>
                 <span className={`font-semibold ${remaining > 0 ? "text-amber-700" : "text-emerald-700"}`}>
-                  {money(remaining)}
+                  {toMoney(remaining)}
                 </span>
               </div>
 
@@ -630,7 +631,7 @@ export default function InvoiceDetailPage() {
                             </p>
                           </div>
                         </div>
-                        <p className="font-semibold text-foreground">{money(p.amount)}</p>
+                        <p className="font-semibold text-foreground">{toMoney(p.amount)}</p>
                       </div>
                     );
                   })}

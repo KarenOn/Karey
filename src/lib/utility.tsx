@@ -40,8 +40,8 @@ export function addMinutes(date: Date, minutes: number) {
 }
 
 export function toMoney(v: unknown) {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : 0;
+  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : 0;
+  return n.toLocaleString("es-DO", { style: "currency", currency: "DOP" });
 }
 
 export function formatCurrency(

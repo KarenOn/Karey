@@ -16,6 +16,13 @@ export async function apiListClients(): Promise<ClientRow[]> {
   return res.json();
 }
 
+export async function apiSearchClients(search = "", limit = 20): Promise<ClientRow[]> {
+  const params = new URLSearchParams({ search, limit: String(limit) });
+  const res = await fetch(`/api/clients?${params.toString()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Error buscando clientes");
+  return res.json();
+}
+
 export async function apiCreateClient(data: ClientFormValues): Promise<ClientRow> {
   const res = await fetch("/api/clients", {
     method: "POST",

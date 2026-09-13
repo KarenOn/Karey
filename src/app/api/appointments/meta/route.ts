@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
 
-  const [clients, pets, vets, schedules] = await Promise.all([
+  const [clients, pets, vets, schedules, services] = await Promise.all([
     prisma.client.findMany({
       where: { clinicId },
       orderBy: { fullName: "asc" },
@@ -36,6 +36,11 @@ export async function GET() {
       orderBy: { day: "asc" },
       select: { day: true, open: true, close: true, closed: true },
     }),
+    prisma.service.findMany({
+      where: { clinicId, isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, durationMins: true },
+    }),
   ]);
 
   const existingDays = new Set(schedules.map((schedule) => schedule.day));
@@ -51,6 +56,7 @@ export async function GET() {
     pets,
     vets: vets.map((member) => member.user).sort((left, right) => left.name.localeCompare(right.name)),
     schedules: normalizedSchedules,
+    services,
     appointmentTypes: APPOINTMENT_TYPES,
     appointmentStatuses: APPOINTMENT_STATUSES,
     clinicTimezone: member.clinic.timezone,

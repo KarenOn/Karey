@@ -88,9 +88,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       ...(data.expirationDate !== undefined ? { expirationDate: data.expirationDate ? parse(data.expirationDate, "yyyy-MM-dd", new Date()) : null } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(data.description !== undefined ? { description: data.description } : {}),
-      ...(data.requiresPrescription !== undefined
-        ? { requiresPrescription: data.requiresPrescription }
-        : {}),
       },
     select: {
       id: true,

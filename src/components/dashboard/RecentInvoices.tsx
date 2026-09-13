@@ -9,6 +9,7 @@ import { FileText, ChevronRight, CheckCircle, Clock, XCircle } from "lucide-reac
 import Link from "next/link";
 
 import type { DashboardInvoiceDTO, DashboardClientDTO, InvoiceStatus } from "@/types/common";
+import { toMoney } from "@/lib/utility";
 
 const statusConfig: Record<InvoiceStatus, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   DRAFT: { label: "Borrador", icon: Clock, color: "text-slate-600", bg: "bg-slate-100" },
@@ -65,7 +66,7 @@ export default function RecentInvoices({ invoices, clients }: Props) {
                     </div>
 
                     <div className="text-right">
-                      <p className="text-lg font-bold text-foreground">${Number(invoice.total ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                      <p className="text-lg font-bold text-foreground">{toMoney(invoice.total ?? 0)}</p>
                       <p className="text-xs text-muted-foreground">{format(parseISO(invoice.date), "d MMM", { locale: es })}</p>
                     </div>
                   </div>
