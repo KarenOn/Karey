@@ -102,12 +102,15 @@ export default function InvoicesPage() {
   );
 
   const totalPending = useMemo(
-    () => invoices.filter((i) => i.status === "ISSUED").reduce((acc, i) => acc + toMoney(i.total), 0),
-    [invoices]
+    () =>
+      invoices
+        .filter((i) => i.status === "ISSUED")
+        .reduce((acc, i) => Number(acc + toMoney(i.total)), 0),
+    [invoices],
   );
 
   const totalPaid = useMemo(
-    () => invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + toMoney(i.total), 0),
+    () => invoices.filter((i) => i.status === "PAID").reduce((acc, i) => Number(acc + toMoney(i.total)), 0),
     [invoices]
   );
 

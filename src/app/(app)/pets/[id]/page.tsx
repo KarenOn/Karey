@@ -1079,11 +1079,11 @@ function PatientDetailContent() {
               </div> */}
               <SignedFileUploader
                 accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                buttonLabel={
-                  attachForm.storageRef
-                    ? "Cambiar documento"
-                    : "Subir documento"
-                }
+                // buttonLabel={
+                //   attachForm.storageRef
+                //     ? "Cambiar documento"
+                //     : "Subir documento"
+                // }
                 disabled={draftAttachmentBusy}
                 onError={(message) => {
                   setAlert({
@@ -1093,7 +1093,7 @@ function PatientDetailContent() {
                   });
                   setAlertOpen(true);
                 }}
-                onFileSelected={handleAttachmentSelected}
+                onFileSelected={() => handleAttachmentSelected}
               />
             </div>
 
