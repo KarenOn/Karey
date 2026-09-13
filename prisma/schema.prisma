@@ -996,7 +996,7 @@ model ClinicalReportJob {
   clinic      Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   requestedBy User   @relation(fields: [requestedById], references: [id], onDelete: Cascade)
 
-  @@unique([clinicId, dedupeKey])
+  @@index([clinicId, dedupeKey])
   @@index([status, createdAt])
   @@index([clinicId, requestedById])
   @@map("clinicalreportjob")

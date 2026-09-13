@@ -22,12 +22,45 @@ export async function POST(req: Request) {
     const input = parseBody(await req.json().catch(() => null));
     if (!input) return NextResponse.json({ error: "Selecciona pacientes, cliente y rango válidos." }, { status: 422 });
     const dedupeKey = JSON.stringify(input);
-    const job = await prisma.clinicalReportJob.upsert({
-      where: { clinicId_dedupeKey: { clinicId, dedupeKey } },
-      create: { clinicId, requestedById: session.user.id, dedupeKey, petIds: input.petIds, clientId: input.clientId ?? null, range: input.range, status: ClinicalReportJobStatus.PENDING },
-      update: {},
+    const activeJob = await prisma.clinicalReportJob.findFirst({
+      where: {
+        clinicId,
+        dedupeKey,
+        status: { in: [ClinicalReportJobStatus.PENDING, ClinicalReportJobStatus.PROCESSING] },
+      },
+      orderBy: { createdAt: "desc" },
       select: { id: true, status: true },
     });
+
+    if (activeJob) return NextResponse.json(activeJob, { status: 202 });
+
+    let job;
+    try {
+      job = await prisma.clinicalReportJob.create({
+        data: {
+          clinicId,
+          requestedById: session.user.id,
+          dedupeKey,
+          petIds: input.petIds,
+          clientId: input.clientId ?? null,
+          range: input.range,
+          status: ClinicalReportJobStatus.PENDING,
+          completedAt: null,
+        },
+        select: { id: true, status: true },
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code !== "P2002") throw error;
+      job = await prisma.clinicalReportJob.findFirstOrThrow({
+        where: {
+          clinicId,
+          dedupeKey,
+          status: { in: [ClinicalReportJobStatus.PENDING, ClinicalReportJobStatus.PROCESSING] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true },
+      });
+    }
     return NextResponse.json(job, { status: 202 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo solicitar el informe.";
