@@ -397,7 +397,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               <TableHead>Nombre clínica</TableHead>
               <TableHead>Responsable</TableHead>
               <TableHead>Empleados</TableHead>
-              <TableHead>Telefono</TableHead>
+              <TableHead>Teléfono</TableHead>
               <TableHead>Pago</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>Proximo pago</TableHead>
@@ -663,7 +663,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-owner-phone">Telefono owner</Label>
+                <Label htmlFor="create-owner-phone">Teléfono owner</Label>
                 <PhoneInput
                   id="create-owner-phone"
                   value={createForm.ownerPhone}
@@ -829,7 +829,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               </div>
               <div className="app-panel-muted p-4">
                 <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                  Telefono
+                  Teléfono
                 </p>
                 <p className="mt-2 text-sm text-foreground">
                   {viewClinic.phone ?? "Sin telefono"}

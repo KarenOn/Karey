@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Mail, PawPrint, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 export default function RegisterPage() {
   return (
@@ -17,7 +18,7 @@ export default function RegisterPage() {
           </div>
           <div className="app-panel-muted p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12">
+              <div className="flex h-11 w-11 items-center justify-center">
                 <ShieldCheck className="size-5 text-primary" />
               </div>
               <div>
@@ -29,8 +30,12 @@ export default function RegisterPage() {
         </section>
 
         <section className="app-panel-strong mx-auto w-full max-w-xl p-8 text-center sm:p-10">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-primary">
+          {/* <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-primary">
             <PawPrint className="size-7 text-primary-foreground" />
+          </div> */}
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)] shadow-[0_20px_40px_rgba(18,41,79,0.24)]">
+            {/* <PawPrint className="size-7 text-white" /> */}
+            <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
           </div>
           <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">CONOCE KAREY VET</p>
           <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">¿Quieres probar Karey en tu clínica?</h1>

@@ -93,7 +93,7 @@ const routeModuleMap: Array<{ prefix: string; moduleKey: ModuleKey }> = [
 ];
 
 export default function AppShell({ children, initialUser = null }: AppSidebarProps) {
-  const { setTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -442,7 +442,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
               </div>
 
               <div className="flex items-center gap-2">
-                {canUseQuickCreate ? <DropdownMenu>
+                {/* {canUseQuickCreate ? <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button data-tour-id="quick-create" size="sm" className="inline-flex"><Plus className="h-4 w-4" />Nuevo</Button>
                   </DropdownMenuTrigger>
@@ -450,7 +450,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                     {currentUser?.access.actions.clients.create ? <DropdownMenuItem asChild><Link href="/clients?action=new"><User className="h-4 w-4" /> Cliente</Link></DropdownMenuItem> : null}
                     {currentUser?.access.actions.invoices.create ? <DropdownMenuItem asChild><Link href="/invoices/new"><FileText className="h-4 w-4" /> Factura</Link></DropdownMenuItem> : null}
                   </DropdownMenuContent>
-                </DropdownMenu> : null}
+                </DropdownMenu> : null} */}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -483,26 +483,16 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                 </DropdownMenu>
                 <NotificationBell />
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <Sun className="h-[1.1rem] w-[1.1rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-                      <Moon className="absolute h-[1.1rem] w-[1.1rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-                      <span className="sr-only">Cambiar tema</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setTheme("light")}>
-                      <Sun className="h-4 w-4" />
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setTheme("dark")}>
-                      <Moon className="h-4 w-4" />
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setTheme("system")}>
-                      <Monitor className="h-4 w-4" />
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                >
+                  <Sun className="h-[1.1rem] w-[1.1rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+                  <Moon className="absolute h-[1.1rem] w-[1.1rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+                  <span className="sr-only">Cambiar tema</span>
+                </Button>
+
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Mail, PawPrint, Sparkles, MoonStar } from "lucide-react";
+import { LoaderCircle, Mail, PawPrint, Unplug, Turtle, Users } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
@@ -123,8 +123,8 @@ export default function LoginPage() {
           <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(13,148,136,0.16),transparent_50%)]" />
           <div className="relative">
             <div className="app-kicker mb-4">
-              <Sparkles className="size-3.5" />
-              Karey Vet Suite
+              {/* <PawPrint className="size-3.5" /> */}
+              Karey Vet
             </div>
             <h1 className="app-heading max-w-xl text-5xl leading-[1.05]">Todo lo que pasa en tu clínica, en un solo lugar.</h1>
             <p className="mt-5 max-w-xl text-base leading-8 text-muted-foreground">
@@ -139,12 +139,12 @@ export default function LoginPage() {
               <p className="mt-1 text-sm text-muted-foreground">Consulta rápidamente lo que necesita tu atención.</p>
             </div>
             <div className="app-panel-muted p-4">
-              <MoonStar className="mb-3 size-5 text-(--brand-gold)" />
+              <Unplug className="mb-3 size-5 text-(--brand-gold)" />
               <p className="text-sm font-extrabold text-foreground">Todo conectado</p>
               <p className="mt-1 text-sm text-muted-foreground">Pacientes, citas, servicios y pagos siempre a mano.</p>
             </div>
             <div className="app-panel-muted p-4">
-              <Sparkles className="mb-3 size-5 text-primary" />
+              <Users className="mb-3 size-5 text-primary" />
               <p className="text-sm font-extrabold text-foreground">Hecho para tu equipo</p>
               <p className="mt-1 text-sm text-muted-foreground">Una forma sencilla de trabajar juntos cada día.</p>
             </div>
@@ -163,7 +163,7 @@ export default function LoginPage() {
             <p className="mt-3 text-muted-foreground">Tu clínica te espera. Continúa donde lo dejaste.</p>
           </div>
 
-          <button type="button" onClick={onGoogle} className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-border/80 bg-background/70 transition hover:bg-background">
+          {/* <button type="button" onClick={onGoogle} className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-border/80 bg-background/70 transition hover:bg-background">
             <span className="text-lg">G</span>
             <span className="font-semibold text-foreground">Continuar con Google</span>
           </button>
@@ -172,7 +172,7 @@ export default function LoginPage() {
             <div className="h-px flex-1 bg-border" />
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">o</span>
             <div className="h-px flex-1 bg-border" />
-          </div>
+          </div> */}
 
           {err && <div className="mb-4 rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-500">{err}</div>}
 

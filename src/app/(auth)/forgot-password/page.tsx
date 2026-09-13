@@ -6,6 +6,7 @@ import { ArrowLeft, Mail, PawPrint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { z } from "zod";
+import Image from "next/image";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -52,9 +53,13 @@ export default function ForgotPasswordPage() {
     return (
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-xl items-center px-4">
         <div className="app-panel-strong w-full p-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)]">
+          {/* <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)]">
             <PawPrint className="size-6 text-white" />
-          </div>
+          </div> */}
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)] shadow-[0_20px_40px_rgba(18,41,79,0.24)]">
+                        {/* <PawPrint className="size-7 text-white" /> */}
+                        <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
+                      </div>
           <h1 className="font-display text-3xl font-semibold">Revisa tu correo</h1>
           <p className="mt-3 text-sm text-muted-foreground">
             Si ese correo existe en Karey Vet, te enviamos un enlace temporal para
@@ -71,9 +76,14 @@ export default function ForgotPasswordPage() {
   return (
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-xl items-center px-4">
       <form onSubmit={onSubmit} className="app-panel-strong w-full space-y-5 p-8">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)]">
+        {/* <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)]">
           <PawPrint className="size-6 text-white" />
-        </div>
+        </div> */}
+
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)] shadow-[0_20px_40px_rgba(18,41,79,0.24)]">
+              {/* <PawPrint className="size-7 text-white" /> */}
+              <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
+            </div>
 
         <div className="text-center">
           <h1 className="font-display text-3xl font-semibold">Olvidé mi contraseña</h1>

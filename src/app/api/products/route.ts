@@ -86,7 +86,8 @@ export async function POST(req: Request) {
       expirationDate: input.expirationDate ? parse(input.expirationDate, "yyyy-MM-dd", new Date()) : null,
       isActive: input.isActive,
       description: input.description ?? null,
-      requiresPrescription: input.requiresPrescription,
+      // Reserved for future veterinary prescription workflow.
+      requiresPrescription: false,
       },
     select: {
       id: true,

@@ -17,6 +17,7 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import { AppAlert } from "@/components/shared/AppAlert";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
 import { apiCreateService, apiDeleteService, apiListServices, apiUpdateService, type ServiceRow } from "@/lib/api/services";
+import { toMoney } from "@/lib/utility";
 
 const formCategories = ["Consulta", "Cirugia", "Vacunacion", "Laboratorio", "Imagen", "Estetica", "Hospitalizacion", "Emergencia", "Otro"];
 
@@ -127,7 +128,7 @@ export default function ServicesPage() {
         accessorKey: "price",
         cell: (service) => (
           <span className="font-medium text-foreground">
-            {money(service.price)}
+            {toMoney(service.price)}
           </span>
         ),
       },
@@ -205,7 +206,7 @@ export default function ServicesPage() {
           },
           {
             label: "Precio medio",
-            value: money(averagePrice),
+            value: toMoney(averagePrice),
             hint: "Referencia rapida",
           },
         ]}

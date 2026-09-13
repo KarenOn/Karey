@@ -29,6 +29,7 @@ import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
 import type { PetSpecies } from "@/types/common";
 import SearchableSelect from "@/components/shared/SearchableSelect";
 import PhoneInput from "@/components/shared/PhoneInput";
+import { getServiceDuration } from "@/lib/appointment-helpers";
 
 type TodayTurnStatus =
   | "WAITING"
@@ -353,7 +354,7 @@ export default function NewTurnModal({
                 petName: createForm.petName.trim(),
                 species: createForm.species,
               }),
-          estimatedDuration: selectedService.durationMins ?? 60,
+          estimatedDuration: getServiceDuration(selectedService.durationMins),
           notes: notes.trim() || null,
           service: mapServiceToTurnType(selectedService),
           serviceName: selectedService.name,
@@ -504,7 +505,7 @@ export default function NewTurnModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="clientPhone">Telefono (opcional)</Label>
+                  <Label htmlFor="clientPhone">Teléfono (opcional)</Label>
                   <PhoneInput
                     id="clientPhone"
                     onChange={(event) =>
@@ -588,7 +589,7 @@ export default function NewTurnModal({
                   </p>
                   <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Clock3 className="h-4 w-4 text-muted-foreground" />
-                    {selectedService?.durationMins ?? 60} min
+                    {getServiceDuration(selectedService?.durationMins)} min
                   </p>
                 </div>
 
@@ -647,7 +648,7 @@ export default function NewTurnModal({
                   <p className="text-xs text-muted-foreground">
                     {mode === "search"
                       ? selectedResult?.ownerPhone || "Sin telefono"
-                      : createForm.phone || "Telefono no registrado"}
+                      : createForm.phone || "Teléfono no registrado"}
                   </p>
                 </div>
               </div>

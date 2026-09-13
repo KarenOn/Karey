@@ -23,6 +23,7 @@ type SearchableSelectProps = {
   options: SearchableSelectOption[];
   placeholder?: string;
   searchPlaceholder?: string;
+  onSearchChange?: (value: string) => void;
   emptyMessage?: string;
   disabled?: boolean;
   loading?: boolean;
@@ -43,6 +44,7 @@ export default function SearchableSelect({
   options,
   placeholder = "Seleccionar...",
   searchPlaceholder = "Buscar...",
+  onSearchChange,
   emptyMessage = "No encontramos resultados.",
   disabled = false,
   loading = false,
@@ -99,7 +101,10 @@ export default function SearchableSelect({
       <PopoverContent align="start" className={cn("w-(--radix-popover-trigger-width) p-0", className)}>
         <Command shouldFilter>
           <CommandInput
-            onValueChange={setQuery}
+             onValueChange={(value) => {
+               setQuery(value);
+               onSearchChange?.(value);
+             }}
             placeholder={searchPlaceholder}
             value={query}
           />

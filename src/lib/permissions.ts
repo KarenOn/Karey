@@ -15,7 +15,6 @@ export type PermissionCatalogGroup = {
 
 /** Catálogo único usado por la pantalla de roles y por la documentación del ACL. */
 export const PERMISSION_CATALOG: readonly PermissionCatalogGroup[] = [
-  { module: "dashboard", label: "Resumen", actions: ["read"] },
   { module: "clinic", label: "Clínica", actions: ["read", "update"] },
   { module: "employees", label: "Empleados", actions: ["read", "invite", "create", "changeRole", "activate", "deactivate", "resendInvite"] },
   { module: "roles", label: "Roles y permisos", actions: ["read", "manage", "create", "update", "delete"] },
@@ -166,7 +165,6 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   const allow = (key: string, fallbacks: string[] = []) =>
     elevated || hasAnyPermission(perms, [key, ...fallbacks]);
 
-  const dashboardRead = allow("dashboard.read", ["today.read"]);
   const clinicRead = allow("clinic.read");
   const clinicUpdate = allow("clinic.update");
 
@@ -260,7 +258,7 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   // La visibilidad de un módulo representa su permiso de lectura, no cualquier
   // acción relacionada ni un fallback de otro módulo.
   const modules = {
-    dashboard: dashboardRead,
+    dashboard: true,
     clients: clientsRead,
     pets: petsRead,
     today: todayRead,

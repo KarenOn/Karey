@@ -18,7 +18,6 @@ import {
   FileText,
   Package,
   Plus,
-  ShieldAlert,
   Trash2,
   Waypoints,
 } from "lucide-react";
@@ -37,7 +36,7 @@ import type { ProductCreateInput } from "@/lib/validators/product";
 import type { StockMovementType } from "@/types/common";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
-import { formatCurrency } from "@/lib/utility";
+import { formatCurrency, toMoney } from "@/lib/utility";
 
 type ProductRow = {
   id: number;
@@ -52,7 +51,6 @@ type ProductRow = {
   minStock: number;
   expirationDate: string | null;
   description: string | null;
-  requiresPrescription?: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -70,7 +68,6 @@ type ProductFormState = {
   minStock: string | number;
   expirationDate: string;
   description: string;
-  requiresPrescription: boolean;
   isActive: boolean;
 };
 
@@ -101,7 +98,6 @@ const emptyProductForm: ProductFormState = {
   minStock: 5,
   expirationDate: "",
   description: "",
-  requiresPrescription: false,
   isActive: true,
 };
 
@@ -117,6 +113,7 @@ const emptyMovementForm: MovementFormState = {
 const categoryOptions = [
   { value: "Medicamento", label: "Medicamento" },
   { value: "Vacuna", label: "Vacuna" },
+  { value: "Insumo", label: "Insumo" },
   { value: "Alimento", label: "Alimento" },
   { value: "Accesorio", label: "Accesorio" },
   { value: "Higiene", label: "Higiene" },
@@ -128,6 +125,7 @@ const categoryOptions = [
 const categoryColors: Record<string, string> = {
   Medicamento: "bg-violet-50 text-violet-700 border-violet-200",
   Vacuna: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
+  Insumo: "bg-blue-50 text-blue-700 border-blue-200",
   Alimento: "bg-amber-50 text-amber-700 border-amber-200",
   Accesorio: "bg-sky-50 text-sky-700 border-sky-200",
   Higiene: "bg-cyan-50 text-cyan-700 border-cyan-200",
@@ -285,7 +283,10 @@ export default function InventoryPage() {
     });
   }, [movements, movementTypeFilter, movementProductFilter]);
 
-  const productCategories = useMemo(() => Array.from(new Set(products.map((product) => product.category || "Otro"))).sort((a, b) => a.localeCompare(b, "es")), [products]);
+  const productCategories = useMemo(
+    () => Array.from(new Set([...categoryOptions.map((option) => option.value), ...products.map((product) => product.category || "Otro")])).sort((a, b) => a.localeCompare(b, "es")),
+    [products],
+  );
 
   const productOptions = useMemo(() => {
     return [...products]
@@ -329,7 +330,6 @@ export default function InventoryPage() {
       minStock: product.minStock,
       expirationDate: product.expirationDate?.slice(0, 10) ?? "",
       description: product.description ?? "",
-      requiresPrescription: !!product.requiresPrescription,
       isActive: !!product.isActive,
     });
     setProductModalOpen(true);
@@ -374,7 +374,6 @@ export default function InventoryPage() {
       minStock: toNumber(productForm.minStock),
       expirationDate: productForm.expirationDate || null,
       description: productForm.description.trim() || null,
-      requiresPrescription: !!productForm.requiresPrescription,
       isActive: !!productForm.isActive,
     };
 
@@ -493,12 +492,6 @@ export default function InventoryPage() {
             <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
               {row.sku ? <span>SKU: {row.sku}</span> : null}
               {row.unit ? <span>Unidad: {row.unit}</span> : null}
-              {row.requiresPrescription ? (
-                <span className="inline-flex items-center gap-1 text-amber-700">
-                  <ShieldAlert className="h-3.5 w-3.5" />
-                  Requiere receta
-                </span>
-              ) : null}
             </div>
             {row.description ? (
               <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
@@ -534,8 +527,8 @@ export default function InventoryPage() {
       header: "Precio",
       cell: (row: ProductRow) => (
         <div>
-          <div className="font-semibold text-foreground">{money(toNumber(row.price))}</div>
-          <div className="text-xs text-muted-foreground">Costo: {row.cost == null ? "-" : money(toNumber(row.cost))}</div>
+          <div className="font-semibold text-foreground">{toMoney(toNumber(row.price))}</div>
+          <div className="text-xs text-muted-foreground">Costo: {row.cost == null ? "-" : toMoney(toNumber(row.cost))}</div>
         </div>
       ),
     },
@@ -741,7 +734,6 @@ export default function InventoryPage() {
           <FormField label="Fecha de vencimiento" name="expirationDate" type="date" value={productForm.expirationDate} onChange={handleProductChange} />
           <FormField label="Control de stock" name="trackStock" type="switch" value={productForm.trackStock} onChange={handleProductChange} placeholder="Activar seguimiento de inventario" />
           <FormField label="Activo" name="isActive" type="switch" value={productForm.isActive} onChange={handleProductChange} placeholder="Disponible para venta y uso" />
-          <FormField label="Requiere receta" name="requiresPrescription" type="switch" value={productForm.requiresPrescription} onChange={handleProductChange} placeholder="Solicitar receta medica" />
           <div className="sm:col-span-2">
             <FormField label="Descripcion" name="description" type="textarea" value={productForm.description} onChange={handleProductChange} placeholder="Notas o detalles del producto" />
           </div>

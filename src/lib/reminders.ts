@@ -795,7 +795,7 @@ export async function processQueuedNotifications(limit = 50) {
   const dueNotifications = await prisma.notification.findMany({
     where: {
       OR: [{ scheduledAt: null }, { scheduledAt: { lte: now } }],
-      status: NotificationStatus.QUEUED,
+      status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] },
     },
     include: {
       recipients: {
@@ -811,11 +811,35 @@ export async function processQueuedNotifications(limit = 50) {
   let failed = 0;
 
   for (const notification of dueNotifications) {
+    const claimed = await prisma.notification.updateMany({
+      where: {
+        id: notification.id,
+        status: { in: [NotificationStatus.QUEUED, NotificationStatus.FAILED] },
+      },
+      data: { status: NotificationStatus.PROCESSING },
+    });
+
+    if (!claimed.count) {
+      continue;
+    }
+
+    const pendingRecipients = notification.recipients.filter(
+      (recipient) => recipient.status !== NotificationStatus.SENT,
+    );
+
+    if (!pendingRecipients.length) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: { status: NotificationStatus.SENT },
+      });
+      continue;
+    }
+
     processed += 1;
     let anySuccess = false;
     const errors: string[] = [];
 
-    for (const recipient of notification.recipients) {
+    for (const recipient of pendingRecipients) {
       try {
         await deliverNotification({
           channel: notification.channel,

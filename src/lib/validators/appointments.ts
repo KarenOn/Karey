@@ -43,6 +43,7 @@ const AppointmentWritableSchema = z.object({
   clientId: z.coerce.number().int().positive().optional(),
   petId: z.coerce.number().int().positive().optional(),
   type: AppointmentTypeSchema.optional(),
+  serviceId: z.coerce.number().int().positive().nullable().optional(),
   startAt: DateLike.optional(),
   endAt: NullableDateLike.optional(),
   status: AppointmentStatusSchema.optional(),
@@ -55,6 +56,7 @@ export const AppointmentCreateSchema = AppointmentWritableSchema.extend({
   petId: z.coerce.number().int().positive(),
   startAt: DateLike,
   type: AppointmentTypeSchema.default(AppointmentType.CONSULTATION),
+  serviceId: z.coerce.number().int().positive(),
 }).superRefine((data, ctx) => {
   if (data.startAt <= new Date()) {
     ctx.addIssue({ code: "custom", message: "No puedes agendar una cita en un horario que ya pasó.", path: ["startAt"] });

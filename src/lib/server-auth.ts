@@ -69,7 +69,7 @@ export async function requireClinicPermissions(permissions: PermissionKey[]) {
     return { session, clinicId: member.clinicId, member };
   }
 
-  const ok = permissions.some((permission) => hasPermission(member.role.permissions, permission));
+  const ok = permissions.length === 0 || permissions.some((permission) => hasPermission(member.role.permissions, permission));
   if (!ok) throw new Error("FORBIDDEN");
 
   return { session, clinicId: member.clinicId, member };

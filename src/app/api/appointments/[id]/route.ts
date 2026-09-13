@@ -8,7 +8,7 @@ import {
 } from "@/lib/reminders";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentUpdateSchema } from "@/lib/validators/appointments";
-import { getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
+import { calculateAppointmentEnd, getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -24,6 +24,7 @@ const appointmentInclude = {
   vet: { select: { id: true, name: true, email: true } },
   visit: { select: { id: true, _count: { select: { vaccinations: true } } } },
   encounterItems: { select: { id: true } },
+  service: { select: { id: true, name: true, durationMins: true } },
 } as const;
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 
@@ -80,6 +81,7 @@ async function findOverlappingAppointment(params: {
       pet: { select: { name: true } },
       client: { select: { fullName: true } },
       vet: { select: { name: true } },
+      service: { select: { durationMins: true } },
     },
     orderBy: { startAt: "asc" },
   });
@@ -192,6 +194,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       startAt: true,
       endAt: true,
       vetId: true,
+      serviceId: true,
       status: true,
     },
   });
@@ -205,7 +208,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ error: "No puedes reprogramar una cita a un horario que ya pasó." }, { status: 422 });
   }
   const isTerminal = ([AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] as AppointmentStatus[]).includes(current.status);
-  const changesSchedule = input.startAt !== undefined || input.endAt !== undefined || input.petId !== undefined || input.clientId !== undefined || input.vetId !== undefined;
+  const changesSchedule = input.startAt !== undefined || input.endAt !== undefined || input.petId !== undefined || input.clientId !== undefined || input.vetId !== undefined || input.serviceId !== undefined;
   if (isTerminal && (changesSchedule || input.status !== undefined && input.status !== current.status)) {
     return NextResponse.json({ error: "Una cita histórica no puede modificarse. Crea una nueva ocurrencia." }, { status: 409 });
   }
@@ -260,10 +263,24 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
   }
 
+  const nextServiceId = input.serviceId === undefined ? current.serviceId : input.serviceId;
+  const service = nextServiceId
+    ? await prisma.service.findFirst({
+        where: { id: nextServiceId, clinicId, isActive: true },
+        select: { id: true, durationMins: true },
+      })
+    : null;
+  if (input.serviceId !== undefined && nextServiceId && !service) {
+    return NextResponse.json({ error: "Servicio inválido o inactivo" }, { status: 404 });
+  }
+
   const nextStartAt = input.startAt ?? current.startAt;
-  const nextEndAt = input.endAt === undefined
-    ? current.endAt ?? addMinutes(nextStartAt, DEFAULT_APPOINTMENT_DURATION_MINUTES)
-    : input.endAt ?? addMinutes(nextStartAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
+  const derivesFromService = nextServiceId !== null && (input.serviceId !== undefined || input.startAt !== undefined);
+  const nextEndAt = derivesFromService
+    ? calculateAppointmentEnd(nextStartAt, service?.durationMins)
+    : input.endAt === undefined
+      ? current.endAt ?? addMinutes(nextStartAt, DEFAULT_APPOINTMENT_DURATION_MINUTES)
+      : input.endAt ?? addMinutes(nextStartAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
 
   if (nextEndAt && nextEndAt <= nextStartAt) {
     return NextResponse.json(
@@ -307,6 +324,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     where: { id },
     data: {
       ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.serviceId !== undefined ? { serviceId: input.serviceId } : {}),
       ...(input.startAt !== undefined ? { startAt: input.startAt } : {}),
       ...(input.endAt !== undefined || input.startAt !== undefined ? { endAt: nextEndAt } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
@@ -315,6 +333,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       ...(input.startAt !== undefined ||
       input.endAt !== undefined ||
       input.type !== undefined ||
+      input.serviceId !== undefined ||
       input.petId !== undefined ||
       input.clientId !== undefined
         ? {

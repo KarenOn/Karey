@@ -8,7 +8,7 @@ import { AppointmentCreateSchema } from "@/lib/validators/appointments";
 import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 import { hasPermission, isElevatedClinicRole } from "@/lib/permissions";
 import { notifyAppointmentAssigned } from "@/lib/in-app-notifications";
-import { getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
+import { calculateAppointmentEnd, getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -24,6 +24,7 @@ const appointmentInclude = {
   vet: { select: { id: true, name: true, email: true } },
   visit: { select: { id: true, _count: { select: { vaccinations: true } } } },
   encounterItems: { select: { id: true } },
+  service: { select: { id: true, name: true, durationMins: true } },
 } as const;
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 
@@ -91,6 +92,7 @@ async function findOverlappingAppointment(params: {
       pet: { select: { name: true } },
       client: { select: { fullName: true } },
       vet: { select: { name: true } },
+      service: { select: { durationMins: true } },
     },
     orderBy: { startAt: "asc" },
   });
@@ -297,20 +299,6 @@ export async function POST(req: Request) {
   if (input.startAt <= new Date()) {
     return NextResponse.json({ error: "No puedes agendar una cita en un horario que ya pasó." }, { status: 422 });
   }
-  const effectiveEndAt = input.endAt ?? addMinutes(input.startAt, DEFAULT_APPOINTMENT_DURATION_MINUTES);
-  if (effectiveEndAt <= input.startAt) {
-    return NextResponse.json({ error: "La hora final debe ser posterior a la inicial" }, { status: 422 });
-  }
-
-  const scheduleError = await validateAppointmentSchedule({
-    clinicId,
-    startAt: input.startAt,
-    endAt: effectiveEndAt,
-  });
-  if (scheduleError) {
-    return scheduleError;
-  }
-
   const validated = await validateAppointmentRelations({
     clinicId,
     petId: input.petId,
@@ -321,6 +309,18 @@ export async function POST(req: Request) {
   if ("error" in validated) {
     return validated.error;
   }
+
+  const service = await prisma.service.findFirst({
+    where: { id: input.serviceId, clinicId, isActive: true },
+    select: { id: true, durationMins: true },
+  });
+  if (!service) {
+    return NextResponse.json({ error: "Servicio inválido o inactivo" }, { status: 404 });
+  }
+
+  const effectiveEndAt = calculateAppointmentEnd(input.startAt, service.durationMins);
+  const scheduleError = await validateAppointmentSchedule({ clinicId, startAt: input.startAt, endAt: effectiveEndAt });
+  if (scheduleError) return scheduleError;
 
   const overlap = await findOverlappingAppointment({
     clinicId,
@@ -349,6 +349,7 @@ export async function POST(req: Request) {
       clientId: validated.data.clientId,
       petId: validated.data.petId,
       type: input.type,
+      serviceId: service.id,
       startAt: input.startAt,
       endAt: effectiveEndAt,
       status: input.status ?? AppointmentStatus.SCHEDULED,

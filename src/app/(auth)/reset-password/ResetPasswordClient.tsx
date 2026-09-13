@@ -6,6 +6,7 @@ import { ArrowLeft, KeyRound, Lock, PawPrint } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import PasswordInput from "@/components/shared/PasswordInput";
+import Image from "next/image";
 
 type ResetPasswordClientProps = {
   token: string;
@@ -99,8 +100,9 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
   return (
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-xl items-center px-4">
       <form onSubmit={onSubmit} className="app-panel-strong w-full space-y-5 p-8">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2d3a66_0%,#0d9488_100%)]">
-          <PawPrint className="size-6 text-white" />
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#0d9488_0%,#2d3a66_100%)] shadow-[0_20px_40px_rgba(18,41,79,0.24)]">
+          {/* <PawPrint className="size-7 text-white" /> */}
+          <Image src="/icon1.png" alt="Karey Vet Logo" width={50} height={50} />
         </div>
 
         <div className="text-center">

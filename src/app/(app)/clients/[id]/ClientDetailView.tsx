@@ -25,6 +25,7 @@ import { ClientFormSchema, zodFieldErrors, type ClientFormValues } from "@/lib/v
 import type { FormFieldChangeEvent } from "@/components/shared/FormField";
 import { toast } from "sonner";
 import BackButton from "@/components/shared/BackButton";
+import { formatCurrency } from "@/lib/utility";
 
 type PetSpecies = "DOG" | "CAT" | "BIRD" | "RABBIT" | "OTHER";
 
@@ -201,7 +202,7 @@ export default function ClientDetailView({
           </div>
 
           <div className="space-y-4">
-            <InfoRow icon={Phone} label="Telefono" value={clientData.phone ?? "-"} />
+            <InfoRow icon={Phone} label="Teléfono" value={clientData.phone ?? "-"} />
             {clientData.email ? <InfoRow icon={Mail} label="Email" value={clientData.email} /> : null}
             {clientData.address ? <InfoRow icon={MapPin} label="Dirección" value={clientData.address} /> : null}
           </div>
@@ -218,7 +219,7 @@ export default function ClientDetailView({
             <MiniStat label="Citas" value={appointments.length} tone="text-[var(--brand-navy)] dark:text-blue-300" />
             <MiniStat
               label="Total"
-              value={`$${totalSpent.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`}
+              value={formatCurrency(totalSpent)}
               tone="text-emerald-600 dark:text-emerald-300"
             />
           </div>
@@ -321,7 +322,7 @@ export default function ClientDetailView({
 
                     <div className="text-right">
                       <p className="font-bold text-foreground">
-                        ${inv.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        {formatCurrency(inv.total)}
                       </p>
                       <Badge className={invoiceStatusColors[inv.status]}>
                         {invoiceStatusLabel[inv.status]}

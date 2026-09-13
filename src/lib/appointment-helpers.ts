@@ -13,13 +13,23 @@ export function invalidateAppointmentSurfaces(detail?: { appointmentId?: number;
  * Handles missing endAt by using duration
  */
 export function getAppointmentEnd(
-  appointment: { startAt: string | Date; endAt?: string | Date | null },
-  defaultDurationMinutes = 30
+  appointment: { startAt: string | Date; endAt?: string | Date | null; service?: { durationMins: number | null } | null },
+  defaultDurationMinutes = DEFAULT_APPOINTMENT_DURATION_MINUTES
 ): Date | null {
   const start = appointment.startAt instanceof Date ? appointment.startAt : safeDate(appointment.startAt);
   if (!start) return null;
   const end = appointment.endAt instanceof Date ? appointment.endAt : appointment.endAt ? safeDate(appointment.endAt) : null;
-  return end ?? utilAddMinutes(start, defaultDurationMinutes);
+  return end ?? utilAddMinutes(start, getServiceDuration(appointment.service?.durationMins ?? defaultDurationMinutes));
+}
+
+export const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
+
+export function getServiceDuration(durationMins: number | null | undefined) {
+  return durationMins && durationMins > 0 ? durationMins : DEFAULT_APPOINTMENT_DURATION_MINUTES;
+}
+
+export function calculateAppointmentEnd(startAt: Date, durationMins: number | null | undefined) {
+  return new Date(startAt.getTime() + getServiceDuration(durationMins) * 60_000);
 }
 
 /**

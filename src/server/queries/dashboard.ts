@@ -142,7 +142,26 @@ import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { startOfDay, endOfDay } from "@/lib/utility";
 import { syncInventoryNotifications } from "@/lib/in-app-notifications";
 
-export async function getDashboardData(clinicId: number, canViewInventory = true) {
+export type DashboardVisibility = {
+  canViewClients?: boolean;
+  canViewPatients?: boolean;
+  canViewAppointments?: boolean;
+  canViewVaccines?: boolean;
+  canViewInventory?: boolean;
+  canViewInvoices?: boolean;
+  canViewRevenue?: boolean;
+};
+
+export async function getDashboardData(clinicId: number, visibility: DashboardVisibility = {}) {
+  const {
+    canViewClients = true,
+    canViewPatients = true,
+    canViewAppointments = true,
+    canViewVaccines = true,
+    canViewInventory = true,
+    canViewInvoices = true,
+    canViewRevenue = true,
+  } = visibility;
   // ✅ Single clinic (por ahora)
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
@@ -335,7 +354,7 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
   ]);
 
   // ✅ Mapeo: Upcoming Appointments (para tus componentes actuales)
-  const upcomingAppointments = upcomingAppointmentsDb.map((a) => ({
+  const upcomingAppointments = canViewAppointments ? upcomingAppointmentsDb.map((a) => ({
     id: a.id,
     date: format(a.startAt, "yyyy-MM-dd"),
     time: format(a.startAt, "HH:mm"),
@@ -344,12 +363,12 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
     notes: a.notes ?? "",
     patient_id: a.petId,
     client_id: a.clientId,
-    patient_name: a.pet?.name ?? "",
-    client_name: a.client?.fullName ?? a.pet?.client?.fullName ?? "",
-  }));
+    patient_name: canViewPatients ? a.pet?.name ?? "" : "",
+    client_name: canViewClients ? a.client?.fullName ?? a.pet?.client?.fullName ?? "" : "",
+  })) : [];
 
   // ✅ Facturas recientes (shape típico para widget)
-  const invoices = recentInvoicesDb.map((i) => ({
+  const invoices = canViewInvoices ? recentInvoicesDb.map((i) => ({
     id: i.id,
     number: i.number,
     status: i.status,
@@ -357,7 +376,7 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
     total: Number(i.total ?? 0),
     client_id: i.clientId,
     client_name: i.client?.fullName ?? "",
-  }));
+  })) : [];
 
   // ✅ Stock bajo
   const products = lowStockProductsDb.map((p) => ({
@@ -377,7 +396,7 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
   }));
 
   // ✅ Vacunas próximas
-  const vaccinations = upcomingVaccinationsDb.map((v) => ({
+  const vaccinations = canViewVaccines && canViewPatients ? upcomingVaccinationsDb.map((v) => ({
     id: v.id,
     pet_id: v.petId,
     pet_name: v.pet?.name ?? "",
@@ -385,9 +404,9 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
     vaccine_name: v.vaccine?.name ?? "",
     next_due_at: v.nextDueAt ? format(v.nextDueAt, "yyyy-MM-dd") : null,
     applied_at: v.appliedAt ? format(v.appliedAt, "yyyy-MM-dd") : null,
-  }));
+  })) : [];
 
-  const monthlyRevenue = Number(monthlyRevenueAgg._sum.amount ?? 0);
+  const monthlyRevenue = canViewRevenue ? Number(monthlyRevenueAgg._sum.amount ?? 0) : 0;
 
   const [scheduleCount, serviceCount, memberCount, inviteCount, appointmentCount] = await Promise.all([
     prisma.clinicSchedule.count({ where: { clinicId: clinic.id } }),
@@ -402,20 +421,20 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
   return {
     clinicName: clinic.name ?? "Tu clínica",
 
-    clients: clientsDb.map((c) => ({
+    clients: canViewClients ? clientsDb.map((c) => ({
       id: c.id,
       name: c.fullName,
       phone: c.phone,
       email: c.email,
-    })),
+    })) : [],
 
-    patients: patientsDb.map((p) => ({
+    patients: canViewPatients ? patientsDb.map((p) => ({
       id: p.id,
       name: p.name,
       client_id: p.clientId,
       species: p.species,
       breed: p.breed,
-    })),
+    })) : [],
 
     // para widgets
     appointments: upcomingAppointments,
@@ -425,7 +444,7 @@ export async function getDashboardData(clinicId: number, canViewInventory = true
     expiringProducts: canViewInventory ? expiringProducts : [],
     vaccinations,
 
-    todayAppointmentsCount,
+    todayAppointmentsCount: canViewAppointments ? todayAppointmentsCount : 0,
     monthlyRevenue,
     setupChecklist: {
       clinic: Boolean(clinic.name.trim() && clinic.owner?.trim() && (clinic.email?.trim() || clinic.phone?.trim() || clinic.mobile?.trim())),
