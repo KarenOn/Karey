@@ -275,12 +275,11 @@ export default function ProfilePage() {
               <div className="absolute -bottom-2 -right-2">
                 <SignedFileUploader
                   accept="image/*"
-                  buttonLabel=""
                   className="h-8 w-8 rounded-full bg-primary p-0 text-primary-foreground"
                   disabled={!isEditing || saving}
                   maxSizeBytes={2 * 1024 * 1024}
                   onError={(message) => setErr(message)}
-                  onFileSelected={handleLogoSelected}
+                  onFileSelected={() => handleLogoSelected}
                 />
               </div>
             )}
@@ -385,11 +384,11 @@ export default function ProfilePage() {
                       <div className="flex gap-2">
                         <SignedFileUploader
                           accept="image/*"
-                          buttonLabel="Subir logo"
+                          // buttonLabel="Subir logo"
                           disabled={saving}
                           maxSizeBytes={2 * 1024 * 1024}
                           onError={(message) => setErr(message)}
-                          onFileSelected={handleLogoSelected}
+                          onFileSelected={() => handleLogoSelected}
                         />
                         <Button
                           type="button"

@@ -328,7 +328,7 @@ export default function UserProfilePage() {
                 <div className="absolute -bottom-3 -right-3 flex gap-2">
                   <SignedFileUploader
                     accept="image/*"
-                    buttonLabel=""
+                    // buttonLabel=""
                     className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground dark:bg-primary/80"
                     disabled={saving}
                     maxSizeBytes={2 * 1024 * 1024}
@@ -340,7 +340,7 @@ export default function UserProfilePage() {
                       });
                       setAlertOpen(true);
                     }}
-                    onFileSelected={handleAvatarSelected}
+                    onFileSelected={() => handleAvatarSelected}
                   />
                   <Button
                     className="h-10 w-10 rounded-full p-0 dark:bg-destructive/80"
