@@ -10,12 +10,12 @@ import { storeGeneratedReport } from "@/lib/storage";
 type JobInput = { petIds: number[]; clientId?: number; range: ClinicalReportRange };
 
 export async function processClinicalReportJobs(limit = 2) {
-  await prisma.clinicalReportJob.updateMany({ where: { status: ClinicalReportJobStatus.PROCESSING, updatedAt: { lt: new Date(Date.now() - 10 * 60_000) } }, data: { status: ClinicalReportJobStatus.PENDING, error: "Reintentando trabajo interrumpido" } });
+  await prisma.clinicalReportJob.updateMany({ where: { status: ClinicalReportJobStatus.PROCESSING, updatedAt: { lt: new Date(Date.now() - 10 * 60_000) } }, data: { status: ClinicalReportJobStatus.PENDING, error: "Reintentando trabajo interrumpido", storageRef: null, completedAt: null } });
   let processed = 0;
   for (let index = 0; index < limit; index += 1) {
     const pending = await prisma.clinicalReportJob.findFirst({ where: { status: ClinicalReportJobStatus.PENDING }, orderBy: { createdAt: "asc" } });
     if (!pending) break;
-    const claimed = await prisma.clinicalReportJob.updateMany({ where: { id: pending.id, status: ClinicalReportJobStatus.PENDING }, data: { status: ClinicalReportJobStatus.PROCESSING, error: null } });
+    const claimed = await prisma.clinicalReportJob.updateMany({ where: { id: pending.id, status: ClinicalReportJobStatus.PENDING }, data: { status: ClinicalReportJobStatus.PROCESSING, error: null, storageRef: null, completedAt: null } });
     if (!claimed.count) continue;
     processed += 1;
     await processOne(pending.id).catch(() => undefined);
