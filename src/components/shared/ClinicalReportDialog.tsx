@@ -27,6 +27,7 @@ export default function ClinicalReportDialog({ open, onClose, pets, clients, ini
   const [searchedClients, setSearchedClients] = useState<ClientRow[]>([]);
   const [clientLoading, setClientLoading] = useState(false);
   const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
+  const initialPetIdsKey = initialPetIds.join(",");
   const clientOptions = useMemo(() => {
     const options = searchedClients.map((client) => ({ value: String(client.id), label: client.fullName, keywords: [client.phone ?? "", client.email ?? ""] }));
     if (selectedClient && !options.some((option) => option.value === String(selectedClient.id))) {
@@ -37,10 +38,9 @@ export default function ClinicalReportDialog({ open, onClose, pets, clients, ini
   const selectedPets = pets.filter((pet) => selectedIds.includes(pet.id));
 
   useEffect(() => {
-    if (!open) return;
     setSelectedIds([...initialPetIds]);
-    setMode("patients");
-  }, [open, initialPetIds]);
+    if (open) setMode("patients");
+  }, [open, initialPetIds, initialPetIdsKey]);
 
   useEffect(() => {
     if (!open || mode !== "client") return;

@@ -1,9 +1,8 @@
 import "server-only";
 
-import puppeteer from "puppeteer";
 import { ClinicalReportJobStatus, NotificationChannel, NotificationStatus } from "@/generated/prisma/client";
 import { getClinicalReportData, type ClinicalReportRange } from "@/lib/clinical-report";
-import { renderClinicalReportHtml } from "@/lib/print/renderClinicalReportHtml";
+import { renderClinicalReportPdf } from "@/lib/print/renderClinicalReportPdf";
 import { prisma } from "@/lib/prisma";
 import { storeGeneratedReport } from "@/lib/storage";
 
@@ -55,14 +54,7 @@ async function processOne(jobId: number): Promise<boolean> {
     const data = await getClinicalReportData({ clinicId: job.clinicId, ...input });
     stage = "RENDER_PDF";
     logStage(job.id, stage, ClinicalReportJobStatus.PROCESSING);
-    const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
-    let pdf: Uint8Array;
-    try {
-      const page = await browser.newPage();
-      await page.emulateTimezone(data.clinic.timezone);
-      await page.setContent(renderClinicalReportHtml(data), { waitUntil: "networkidle0" });
-      pdf = await page.pdf({ format: "A4", printBackground: true, margin: { top: "15mm", right: "15mm", bottom: "15mm", left: "15mm" } });
-    } finally { await browser.close(); }
+    const pdf = await renderClinicalReportPdf(data);
     const firstName = data.patients[0]?.name ?? "paciente";
     stage = "UPLOAD_S3";
     logStage(job.id, stage, ClinicalReportJobStatus.PROCESSING);

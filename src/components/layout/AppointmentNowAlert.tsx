@@ -63,6 +63,10 @@ export default function AppointmentNowAlert() {
   const noShowToasts = useRef<Set<number>>(new Set());
   async function load() {
     const response = await fetch("/api/appointments?surface=now-alert", { cache: "no-store" });
+    if (response.status === 401) {
+      window.dispatchEvent(new Event("karey:session-expired"));
+      return;
+    }
     if (!response.ok) return;
     const payload = await response.json() as AppointmentNow[] | { appointments: AppointmentNow[]; currentUserIsVet: boolean };
     const data = Array.isArray(payload) ? payload : payload.appointments;

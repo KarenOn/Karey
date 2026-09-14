@@ -26,6 +26,8 @@ export default function LoginPage() {
       setErr("Tu acceso a esta clínica ha sido desactivado. Contacta al administrador de la clínica.");
     } else if (reason === "no-clinic") {
       setErr("Tu usuario no tiene una clínica activa asignada.");
+    } else if (reason === "session-expired") {
+      setErr("Tu sesión expiró. Vuelve a iniciar sesión para continuar.");
     }
   }, []);
 
