@@ -223,7 +223,16 @@ async function validateAppointmentRelations(params: {
 }
 
 export async function GET(req: Request) {
-  const { clinicId, member, session } = await requireClinicPermission("appointments.read");
+  let authContext: Awaited<ReturnType<typeof requireClinicPermission>>;
+  try {
+    authContext = await requireClinicPermission("appointments.read");
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHORIZED") {
+      return NextResponse.json({ error: "Sesión expirada" }, { status: 401 });
+    }
+    throw error;
+  }
+  const { clinicId, member, session } = authContext;
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }

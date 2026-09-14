@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   CircleHelp,
@@ -101,6 +101,19 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
   const [tourOpen, setTourOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUserProfile | null>(initialUser);
   const router = useRouter();
+  const sessionExpiryHandled = useRef(false);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      if (sessionExpiryHandled.current) return;
+      sessionExpiryHandled.current = true;
+      void authClient.signOut().catch(() => undefined);
+      const currentPath = `${window.location.pathname}${window.location.search}`;
+      router.replace(`/login?error=session-expired&callbackUrl=${encodeURIComponent(currentPath)}`);
+    };
+    window.addEventListener("karey:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("karey:session-expired", handleSessionExpired);
+  }, [router]);
 
   const navigation: NavItem[] = useMemo(
     () => [
@@ -196,6 +209,10 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
     async function loadCurrentUser() {
       try {
         const res = await fetch("/api/profile", { cache: "no-store" });
+        if (res.status === 401) {
+          window.dispatchEvent(new Event("karey:session-expired"));
+          return;
+        }
         const data = (await res.json().catch(() => null)) as CurrentUserProfile | null;
 
         if (!mounted || !res.ok || !data) {

@@ -28,6 +28,10 @@ export default function NotificationBell() {
   async function load() {
     try {
       const response = await fetch("/api/notifications", { cache: "no-store" });
+      if (response.status === 401) {
+        window.dispatchEvent(new Event("karey:session-expired"));
+        return;
+      }
       if (!response.ok) return;
       const data = await response.json() as { unreadCount: number; notifications: Item[] };
       if (initialized.current) {
