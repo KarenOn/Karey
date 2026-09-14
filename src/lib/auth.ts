@@ -43,6 +43,9 @@ export const auth = betterAuth({
     },
   },
   session: {
+    // Keep remembered clinic sessions usable for a normal work month.
+    expiresIn: 60 * 60 * 24 * 30,
+    updateAge: 60 * 60 * 24,
     additionalFields: {
       impersonatedBy: {
         type: "string",
