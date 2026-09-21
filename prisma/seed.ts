@@ -285,6 +285,7 @@ const ROLE_DEFINITIONS = [
       vaccines: ["read", "create", "update", "edit"],
       invoices: ["read", "viewDrafts", "create", "update", "edit", "issue", "annul", "sendToBilling", "download", "print", "delete"],
       payments: ["read", "register"],
+      cash: ["read", "open", "operate", "close", "closeAny"],
     },
   },
   {
@@ -308,6 +309,7 @@ const ROLE_DEFINITIONS = [
       vaccines: ["read", "create", "update", "edit"],
       invoices: ["read", "viewDrafts", "create", "update", "edit", "issue", "annul", "sendToBilling", "download", "print"],
       payments: ["read", "register"],
+      cash: ["read", "open", "operate", "close", "closeAny"],
     },
   },
   {
@@ -342,6 +344,7 @@ const ROLE_DEFINITIONS = [
       inventory: ["read"],
       invoices: ["read", "viewDrafts", "create", "sendToBilling", "download", "print"],
       payments: ["read", "register"],
+      cash: ["read", "open", "operate", "close"],
     },
   },
 ];
@@ -364,7 +367,7 @@ const CLINICS: ClinicSeed[] = [
     phone: "+1 809 555 0200",
     email: "centro@kiskeyavet.local",
     address: "Av. Abraham Lincoln 1203, Santo Domingo",
-    currency: "USD",
+    currency: "DOP",
     timezone: "America/Santo_Domingo",
     slogan: "Medicina preventiva, cirugia y grooming en un solo lugar.",
     owner: "Camila Rodriguez",
@@ -1271,7 +1274,7 @@ const CLINICS: ClinicSeed[] = [
     phone: "+1 809 555 0300",
     email: "bellavista@kiskeyavet.local",
     address: "Av. Sarasota 88, Bella Vista, Santo Domingo",
-    currency: "USD",
+    currency: "DOP",
     timezone: "America/Santo_Domingo",
     slogan: "Atencion clinica avanzada, urgencias leves y odontologia veterinaria.",
     owner: "Ricardo Santana",

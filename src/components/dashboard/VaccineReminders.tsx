@@ -3,7 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Badge } from "../ui/badge";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { format, parse, differenceInCalendarDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { Syringe, AlertTriangle, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -29,7 +29,8 @@ export default function VaccineReminders({ vaccinations, patients }: Props) {
   const upcomingVaccinations = vaccinations
     .filter((v) => !!v.next_due_at)
     .map((v) => {
-      const daysUntil = differenceInDays(parseISO(v.next_due_at as string), new Date());
+      const dueDate = parse(v.next_due_at as string, "yyyy-MM-dd", new Date());
+      const daysUntil = differenceInCalendarDays(dueDate, new Date());
       return { ...v, daysUntil };
     })
     .filter((v) => v.daysUntil >= 0 && v.daysUntil <= 30)
@@ -78,7 +79,7 @@ export default function VaccineReminders({ vaccinations, patients }: Props) {
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                      {vac.next_due_at ? format(parseISO(vac.next_due_at), "d MMM", { locale: es }) : ""}
+                      {vac.next_due_at ? format(parse(vac.next_due_at, "yyyy-MM-dd", new Date()), "d MMM", { locale: es }) : ""}
                     </p>
                   </div>
                 </div>

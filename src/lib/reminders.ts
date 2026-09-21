@@ -9,11 +9,14 @@ import {
 import {
   getAppUrl,
   sendAppointmentReminderEmail,
+  sendClinicalReminderEmail,
   sendPaymentReminderEmail,
   sendSubscriptionReminderEmail,
 } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { isValidWhatsAppPhone, sendWhatsAppMessage } from "@/lib/whatsapp";
+import { createInAppNotification } from "@/lib/in-app-notifications";
+import { getClinicDateKey } from "@/lib/appointment-time";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const APPOINTMENT_CONFIRM_IDENTIFIER_PREFIX = "appointment-confirmation:";
@@ -67,6 +70,17 @@ type SubscriptionReminderMeta = {
   kind: "REMINDER_BEFORE_DUE" | "DUE_TODAY" | "GRACE_REMINDER";
   kindMarker: "subscription-reminder";
   recipientName: string | null;
+};
+
+type ClinicalReminderMeta = {
+  audience: ReminderAudience;
+  clinicName: string;
+  clientName: string;
+  dueDateIso: string;
+  kind: "vaccine-upcoming" | "vaccine-overdue" | "clinical-follow-up";
+  petName: string;
+  recipientName: string | null;
+  vaccineName?: string;
 };
 
 function scheduleOneDayBefore(date: Date) {
@@ -224,19 +238,24 @@ async function createQueuedNotification(params: {
   clinicId: number;
   email?: string | null;
   message: string;
-  meta: AppointmentReminderMeta | PaymentReminderMeta;
+  meta: AppointmentReminderMeta | PaymentReminderMeta | ClinicalReminderMeta;
   phone?: string | null;
   scheduledAt: Date;
   title: string;
   userId?: string | null;
   clientId?: number | null;
+  eventKey?: string;
+  type?: string;
 }) {
-  await prisma.notification.create({
-    data: {
+  try {
+    await prisma.notification.create({
+      data: {
       channel: params.channel,
       clinicId: params.clinicId,
       message: params.message,
       meta: JSON.parse(JSON.stringify(params.meta)),
+      eventKey: params.eventKey ?? null,
+      type: params.type ?? "SYSTEM",
       scheduledAt: params.scheduledAt,
       status: NotificationStatus.QUEUED,
       title: params.title,
@@ -249,8 +268,12 @@ async function createQueuedNotification(params: {
           userId: params.userId ?? null,
         },
       },
-    },
-  });
+      },
+    });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2002") return;
+    throw error;
+  }
 }
 
 function canSendAppointmentReminder(status: AppointmentStatus) {
@@ -290,6 +313,10 @@ function isPaymentReminderMeta(meta: unknown): meta is PaymentReminderMeta {
 
 function isSubscriptionReminderMeta(meta: unknown): meta is SubscriptionReminderMeta {
   return Boolean(meta && typeof meta === "object" && (meta as { kindMarker?: string }).kindMarker === "subscription-reminder");
+}
+
+function isClinicalReminderMeta(meta: unknown): meta is ClinicalReminderMeta {
+  return Boolean(meta && typeof meta === "object" && ["vaccine-upcoming", "vaccine-overdue", "clinical-follow-up"].includes((meta as { kind?: string }).kind ?? ""));
 }
 
 function buildAppointmentWhatsAppText(meta: AppointmentReminderMeta) {
@@ -350,10 +377,16 @@ function buildPaymentWhatsAppText(meta: PaymentReminderMeta) {
   ].join("\n");
 }
 
+function buildClinicalWhatsAppText(meta: ClinicalReminderMeta) {
+  const date = new Intl.DateTimeFormat("es-BO", { dateStyle: "medium" }).format(new Date(meta.dueDateIso));
+  const reason = meta.kind === "clinical-follow-up" ? "próximo control clínico" : `vacuna de ${meta.vaccineName ?? "vacunación"}`;
+  return `Recordatorio de Karey Vet. Paciente: ${meta.petName}. Propietario: ${meta.clientName}. Motivo: ${reason}. Fecha: ${date}. Acción recomendada: ${meta.kind === "vaccine-overdue" ? "contactar al propietario y regularizar la vacuna" : "agendar o confirmar la atención"}.`;
+}
+
 async function deliverNotification(params: {
   channel: NotificationChannel;
   email: string | null;
-  meta: AppointmentReminderMeta | PaymentReminderMeta | SubscriptionReminderMeta | null;
+  meta: AppointmentReminderMeta | PaymentReminderMeta | SubscriptionReminderMeta | ClinicalReminderMeta | null;
   phone: string | null;
 }) {
   const { channel, email, meta, phone } = params;
@@ -396,6 +429,11 @@ async function deliverNotification(params: {
       return;
     }
 
+    if (isClinicalReminderMeta(meta)) {
+      await sendClinicalReminderEmail({ ...meta, dueDate: new Date(meta.dueDateIso), to: email });
+      return;
+    }
+
     if (isSubscriptionReminderMeta(meta)) {
       await sendSubscriptionReminderEmail({
         clinicName: meta.clinicName,
@@ -428,6 +466,11 @@ async function deliverNotification(params: {
       });
       return;
     }
+
+    if (isClinicalReminderMeta(meta)) {
+      await sendWhatsAppMessage({ body: buildClinicalWhatsAppText(meta), to: phone });
+      return;
+    }
   }
 
   throw new Error(`Canal o metadata no soportados: ${channel}.`);
@@ -435,7 +478,7 @@ async function deliverNotification(params: {
 
 async function markAppointmentReminderDelivered(params: {
   channel: NotificationChannel;
-  meta: AppointmentReminderMeta | PaymentReminderMeta | SubscriptionReminderMeta | null;
+  meta: AppointmentReminderMeta | PaymentReminderMeta | SubscriptionReminderMeta | ClinicalReminderMeta | null;
 }) {
   const { channel, meta } = params;
 
@@ -788,6 +831,72 @@ export async function syncInvoicePaymentReminderNotifications(invoiceId: number)
   }
 
   await Promise.all(notifications);
+}
+
+const CLINICAL_REMINDER_WINDOW_DAYS = 30;
+// Desparasitación queda fuera hasta disponer de fecha, producto o pauta estructurada.
+// No derivar recordatorios desde texto libre ni desde AppointmentType.DEWORMING.
+
+function localDayDistance(date: Date, now: Date, timeZone: string) {
+  const due = Date.parse(`${getClinicDateKey(date, timeZone)}T00:00:00Z`);
+  const today = Date.parse(`${getClinicDateKey(now, timeZone)}T00:00:00Z`);
+  return Math.round((due - today) / DAY_IN_MS);
+}
+
+async function createClinicalReminderNotifications(params: {
+  sourceId: number;
+  clinicId: number;
+  clinicName: string;
+  client: { id: number; fullName: string; email: string | null; phone: string | null };
+  dueDate: Date;
+  kind: ClinicalReminderMeta["kind"];
+  petName: string;
+  vaccineName?: string;
+}) {
+  const key = `clinical:${params.kind}:${params.sourceId}:${params.dueDate.toISOString()}`;
+  const action = params.kind === "vaccine-overdue" ? "Contactar al propietario y regularizar la vacuna." : "Agendar o confirmar la atención.";
+  const reason = params.kind === "clinical-follow-up" ? "próximo control clínico" : `vacuna de ${params.vaccineName ?? "vacunación"}`;
+  const date = new Intl.DateTimeFormat("es-BO", { dateStyle: "medium" }).format(params.dueDate);
+  const subject = params.vaccineName ? `Vacuna de ${params.vaccineName} de ${params.petName}` : `Control clínico de ${params.petName}`;
+  const message = `${subject} ${params.kind === "vaccine-overdue" ? "está vencida" : `vence el ${date}`}. Propietario: ${params.client.fullName}. Motivo: ${reason}. Fecha: ${date}. Acción recomendada: ${action}`;
+  const meta: ClinicalReminderMeta = { audience: "client", clinicName: params.clinicName, clientName: params.client.fullName, dueDateIso: params.dueDate.toISOString(), kind: params.kind, petName: params.petName, recipientName: params.client.fullName, vaccineName: params.vaccineName };
+  const admins = await getAdminRecipients(params.clinicId);
+
+  await createInAppNotification({ clinicId: params.clinicId, eventKey: `${key}:IN_APP`, type: params.kind === "clinical-follow-up" ? "CLINICAL_FOLLOW_UP_REMINDER" : "VACCINE_REMINDER", title: params.kind === "clinical-follow-up" ? "Próximo control clínico" : params.kind === "vaccine-overdue" ? "Vacuna vencida" : "Vacuna próxima", message, targetUrl: `/pets`, userIds: admins.map((admin) => admin.userId) });
+
+  const recipients = [
+    ...(params.client.email ? [{ audience: "client" as const, email: params.client.email, name: params.client.fullName, phone: params.client.phone, userId: null }] : []),
+    ...admins.map((admin) => ({ audience: "admin" as const, email: admin.email, name: admin.name, phone: admin.phone, userId: admin.userId })),
+  ];
+  await Promise.all(recipients.flatMap((recipient) => {
+    const recipientMeta = { ...meta, audience: recipient.audience, recipientName: recipient.name } satisfies ClinicalReminderMeta;
+    const tasks: Promise<void>[] = [];
+    if (recipient.email) tasks.push(createQueuedNotification({ channel: NotificationChannel.EMAIL, clinicId: params.clinicId, email: recipient.email, message, meta: recipientMeta, scheduledAt: new Date(), title: `${params.kind}:EMAIL:${recipient.userId ?? "client"}`, type: recipientMeta.kind === "clinical-follow-up" ? "CLINICAL_FOLLOW_UP_REMINDER" : "VACCINE_REMINDER", eventKey: `${key}:EMAIL:${recipient.userId ?? "client"}`, userId: recipient.userId, clientId: recipient.audience === "client" ? params.client.id : null }));
+    if (isValidWhatsAppPhone(recipient.phone)) tasks.push(createQueuedNotification({ channel: NotificationChannel.WHATSAPP, clinicId: params.clinicId, message, meta: recipientMeta, phone: recipient.phone, scheduledAt: new Date(), title: `${params.kind}:WHATSAPP:${recipient.userId ?? "client"}`, type: recipientMeta.kind === "clinical-follow-up" ? "CLINICAL_FOLLOW_UP_REMINDER" : "VACCINE_REMINDER", eventKey: `${key}:WHATSAPP:${recipient.userId ?? "client"}`, userId: recipient.userId, clientId: recipient.audience === "client" ? params.client.id : null }));
+    return tasks;
+  }));
+}
+
+export async function syncClinicalReminderNotifications(now = new Date()) {
+  const vaccinations = await prisma.vaccinationRecord.findMany({ where: { nextDueAt: { not: null } }, select: { id: true, nextDueAt: true, vaccineName: true, clinic: { select: { id: true, name: true, timezone: true } }, pet: { select: { name: true, client: { select: { id: true, fullName: true, email: true, phone: true } } } } } });
+  const visits = await prisma.clinicalVisit.findMany({ where: { nextReviewAt: { not: null } }, select: { id: true, nextReviewAt: true, clinic: { select: { id: true, name: true, timezone: true } }, pet: { select: { name: true, client: { select: { id: true, fullName: true, email: true, phone: true } } } } } });
+  let created = 0;
+  for (const vaccination of vaccinations) {
+    if (!vaccination.nextDueAt) continue;
+    const distance = localDayDistance(vaccination.nextDueAt, now, vaccination.clinic.timezone || "America/Santo_Domingo");
+    const kind = distance < 0 ? "vaccine-overdue" : distance <= CLINICAL_REMINDER_WINDOW_DAYS ? "vaccine-upcoming" : null;
+    if (!kind) continue;
+    await createClinicalReminderNotifications({ sourceId: vaccination.id, clinicId: vaccination.clinic.id, clinicName: vaccination.clinic.name, client: vaccination.pet.client, dueDate: vaccination.nextDueAt, kind, petName: vaccination.pet.name, vaccineName: vaccination.vaccineName });
+    created += 1;
+  }
+  for (const visit of visits) {
+    if (!visit.nextReviewAt) continue;
+    const distance = localDayDistance(visit.nextReviewAt, now, visit.clinic.timezone || "America/Santo_Domingo");
+    if (distance < 0 || distance > CLINICAL_REMINDER_WINDOW_DAYS) continue;
+    await createClinicalReminderNotifications({ sourceId: visit.id, clinicId: visit.clinic.id, clinicName: visit.clinic.name, client: visit.pet.client, dueDate: visit.nextReviewAt, kind: "clinical-follow-up", petName: visit.pet.name });
+    created += 1;
+  }
+  return { clinicalReminders: created };
 }
 
 export async function processQueuedNotifications(limit = 50) {

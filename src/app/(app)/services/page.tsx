@@ -9,28 +9,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Modal from "@/components/shared/Modal";
 import AppPageHero from "@/components/shared/AppPageHero";
 import DataTable, { type DataTableColumn } from "@/components/shared/Datatable";
 import ModalDelete from "@/components/shared/ModalDelete";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { AppAlert } from "@/components/shared/AppAlert";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { useCurrentUserAccess, useCurrentUserProfile } from "@/components/layout/current-user-context";
 import { apiCreateService, apiDeleteService, apiListServices, apiUpdateService, type ServiceRow } from "@/lib/api/services";
+import { countActiveServicesWithoutDuration } from "@/lib/service-stats";
 import { toMoney } from "@/lib/utility";
+import { toast } from "sonner";
+import { ServiceCreateSchema, zodFieldErrors } from "@/lib/validators/service";
 
 const formCategories = ["Consulta", "Cirugia", "Vacunacion", "Laboratorio", "Imagen", "Estetica", "Hospitalizacion", "Emergencia", "Otro"];
 
 type FormState = { name: string; category: string; price: number; durationMins: number | ""; description: string; isActive: boolean };
 const emptyForm: FormState = { name: "", category: "Consulta", price: 0, durationMins: "", description: "", isActive: true };
 
-function money(value: unknown) {
-  const number = typeof value === "number" ? value : Number(value);
-  return new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP" }).format(Number.isFinite(number) ? number : 0);
-}
-
 export default function ServicesPage() {
   const access = useCurrentUserAccess();
+  const profile = useCurrentUserProfile();
+  const currency = profile?.clinicCurrency ?? "DOP";
   const [rows, setRows] = useState<ServiceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +43,7 @@ export default function ServicesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState<ServiceRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{ variant: "success" | "info" | "warning" | "destructive"; title: string; description?: string }>({ variant: "info", title: "" });
 
@@ -67,7 +68,7 @@ export default function ServicesPage() {
     return statusMatches && categoryMatches;
   }), [rows, statusFilter, categoryFilter]);
   const activeServices = useMemo(() => rows.filter((service) => service.isActive).length, [rows]);
-  const averagePrice = useMemo(() => rows.length ? rows.reduce((total, service) => total + Number(service.price || 0), 0) / rows.length : 0, [rows]);
+  const servicesWithoutDuration = useMemo(() => countActiveServicesWithoutDuration(rows), [rows]);
 
   const openCreate = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (service: ServiceRow) => {
@@ -77,14 +78,24 @@ export default function ServicesPage() {
   };
 
   const save = async () => {
-    if (!form.name.trim()) { setError("El nombre del servicio es obligatorio."); return; }
-    setSaving(true); setError(null);
+    const parsed = ServiceCreateSchema.safeParse({ ...form, durationMins: form.durationMins === "" ? undefined : form.durationMins });
+    if (!parsed.success) {
+      setFieldErrors(zodFieldErrors(parsed.error));
+      toast.error("Revisa los campos obligatorios antes de continuar.");
+      requestAnimationFrame(() => {
+        const first = document.querySelector<HTMLElement>('[data-invalid="true"] input, [data-invalid="true"] textarea, [data-invalid="true"] button');
+        first?.scrollIntoView({ block: "center" });
+        first?.focus();
+      });
+      return;
+    }
+    setSaving(true); setError(null); setFieldErrors({});
     try {
       const payload = { name: form.name.trim(), category: form.category || undefined, description: form.description.trim() || undefined, price: form.price, durationMins: form.durationMins === "" ? undefined : Number(form.durationMins), isActive: form.isActive };
       if (editing) await apiUpdateService(editing.id, payload); else await apiCreateService(payload);
       setDialogOpen(false); await load();
       setAlert({ variant: "success", title: editing ? "Servicio actualizado" : "Servicio creado", description: "El catalogo se actualizo correctamente." }); setAlertOpen(true);
-    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "No se pudo guardar el servicio."); }
+    } catch (saveError) { toast.error(saveError instanceof Error ? saveError.message : "No se pudo guardar el servicio."); }
     finally { setSaving(false); }
   };
 
@@ -128,7 +139,7 @@ export default function ServicesPage() {
         accessorKey: "price",
         cell: (service) => (
           <span className="font-medium text-foreground">
-            {toMoney(service.price)}
+            {toMoney(service.price, currency)}
           </span>
         ),
       },
@@ -179,7 +190,7 @@ export default function ServicesPage() {
         ),
       },
     ],
-    [canDelete, canUpdate],
+    [canDelete, canUpdate, currency],
   );
 
   return (
@@ -205,9 +216,9 @@ export default function ServicesPage() {
             hint: "Disponibles en operacion",
           },
           {
-            label: "Precio medio",
-            value: toMoney(averagePrice),
-            hint: "Referencia rapida",
+            label: "SIN DURACIÓN",
+            value: servicesWithoutDuration,
+            hint: "Servicios sin duración definida",
           },
         ]}
       />
@@ -261,26 +272,33 @@ export default function ServicesPage() {
           }
         />
       )}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? "Editar servicio" : "Nuevo servicio"}
-            </DialogTitle>
-          </DialogHeader>
+      <Modal
+        open={dialogOpen}
+        onClose={setDialogOpen}
+        title={editing ? "Editar servicio" : "Nuevo servicio"}
+        footer={
+          <>
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void save()} disabled={saving}>
+              {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear servicio"}
+            </Button>
+          </>
+        }
+      >
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="service-name">Nombre</Label>
+              <Label htmlFor="service-name" required>Nombre</Label>
               <Input
                 id="service-name"
                 value={form.name}
+                aria-invalid={Boolean(fieldErrors.name)}
                 onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
+                  { setForm((current) => ({ ...current, name: event.target.value })); setFieldErrors((current) => ({ ...current, name: "" })); }
                 }
               />
+              {fieldErrors.name ? <p className="text-sm font-medium text-destructive">{fieldErrors.name}</p> : null}
             </div>
             <div className="space-y-2">
               <Label>Categoria</Label>
@@ -306,19 +324,18 @@ export default function ServicesPage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="service-price">Precio</Label>
+                <Label htmlFor="service-price" required>Precio</Label>
                 <Input
                   id="service-price"
                   type="number"
                   min={0}
                   value={form.price}
+                  aria-invalid={Boolean(fieldErrors.price)}
                   onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      price: Math.max(0, Number(event.target.value) || 0),
-                    }))
+                    { setForm((current) => ({ ...current, price: Math.max(0, Number(event.target.value) || 0) })); setFieldErrors((current) => ({ ...current, price: "" })); }
                   }
                 />
+                {fieldErrors.price ? <p className="text-sm font-medium text-destructive">{fieldErrors.price}</p> : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="service-duration">Duracion (min)</Label>
@@ -369,24 +386,7 @@ export default function ServicesPage() {
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button type="button" onClick={() => void save()} disabled={saving}>
-              {saving
-                ? "Guardando..."
-                : editing
-                  ? "Guardar cambios"
-                  : "Crear servicio"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </Modal>
       <ModalDelete
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

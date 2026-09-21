@@ -8,6 +8,7 @@ import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import {
   Printer,
@@ -29,6 +30,7 @@ import {
   Check,
   ReceiptText,
   Plus,
+  LoaderCircle,
 } from "lucide-react";
 
 import { apiCreatePayment, apiGetInvoice, apiUpdateInvoiceStatus, InvoiceDetail } from "@/lib/api/invoices";
@@ -107,6 +109,9 @@ export default function InvoiceDetailPage() {
   const [payAmount, setPayAmount] = useState<string>("");
   const [payMethod, setPayMethod] = useState<PaymentCreateInput["method"]>("CASH");
   const [payRef, setPayRef] = useState<string>("");
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [paymentCashSessions, setPaymentCashSessions] = useState<Array<{ id: number; register: { id: number; name: string } }>>([]);
+  const [paymentCashSessionId, setPaymentCashSessionId] = useState("");
 
   const issueDate = useMemo(() => safeDate(invoice?.issueDate), [invoice?.issueDate]);
 
@@ -117,6 +122,13 @@ export default function InvoiceDetailPage() {
 
   const total = useMemo(() => Number(invoice?.total ?? 0), [invoice]);
   const remaining = useMemo(() => Math.max(0, total - paidSum), [total, paidSum]);
+
+  useEffect(() => {
+    void fetch("/api/cash-sessions/open", { cache: "no-store" }).then((response) => response.ok ? response.json() : []).then((data: Array<{ id: number; register: { id: number; name: string } }>) => {
+      setPaymentCashSessions(data);
+      if (data.length === 1) setPaymentCashSessionId(String(data[0].register.id));
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -186,10 +198,11 @@ export default function InvoiceDetailPage() {
   };
 
   const quickPay = async () => {
-    if (!invoice) return;
+    if (!invoice || paymentSubmitting) return;
     const amount = Number(payAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
+    setPaymentSubmitting(true);
     const shouldAutoPrint = printSettings.autoOpenReceiptAfterPayment;
     const preparedWindow = shouldAutoPrint ? preparePrintWindow() : null;
 
@@ -198,6 +211,7 @@ export default function InvoiceDetailPage() {
         amount,
         method: payMethod,
         reference: payRef || undefined,
+        registerId: paymentCashSessionId ? Number(paymentCashSessionId) : undefined,
       });
 
       await refresh();
@@ -218,6 +232,8 @@ export default function InvoiceDetailPage() {
           ? paymentError.message
           : "No pudimos registrar el pago."
       );
+    } finally {
+      setPaymentSubmitting(false);
     }
   };
 
@@ -471,6 +487,9 @@ export default function InvoiceDetailPage() {
                   <p className="text-sm text-foreground">{invoice.notes}</p>
                 </div>
               ) : null}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Registrado por {invoice.createdBy?.name || invoice.createdBy?.email || "Sin registro histórico"}
+              </p>
             </div>
           </article>
         </div>
@@ -478,13 +497,15 @@ export default function InvoiceDetailPage() {
         {/* RIGHT: Info cards */}
         <div className="space-y-6">
           {/* Cliente */}
-          <div className={invoice.pet ? "grid grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
+          <div className={invoice.pet ? "grid grid-cols-1 gap-4 sm:grid-cols-2" : "grid grid-cols-1 gap-4"}>
              <div className="app-panel-strong p-5">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <User className="w-5 h-5 text-teal-500" /> Cliente
               </h3>
 
               <p className="font-semibold text-lg text-foreground">{invoice.client.fullName}</p>
+              {invoice.client.identificationNumber ? <p className="mt-1 text-sm text-muted-foreground">{invoice.client.identificationType === "CEDULA" ? "Cédula" : invoice.client.identificationType === "RNC" ? "RNC" : "Identificación"}: {invoice.client.identificationNumber}</p> : null}
+              {invoice.clinic.taxId || invoice.clinic.taxName ? <p className="mt-3 border-t pt-3 text-sm text-muted-foreground">{invoice.clinic.taxName && invoice.clinic.taxName !== invoice.clinic.name ? `Nombre fiscal: ${invoice.clinic.taxName}` : null}{invoice.clinic.taxId ? `${invoice.clinic.taxName && invoice.clinic.taxName !== invoice.clinic.name ? " · " : ""}RNC: ${invoice.clinic.taxId}` : null}</p> : null}
 
               <div className="mt-3 space-y-2 text-sm text-muted-foreground">
                 {invoice.client.phone ? (
@@ -565,11 +586,11 @@ export default function InvoiceDetailPage() {
 
                 <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="text-xs text-muted-foreground">Monto</label>
+                    <Label required className="text-xs text-muted-foreground">Monto</Label>
                     <Input value={payAmount} onChange={(e) => setPayAmount(e.target.value)} type="number" />
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-3">
                     <Button
                       type="button"
                       variant={payMethod === "CASH" ? "default" : "outline"}
@@ -596,13 +617,16 @@ export default function InvoiceDetailPage() {
                     </Button>
                   </div>
 
+                  {paymentCashSessions.length > 1 ? <div><label className="text-xs text-muted-foreground">Cobrar en</label><select className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={paymentCashSessionId} onChange={(event) => setPaymentCashSessionId(event.target.value)}><option value="">Seleccionar caja</option>{paymentCashSessions.map((session) => <option key={session.id} value={session.register.id}>{session.register.name}</option>)}</select></div> : null}
+
                   <div>
                     <label className="text-xs text-muted-foreground">Referencia (opcional)</label>
                     <Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Ej: voucher, transacción..." />
                   </div>
 
-                  <Button onClick={quickPay} className="w-full">
-                    <CheckCircle className="w-4 h-4 mr-2" /> Registrar pago
+                  <Button onClick={quickPay} className="w-full" disabled={paymentSubmitting}>
+                    {paymentSubmitting ? <LoaderCircle className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                    {paymentSubmitting ? "Registrando…" : "Registrar pago"}
                   </Button>
                 </div>
               </div>
@@ -628,6 +652,9 @@ export default function InvoiceDetailPage() {
                             <p className="text-xs text-muted-foreground">
                               {d ? format(d, "d MMM yyyy • h:mm a", { locale: es }) : "—"}
                               {p.reference ? ` • ${p.reference}` : ""}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Registrado por {p.createdBy?.name || p.createdBy?.email || "Sin registro histórico"}
                             </p>
                           </div>
                         </div>

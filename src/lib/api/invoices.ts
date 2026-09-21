@@ -11,6 +11,7 @@ export type InvoiceListRow = {
   dueDate: string | null;
   paidAt: string | null;
   total: string;
+  paidTotal: string;
   subtotal: string;
   tax: string;
   discount: string;
@@ -23,7 +24,7 @@ export type InvoiceListRow = {
 
 export type InvoiceDetail = {
   id: number;
-  clinic: { name: string };
+  clinic: { name: string; taxName?: string | null; taxId?: string | null };
   number: string;
   status: string;
   issueDate: string;
@@ -34,8 +35,9 @@ export type InvoiceDetail = {
   discount: string;
   total: string;
   notes: string | null;
+  createdBy: { name: string; email: string } | null;
 
-  client: { id: number; fullName: string; phone: string | null; email: string | null; address: string | null };
+  client: { id: number; fullName: string; phone: string | null; email: string | null; address: string | null; identificationType: string | null; identificationNumber: string | null };
   pet: { id: number; name: string; species: string; breed: string | null } | null;
 
   items: Array<{
@@ -54,6 +56,7 @@ export type InvoiceDetail = {
     method: string;
     reference: string | null;
     paidAt: string;
+    createdBy: { name: string; email: string } | null;
   }>;
 };
 
@@ -111,6 +114,10 @@ export async function apiCreatePayment(invoiceId: number, data: PaymentCreateInp
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Error registrando pago");
-  return res.json();
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string" ? payload.error : "No se pudo registrar el pago.";
+    throw new Error(message);
+  }
+  return payload;
 }

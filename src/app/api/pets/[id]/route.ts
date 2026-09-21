@@ -65,10 +65,19 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
   }
 
+  const updateData = {
+    ...parsed.data,
+    allergies: Object.prototype.hasOwnProperty.call(body, "allergies") ? parsed.data.allergies ?? null : parsed.data.allergies,
+    chronicConditions: Object.prototype.hasOwnProperty.call(body, "chronicConditions") ? parsed.data.chronicConditions ?? null : parsed.data.chronicConditions,
+    clinicalHistory: Object.prototype.hasOwnProperty.call(body, "clinicalHistory") ? parsed.data.clinicalHistory ?? null : parsed.data.clinicalHistory,
+    currentMedications: Object.prototype.hasOwnProperty.call(body, "currentMedications") ? parsed.data.currentMedications ?? null : parsed.data.currentMedications,
+    clinicalWarnings: Object.prototype.hasOwnProperty.call(body, "clinicalWarnings") ? parsed.data.clinicalWarnings ?? null : parsed.data.clinicalWarnings,
+  };
+
   try {
     const updated = await prisma.pet.update({
       where: { id: exists.id },
-      data: parsed.data,
+      data: updateData,
       include: { client: true },
     });
 

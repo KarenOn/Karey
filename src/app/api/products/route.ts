@@ -50,6 +50,7 @@ export async function GET(req: Request) {
       requiresPrescription: true,
       createdAt: true,
       updatedAt: true,
+      batches: { orderBy: { expirationDate: { sort: "asc", nulls: "last" } }, select: { id: true, lotNumber: true, expirationDate: true, quantity: true, cost: true } },
     },
   });
 
@@ -57,7 +58,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("inventory.create");
+  const { clinicId, session } = await requireClinicPermission("inventory.create");
   const body = await req.json().catch(() => null);
   const parsed = ProductCreateSchema.safeParse(body);
 
@@ -109,6 +110,34 @@ export async function POST(req: Request) {
       updatedAt: true,
     },
     });
+
+    if (input.trackStock && input.stockOnHand > 0) {
+      const batch = input.initialBatchNumber
+        ? await tx.productBatch.create({
+            data: {
+              productId: product.id,
+              lotNumber: input.initialBatchNumber,
+              expirationDate: input.initialExpirationDate ? parse(input.initialExpirationDate, "yyyy-MM-dd", new Date()) : null,
+              quantity: input.stockOnHand,
+              cost: input.cost ?? null,
+            },
+          })
+        : null;
+
+      await tx.stockMovement.create({
+        data: {
+          clinicId,
+          productId: product.id,
+          batchId: batch?.id ?? null,
+          type: "IN",
+          quantity: input.stockOnHand,
+          reason: "Stock inicial",
+          referenceType: "PRODUCT",
+          referenceId: String(product.id),
+          createdById: session.user.id,
+        },
+      });
+    }
 
     if (input.category?.trim().toLocaleLowerCase() === "vacuna") {
       const existingCatalog = await tx.vaccineCatalog.findFirst({

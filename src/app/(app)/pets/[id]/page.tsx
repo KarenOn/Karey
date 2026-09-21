@@ -1,7 +1,8 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
-import SignedFileUploader, { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import AttachmentUploadModal from "@/components/shared/AttachmentUploadModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,10 +16,8 @@ import {
   Plus,
   AlertTriangle,
   Paperclip,
-  Trash2,
   Pencil,
   ChevronDown,
-  LoaderCircle,
   FileText,
   Eye,
   Info,
@@ -26,7 +25,7 @@ import {
 import { format, parseISO, differenceInYears, differenceInMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import Modal from "@/components/shared/Modal";
-import FormField, { type FormFieldChangeEvent } from "@/components/shared/FormField";
+import FormField from "@/components/shared/FormField";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
@@ -41,10 +40,11 @@ import { useCurrentUserProfile } from "@/components/layout/current-user-context"
 import { safeDate } from "@/lib/utility";
 import ClinicalReportDialog from "@/components/shared/ClinicalReportDialog";
 import { apiUpdatePet } from "@/lib/api/pets";
-import { PetUpdateSchema } from "@/lib/validators/pet";
+import { PetUpdateSchema, zodFieldErrors } from "@/lib/validators/pet";
 import { toast } from "sonner";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import BackButton from "@/components/shared/BackButton";
+import { deriveAttachmentDisplayName, getAttachmentDisplayName } from "@/lib/attachments";
 
 type PetDTO = any; // si quieres, luego lo tipamos con Prisma types
 type VisitDTO = any;
@@ -55,6 +55,7 @@ type VetDTO = { id: string; name: string; email: string };
 type AttachmentUploadDraft = {
   file?: LocalFile;
   fileName: string;
+  displayName: string;
   fileType: string;
   storageRef: string;
   previewUrl: string;
@@ -140,12 +141,15 @@ function PatientDetailContent() {
   const [patientEditOpen, setPatientEditOpen] = useState(false);
   const [savingPatient, setSavingPatient] = useState(false);
   const [patientEditForm, setPatientEditForm] = useState<Record<string, string>>({});
+  const [patientEditErrors, setPatientEditErrors] = useState<Record<string, string>>({});
   const [vaccineModalOpen, setVaccineModalOpen] = useState(false);
   const [editingVaccination, setEditingVaccination] = useState<VaccDTO | null>(null);
   const [visitDateFilter, setVisitDateFilter] = useState("");
   const [vaccinationDateFilter, setVaccinationDateFilter] = useState("");
   const [visitPage, setVisitPage] = useState(0);
   const [vaccinationPage, setVaccinationPage] = useState(0);
+  const [activeTab, setActiveTab] = useState("history");
+  const [highlightedVaccinationId, setHighlightedVaccinationId] = useState<number | null>(null);
   const [visitTotal, setVisitTotal] = useState(0);
   const [vaccinationTotal, setVaccinationTotal] = useState(0);
   const [expandedAttachments, setExpandedAttachments] = useState<Set<number>>(new Set());
@@ -187,6 +191,7 @@ function PatientDetailContent() {
   });
   const [attachForm, setAttachForm] = useState<AttachmentUploadDraft>({
     fileName: "",
+    displayName: "",
     fileType: "",
     storageRef: "",
     previewUrl: "",
@@ -197,6 +202,7 @@ function PatientDetailContent() {
 
   const emptyAttachmentForm: AttachmentUploadDraft = {
     fileName: "",
+    displayName: "",
     fileType: "",
     storageRef: "",
     previewUrl: "",
@@ -221,18 +227,30 @@ function PatientDetailContent() {
   const client = pet?.client;
   const canEditPatient = !!currentUser?.access.actions.pets.update;
   const canViewVisit = !!currentUser?.access.actions.visits.read;
+  const canViewVaccination = !!currentUser?.access.actions.vaccines.read;
   const canEditVisit = !!currentUser?.access.actions.visits.edit;
 
   function openPatientEdit() {
     if (!pet || !canEditPatient) return;
-    setPatientEditForm({ name: pet.name, species: pet.species, sex: pet.sex, breed: pet.breed ?? "", birthDate: dateOnly(pet.birthDate), weightKg: pet.weightKg == null ? "" : String(pet.weightKg), color: pet.color ?? "", microchip: pet.microchip ?? "", notes: pet.notes ?? "" });
+    setPatientEditForm({ name: pet.name, species: pet.species, sex: pet.sex, breed: pet.breed ?? "", birthDate: dateOnly(pet.birthDate), weightKg: pet.weightKg == null ? "" : String(pet.weightKg), color: pet.color ?? "", microchip: pet.microchip ?? "", notes: pet.notes ?? "", allergies: pet.allergies ?? "", chronicConditions: pet.chronicConditions ?? "", clinicalHistory: pet.clinicalHistory ?? "", currentMedications: pet.currentMedications ?? "", clinicalWarnings: pet.clinicalWarnings ?? "" });
+    setPatientEditErrors({});
     setPatientEditOpen(true);
   }
 
   async function savePatientEdit() {
     if (!pet) return;
     const parsed = PetUpdateSchema.safeParse({ ...patientEditForm, weightKg: patientEditForm.weightKg === "" ? undefined : Number(patientEditForm.weightKg), birthDate: patientEditForm.birthDate || undefined });
-    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message ?? "Revisa los datos del paciente."); return; }
+    if (!parsed.success) {
+      setPatientEditErrors(zodFieldErrors(parsed.error));
+      toast.error("Revisa los campos obligatorios antes de continuar.");
+      requestAnimationFrame(() => {
+        const first = document.querySelector<HTMLElement>('[data-invalid="true"] input, [data-invalid="true"] textarea, [data-invalid="true"] button');
+        first?.scrollIntoView({ block: "center" });
+        first?.focus();
+      });
+      return;
+    }
+    setPatientEditErrors({});
     setSavingPatient(true);
     try { const updated = await apiUpdatePet(pet.id, parsed.data); setPet(updated); setPatientEditOpen(false); toast.success("El paciente fue actualizado."); }
     catch (error) { toast.error(error instanceof Error ? error.message : "No se pudo actualizar el paciente."); }
@@ -293,6 +311,29 @@ function PatientDetailContent() {
   useEffect(() => { if (petId && pet) void loadVisits(visitDateFilter, visitPage).catch(console.error); }, [visitDateFilter, visitPage]);
   useEffect(() => { if (petId && pet) void loadVaccinations(vaccinationDateFilter, vaccinationPage).catch(console.error); }, [vaccinationDateFilter, vaccinationPage]);
 
+  const requestedVisitId = Number(searchParams.get("visitId"));
+  const requestedVaccinationId = Number(searchParams.get("vaccinationId"));
+
+  useEffect(() => {
+    if (!petId || !canViewVisit || !Number.isFinite(requestedVisitId) || requestedVisitId <= 0) return;
+    setActiveTab("history");
+    apiGet<VisitDTO[]>(`/api/pets/${petId}/visits?visitId=${requestedVisitId}`)
+      .then((rows) => setSelectedVisit(rows[0] ?? null))
+      .catch(console.error);
+  }, [canViewVisit, petId, requestedVisitId]);
+
+  useEffect(() => {
+    if (loading || !petId || !canViewVaccination || !Number.isFinite(requestedVaccinationId) || requestedVaccinationId <= 0) return;
+    setActiveTab("vaccines");
+    setHighlightedVaccinationId(requestedVaccinationId);
+    apiGet<VaccDTO[]>(`/api/pets/${petId}/vaccinations?vaccinationId=${requestedVaccinationId}`)
+      .then((rows) => {
+        const target = rows[0];
+        if (target) setVaccinations((current) => current.some((item) => item.id === target.id) ? current : [target, ...current]);
+      })
+      .catch(console.error);
+  }, [canViewVaccination, loading, petId, requestedVaccinationId]);
+
   async function deleteTemporaryAttachment(
     form: AttachmentUploadDraft = attachForm
   ) {
@@ -336,10 +377,11 @@ function PatientDetailContent() {
     }
   }
 
-  function handleAttachmentSelected(file: LocalFile) {
+  function handleAttachmentSelected(file: LocalFile | null) {
+    if (!file) return;
     const previousForm = attachForm;
     revokePreviewUrl(previousForm.previewUrl);
-    setAttachForm({ file, fileName: file.fileName, fileType: file.fileType, storageRef: "", previewUrl: file.previewUrl });
+    setAttachForm({ file, fileName: file.fileName, displayName: deriveAttachmentDisplayName(file.fileName), fileType: file.fileType, storageRef: "", previewUrl: file.previewUrl });
   }
 
   async function handleDeleteSavedAttachment(
@@ -465,7 +507,14 @@ function PatientDetailContent() {
       return null;
     });
     if (!uploaded) { setAttachmentSaving(false); return; }
-    const parsed = MedicalAttachmentCreateSchema.safeParse({ ...attachForm, ...uploaded, file: undefined });
+    const parsed = MedicalAttachmentCreateSchema.safeParse({
+      fileName: uploaded.originalFilename,
+      displayName: getAttachmentDisplayName(attachForm.displayName, uploaded.originalFilename),
+      originalFilename: uploaded.originalFilename,
+      fileType: uploaded.fileType,
+      fileSizeBytes: uploaded.fileSizeBytes,
+      storageRef: uploaded.storageRef,
+    });
     if (!parsed.success) {
       await apiDelete("/api/uploads/object", { storageRef: uploaded.storageRef }).catch(() => undefined);
       window.alert(parsed.error.issues.map((i) => i.message).join("\n"));
@@ -501,10 +550,10 @@ function PatientDetailContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="app-page-hero flex items-center gap-4">
+      <div className="app-page-hero flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <BackButton />
 
-        <div className="flex-1 justify-between flex">
+        <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="app-kicker mb-3 inline-flex border-0">
               Paciente y seguimiento
@@ -514,8 +563,13 @@ function PatientDetailContent() {
               {pet.species} • {pet.breed || "Sin raza especificada"}
             </p>
           </div>
-          <div className="self-end">
-            {canEditPatient ? <Button size="sm" variant="outline" onClick={openPatientEdit}><Pencil className="mr-1 h-4 w-4" />Editar paciente</Button> : null}
+          <div className="self-start sm:self-end">
+            {canEditPatient ? (
+              <Button size="sm" variant="outline" onClick={openPatientEdit}>
+                <Pencil className="mr-1 h-4 w-4" />
+                Editar paciente
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -534,7 +588,7 @@ function PatientDetailContent() {
           </div>
 
           <div className="space-y-4 p-5">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2">
               <div className="app-panel-muted p-3 text-center">
                 <Calendar className="mx-auto mb-1 h-5 w-5 text-muted-foreground" />
                 <p className="text-xs text-muted-foreground">Edad</p>
@@ -601,20 +655,83 @@ function PatientDetailContent() {
                 </div>
               </div>
             )}
+
+            {pet.allergies || pet.chronicConditions || pet.clinicalWarnings ? (
+              <div className="border-t border-amber-200 bg-amber-50/70 pt-4 text-amber-950">
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+                  <AlertTriangle className="h-4 w-4" /> Alertas clínicas
+                </p>
+                <div className="space-y-2 text-sm">
+                  {pet.allergies ? (
+                    <p>
+                      <span className="font-semibold">Alergias:</span>{" "}
+                      {pet.allergies}
+                    </p>
+                  ) : null}
+                  {pet.chronicConditions ? (
+                    <p>
+                      <span className="font-semibold">
+                        Condiciones crónicas:
+                      </span>{" "}
+                      {pet.chronicConditions}
+                    </p>
+                  ) : null}
+                  {pet.clinicalWarnings ? (
+                    <p>
+                      <span className="font-semibold">Advertencias:</span>{" "}
+                      {pet.clinicalWarnings}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {pet.clinicalHistory || pet.currentMedications ? (
+              <div className="border-t border-border/70 pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Información clínica
+                </p>
+                <div className="space-y-2 text-sm text-foreground">
+                  {pet.clinicalHistory ? (
+                    <p>
+                      <span className="font-semibold">Antecedentes:</span>{" "}
+                      {pet.clinicalHistory}
+                    </p>
+                  ) : null}
+                  {pet.currentMedications ? (
+                    <p>
+                      <span className="font-semibold">
+                        Medicamentos actuales:
+                      </span>{" "}
+                      {pet.currentMedications}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </aside>
 
         {/* Tabs */}
         <div className="lg:col-span-2 space-y-4">
-          <Tabs defaultValue="history" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+              <TabsList className="max-w-full justify-start overflow-x-auto">
                 <TabsTrigger value="history">Historial Clínico</TabsTrigger>
                 <TabsTrigger value="vaccines">Vacunas</TabsTrigger>
               </TabsList>
 
               <div className="flex flex-wrap justify-end gap-2">
-                {currentUser?.access.actions.pets.viewClinicalHistory ? <Button size="sm" variant="outline" onClick={() => setClinicalReportOpen(true)}><FileText className="mr-1 h-4 w-4" />Generar informe clínico</Button> : null}
+                {currentUser?.access.actions.pets.viewClinicalHistory ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setClinicalReportOpen(true)}
+                  >
+                    <FileText className="mr-1 h-4 w-4" />
+                    Generar informe clínico
+                  </Button>
+                ) : null}
                 <Button size="sm" onClick={() => setVisitModalOpen(true)}>
                   <Plus className="w-4 h-4 mr-1" /> Visita
                 </Button>
@@ -679,22 +796,26 @@ function PatientDetailContent() {
                               </div>
 
                               <div className="flex gap-2">
-                                {canViewVisit ? <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setSelectedVisit(v)}
-                                >
-                                  <Eye className="mr-1 h-4 w-4" />
-                                  Ver detalle
-                                </Button> : null}
-                                {canEditVisit ? <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setEditingVisit(v)}
-                                >
-                                  <Pencil className="w-4 h-4 mr-1" />
-                                  Editar
-                                </Button> : null}
+                                {canViewVisit ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setSelectedVisit(v)}
+                                  >
+                                    <Eye className="mr-1 h-4 w-4" />
+                                    Ver detalle
+                                  </Button>
+                                ) : null}
+                                {canEditVisit ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEditingVisit(v)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-1" />
+                                    Editar
+                                  </Button>
+                                ) : null}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -711,6 +832,12 @@ function PatientDetailContent() {
                               </div>
                             </div>
 
+                            {v.anamnesis && (
+                              <p className="mt-2 text-sm text-muted-foreground">
+                                <span className="font-medium">Anamnesis:</span>{" "}
+                                {v.anamnesis}
+                              </p>
+                            )}
                             {v.diagnosis && (
                               <p className="mt-2 font-medium text-foreground">
                                 {v.diagnosis}
@@ -730,6 +857,25 @@ function PatientDetailContent() {
                                 {v.notes}
                               </p>
                             )}
+                            {(v.heartRateBpm != null ||
+                              v.respiratoryRatePpm != null ||
+                              v.nextReviewAt) && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {v.heartRateBpm != null
+                                  ? `FC: ${v.heartRateBpm} lpm`
+                                  : ""}
+                                {v.heartRateBpm != null &&
+                                v.respiratoryRatePpm != null
+                                  ? " · "
+                                  : ""}
+                                {v.respiratoryRatePpm != null
+                                  ? `FR: ${v.respiratoryRatePpm} rpm`
+                                  : ""}
+                                {v.nextReviewAt
+                                  ? ` · Control: ${formatClinicalDate(v.nextReviewAt)}`
+                                  : ""}
+                              </p>
+                            )}
 
                             {Array.isArray(v.attachments) &&
                               v.attachments.length > 0 && (
@@ -744,7 +890,10 @@ function PatientDetailContent() {
                                     <DocumentAttachment
                                       key={attachment.id}
                                       fileName={attachment.fileName}
+                                      displayName={attachment.displayName}
+                                      originalFilename={attachment.originalFilename}
                                       fileType={attachment.fileType}
+                                      size={attachment.fileSizeBytes}
                                       url={attachment.url}
                                       downloadUrl={attachment.downloadUrl}
                                       deleting={
@@ -834,7 +983,7 @@ function PatientDetailContent() {
                     {vaccinations.map((r: any) => (
                       <div
                         key={r.id}
-                        className="p-4 transition-colors hover:bg-muted/45"
+                        className={`p-4 transition-colors hover:bg-muted/45 ${highlightedVaccinationId === r.id ? "bg-primary/10 ring-1 ring-primary/30" : ""}`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
@@ -874,7 +1023,6 @@ function PatientDetailContent() {
                           </div>
                         </div>
 
-
                         {(r.batchNumber || r.notes) && (
                           <div className="mt-2 text-sm text-muted-foreground">
                             {r.batchNumber && (
@@ -909,17 +1057,276 @@ function PatientDetailContent() {
         </div>
       </div>
 
-      {currentUser?.access.actions.pets.viewClinicalHistory ? <ClinicalReportDialog open={clinicalReportOpen} onClose={() => setClinicalReportOpen(false)} pets={[pet]} clients={client ? [client] : []} initialPetIds={[pet.id]} /> : null}
+      {currentUser?.access.actions.pets.viewClinicalHistory ? (
+        <ClinicalReportDialog
+          open={clinicalReportOpen}
+          onClose={() => setClinicalReportOpen(false)}
+          pets={[pet]}
+          clients={client ? [client] : []}
+          initialPetIds={[pet.id]}
+        />
+      ) : null}
 
-      <Modal open={patientEditOpen} onClose={setPatientEditOpen} title="Editar paciente" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setPatientEditOpen(false)}>Cancelar</Button><Button disabled={savingPatient} onClick={() => void savePatientEdit()}>{savingPatient ? "Guardando..." : "Guardar cambios"}</Button></div>}>
+      <Modal
+        open={patientEditOpen}
+        onClose={setPatientEditOpen}
+        title="Editar paciente"
+        size="lg"
+        footer={
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setPatientEditOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={savingPatient}
+              onClick={() => void savePatientEdit()}
+            >
+              {savingPatient ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </div>
+        }
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {([['name','Nombre','text'],['species','Especie','select'],['sex','Sexo','select'],['breed','Raza','text'],['birthDate','Fecha de nacimiento','date'],['weightKg','Peso (kg)','number'],['color','Color / pelaje','text'],['microchip','Microchip','text']] as const).map(([name,label,type]) => <FormField key={name} label={label} name={name} type={type} options={name === 'species' ? [{ value: 'DOG', label: 'Perro' }, { value: 'CAT', label: 'Gato' }, { value: 'BIRD', label: 'Ave' }, { value: 'RABBIT', label: 'Conejo' }, { value: 'OTHER', label: 'Otro' }] : name === 'sex' ? [{ value: 'MALE', label: 'Macho' }, { value: 'FEMALE', label: 'Hembra' }, { value: 'UNKNOWN', label: 'Desconocido' }] : undefined} value={patientEditForm[name] ?? ''} onChange={(event) => setPatientEditForm((current) => ({ ...current, [name]: String(event.target.value) }))} />)}
-          <FormField label="Notas" name="notes" type="textarea" value={patientEditForm.notes ?? ''} onChange={(event) => setPatientEditForm((current) => ({ ...current, notes: String(event.target.value) }))} className="sm:col-span-2" />
+          {(
+            [
+              ["name", "Nombre", "text", true],
+              ["species", "Especie", "select", true],
+              ["sex", "Sexo", "select", false],
+              ["breed", "Raza", "text", false],
+              ["birthDate", "Fecha de nacimiento", "date", false],
+              ["weightKg", "Peso (kg)", "number", false],
+              ["color", "Color / pelaje", "text", false],
+              ["microchip", "Microchip", "text", false],
+            ] as const
+          ).map(([name, label, type, required]) => (
+            <FormField
+              key={name}
+              label={label}
+              name={name}
+              type={type}
+              options={
+                name === "species"
+                  ? [
+                      { value: "DOG", label: "Perro" },
+                      { value: "CAT", label: "Gato" },
+                      { value: "BIRD", label: "Ave" },
+                      { value: "RABBIT", label: "Conejo" },
+                      { value: "OTHER", label: "Otro" },
+                    ]
+                  : name === "sex"
+                    ? [
+                        { value: "MALE", label: "Macho" },
+                        { value: "FEMALE", label: "Hembra" },
+                        { value: "UNKNOWN", label: "Desconocido" },
+                      ]
+                    : undefined
+              }
+              value={patientEditForm[name] ?? ""}
+              required={required}
+              error={patientEditErrors[name]}
+              onChange={(event) =>
+                { setPatientEditForm((current) => ({ ...current, [name]: String(event.target.value) })); setPatientEditErrors((current) => ({ ...current, [name]: "" })); }
+              }
+            />
+          ))}
+            <p className="text-sm font-semibold text-foreground sm:col-span-2">
+              Información clínica permanente
+            </p>
+            <FormField
+              label="Alergias"
+              name="allergies"
+              type="textarea"
+              value={patientEditForm.allergies ?? ""}
+              onChange={(event) =>
+                setPatientEditForm((current) => ({
+                  ...current,
+                  allergies: String(event.target.value),
+                }))
+              }
+            />
+            <FormField
+              label="Condiciones / enfermedades crónicas"
+              name="chronicConditions"
+              type="textarea"
+              value={patientEditForm.chronicConditions ?? ""}
+              onChange={(event) =>
+                setPatientEditForm((current) => ({
+                  ...current,
+                  chronicConditions: String(event.target.value),
+                }))
+              }
+            />
+            <FormField
+              label="Antecedentes clínicos importantes"
+              name="clinicalHistory"
+              type="textarea"
+              value={patientEditForm.clinicalHistory ?? ""}
+              onChange={(event) =>
+                setPatientEditForm((current) => ({
+                  ...current,
+                  clinicalHistory: String(event.target.value),
+                }))
+              }
+            />
+            <FormField
+              label="Medicamentos actuales"
+              name="currentMedications"
+              type="textarea"
+              value={patientEditForm.currentMedications ?? ""}
+              onChange={(event) =>
+                setPatientEditForm((current) => ({
+                  ...current,
+                  currentMedications: String(event.target.value),
+                }))
+              }
+            />
+            <FormField
+              label="Advertencias clínicas"
+              name="clinicalWarnings"
+              type="textarea"
+              value={patientEditForm.clinicalWarnings ?? ""}
+              onChange={(event) =>
+                setPatientEditForm((current) => ({
+                  ...current,
+                  clinicalWarnings: String(event.target.value),
+                }))
+              }
+              className="sm:col-span-2"
+            />
+          <FormField
+            label="Notas"
+            name="notes"
+            type="textarea"
+            value={patientEditForm.notes ?? ""}
+            onChange={(event) =>
+              setPatientEditForm((current) => ({
+                ...current,
+                notes: String(event.target.value),
+              }))
+            }
+            className="sm:col-span-2"
+          />
         </div>
       </Modal>
 
-      <Modal open={!!selectedVisit} onClose={(open) => { if (!open) setSelectedVisit(null); }} title="Detalle de visita clínica" size="lg" footer={<div className="flex gap-3">{canEditVisit && selectedVisit ? <Button onClick={() => { setEditingVisit(selectedVisit); setSelectedVisit(null); }}><Pencil className="mr-1 h-4 w-4" />Editar</Button> : null}<Button variant="outline" onClick={() => setSelectedVisit(null)}>Cerrar</Button></div>}>
-        {selectedVisit ? <div className="space-y-4 text-sm"><div className="grid grid-cols-2 gap-4"><Detail label="Fecha" value={formatClinicalDate(selectedVisit.visitAt)} /><Detail label="Veterinario" value={selectedVisit.vet?.name ?? "No registrado"} /><Detail label="Peso" value={selectedVisit.weightKg == null ? "-" : `${selectedVisit.weightKg} kg`} /><Detail label="Temperatura" value={selectedVisit.temperatureC == null ? "-" : `${selectedVisit.temperatureC} °C`} /></div>{[['Motivo', selectedVisit.appointment?.reason], ['Diagnóstico', selectedVisit.diagnosis], ['Tratamiento / notas', [selectedVisit.treatment, selectedVisit.notes].filter(Boolean).join("\n")]].map(([label,value]) => value ? <div key={label}><p className="font-semibold text-foreground">{label}</p><p className="whitespace-pre-wrap text-muted-foreground">{value}</p></div> : null)}{selectedVisit.attachments?.length ? <div><p className="mb-2 font-semibold text-foreground">Adjuntos</p><div className="space-y-2">{selectedVisit.attachments.map((attachment: AttachmentDTO) => <DocumentAttachment key={attachment.id} fileName={attachment.fileName} fileType={attachment.fileType} url={attachment.url} downloadUrl={attachment.downloadUrl} />)}</div></div> : <p className="text-muted-foreground">Sin adjuntos.</p>}</div> : null}
+      <Modal
+        open={!!selectedVisit}
+        onClose={(open) => {
+          if (!open) setSelectedVisit(null);
+        }}
+        title="Detalle de visita clínica"
+        size="lg"
+        footer={
+          <div className="flex gap-3">
+            {canEditVisit && selectedVisit ? (
+              <Button
+                onClick={() => {
+                  setEditingVisit(selectedVisit);
+                  setSelectedVisit(null);
+                }}
+              >
+                <Pencil className="mr-1 h-4 w-4" />
+                Editar
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setSelectedVisit(null)}>
+              Cerrar
+            </Button>
+          </div>
+        }
+      >
+        {selectedVisit ? (
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <Detail
+                label="Fecha"
+                value={formatClinicalDate(selectedVisit.visitAt)}
+              />
+              <Detail
+                label="Veterinario"
+                value={selectedVisit.vet?.name ?? "No registrado"}
+              />
+              <Detail
+                label="Peso"
+                value={
+                  selectedVisit.weightKg == null
+                    ? "-"
+                    : `${selectedVisit.weightKg} kg`
+                }
+              />
+              <Detail
+                label="Temperatura"
+                value={
+                  selectedVisit.temperatureC == null
+                    ? "-"
+                    : `${selectedVisit.temperatureC} °C`
+                }
+              />
+              <Detail
+                label="Frecuencia cardíaca"
+                value={
+                  selectedVisit.heartRateBpm == null
+                    ? "-"
+                    : `${selectedVisit.heartRateBpm} lpm`
+                }
+              />
+              <Detail
+                label="Frecuencia respiratoria"
+                value={
+                  selectedVisit.respiratoryRatePpm == null
+                    ? "-"
+                    : `${selectedVisit.respiratoryRatePpm} rpm`
+                }
+              />
+            </div>
+            {[
+              ["Motivo", selectedVisit.appointment?.reason],
+              ["Anamnesis", selectedVisit.anamnesis],
+              ["Diagnóstico", selectedVisit.diagnosis],
+              ["Tratamiento", selectedVisit.treatment],
+              ["Plan / recomendaciones", selectedVisit.carePlan],
+              ["Notas", selectedVisit.notes],
+              [
+                "Próximo control",
+                selectedVisit.nextReviewAt
+                  ? formatClinicalDate(selectedVisit.nextReviewAt)
+                  : null,
+              ],
+            ].map(([label, value]) =>
+              value ? (
+                <div key={label}>
+                  <p className="font-semibold text-foreground">{label}</p>
+                  <p className="whitespace-pre-wrap text-muted-foreground">
+                    {value}
+                  </p>
+                </div>
+              ) : null,
+            )}
+            {selectedVisit.attachments?.length ? (
+              <div>
+                <p className="mb-2 font-semibold text-foreground">Adjuntos</p>
+                <div className="space-y-2">
+                  {selectedVisit.attachments.map(
+                    (attachment: AttachmentDTO) => (
+                      <DocumentAttachment
+                        key={attachment.id}
+                        fileName={attachment.fileName}
+                        displayName={attachment.displayName}
+                        originalFilename={attachment.originalFilename}
+                        fileType={attachment.fileType}
+                        size={attachment.fileSizeBytes}
+                        url={attachment.url}
+                        downloadUrl={attachment.downloadUrl}
+                      />
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">Sin adjuntos.</p>
+            )}
+          </div>
+        ) : null}
       </Modal>
 
       {/* Modal: Nueva Visita */}
@@ -954,13 +1361,20 @@ function PatientDetailContent() {
           initialValues={
             editingVisit
               ? {
-                  visitAt: format(parseISO(editingVisit.visitAt), "yyyy-MM-dd"),
+                  visitAt: dateOnly(editingVisit.visitAt),
                   vetId: editingVisit.vetId ?? "",
                   diagnosis: editingVisit.diagnosis ?? "",
                   treatment: editingVisit.treatment ?? "",
                   notes: editingVisit.notes ?? "",
+                  anamnesis: editingVisit.anamnesis ?? "",
+                  carePlan: editingVisit.carePlan ?? "",
                   weightKg: editingVisit.weightKg ?? "",
                   temperatureC: editingVisit.temperatureC ?? "",
+                  heartRateBpm: editingVisit.heartRateBpm ?? "",
+                  respiratoryRatePpm: editingVisit.respiratoryRatePpm ?? "",
+                  nextReviewAt: editingVisit.nextReviewAt
+                    ? dateOnly(editingVisit.nextReviewAt)
+                    : "",
                 }
               : visitForm
           }
@@ -1029,123 +1443,25 @@ function PatientDetailContent() {
       </Modal>
 
       {/* Modal: Adjuntar archivo */}
-      <Modal
+      <AttachmentUploadModal
         open={attachModal.open}
-        onClose={() => {
-          void closeAttachmentModal();
-        }}
+        onClose={() => void closeAttachmentModal()}
         title="Adjuntar archivo a la visita"
-        footer={
-          <div className="flex gap-3">
-            <Button
-              disabled={draftAttachmentBusy}
-              variant="outline"
-              onClick={() => {
-                void closeAttachmentModal();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              disabled={
-                draftAttachmentBusy || attachmentSaving || !attachForm.file
-              }
-              onClick={handleCreateAttachment}
-            >
-              {attachmentSaving ? (
-                <LoaderCircle
-                  className="mr-2 h-4 w-4 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : null}
-              {attachmentSaving ? "Guardando…" : "Guardar"}
-            </Button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="order-first rounded-[1.5rem] border border-dashed border-border/70 p-4 sm:col-span-2">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              {/* <div>
-                <p className="font-medium text-foreground">
-                  {attachForm.storageRef
-                    ? "Documento listo"
-                    : "Sube el documento primero"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Al subirlo, el nombre se completa automaticamente y luego
-                  puedes ajustarlo si quieres.
-                </p>
-              </div> */}
-              <SignedFileUploader
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                // buttonLabel={
-                //   attachForm.storageRef
-                //     ? "Cambiar documento"
-                //     : "Subir documento"
-                // }
-                disabled={draftAttachmentBusy}
-                onError={(message) => {
-                  setAlert({
-                    variant: "destructive",
-                    title: "No se pudo subir el archivo",
-                    description: message,
-                  });
-                  setAlertOpen(true);
-                }}
-                onFileSelected={() => handleAttachmentSelected}
-              />
-            </div>
-
-            {attachForm.file || attachForm.storageRef ? (
-              <div className="mt-4 rounded-[1rem] border border-border/70 bg-muted/45 p-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  {/* <div className="min-w-0 text-sm text-muted-foreground">
-                    <p className="truncate font-medium text-foreground">
-                      {attachForm.fileName}
-                    </p>
-                    <p>{attachForm.fileType || "application/octet-stream"}</p>
-                  </div> */}
-                  <div className="flex gap-2">
-                    <DocumentAttachment
-                      fileName={attachForm.fileName}
-                      fileType={attachForm.fileType}
-                      url={attachForm.previewUrl}
-                      size={attachForm.file?.file.size}
-                    />
-                    <Button
-                      className="self-center"
-                      disabled={draftAttachmentBusy}
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        void deleteTemporaryAttachment();
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      {draftAttachmentBusy ? "Quitando..." : "Quitar"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <FormField
-            label="Nombre"
-            name="fileName"
-            value={attachForm.fileName}
-            onChange={(e: FormFieldChangeEvent) =>
-              setAttachForm((p: any) => ({
-                ...p,
-                [e.target.name]: e.target.value,
-              }))
-            }
-            required
-            className="sm:col-span-2"
-          />
-        </div>
-      </Modal>
+        // description="Selecciona un archivo y define el nombre que verá el equipo clínico."
+        showNameField
+        displayName={attachForm.displayName}
+        file={attachForm.file ?? null}
+        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+        disabled={draftAttachmentBusy}
+        saving={attachmentSaving}
+        onDisplayNameChange={(displayName) => setAttachForm((current) => ({ ...current, displayName }))}
+        onFileSelected={handleAttachmentSelected}
+        onError={(message) => {
+          setAlert({ variant: "destructive", title: "No se pudo seleccionar el archivo", description: message });
+          setAlertOpen(true);
+        }}
+        onSave={() => void handleCreateAttachment()}
+      />
 
       {attachmentToDelete ? (
         <ModalDelete

@@ -26,6 +26,8 @@ type ClientRow = {
   email: string | null;
   address: string | null;
   notes: string | null;
+  identificationType: "CEDULA" | "RNC" | "PASSPORT_OTHER" | null;
+  identificationNumber: string | null;
   petsCount: number;
 };
 
@@ -35,6 +37,8 @@ type ClientForm = {
   email: string;
   address: string;
   notes: string;
+  identificationType: "" | "CEDULA" | "RNC" | "PASSPORT_OTHER";
+  identificationNumber: string;
 };
 
 const emptyForm: ClientForm = {
@@ -43,6 +47,8 @@ const emptyForm: ClientForm = {
   email: "",
   address: "",
   notes: "",
+  identificationType: "",
+  identificationNumber: "",
 };
 
 async function apiGetClients(): Promise<ClientRow[]> {
@@ -148,6 +154,8 @@ function ClientsPageContent() {
       email: client.email ?? "",
       address: client.address ?? "",
       notes: client.notes ?? "",
+      identificationType: client.identificationType ?? "",
+      identificationNumber: client.identificationNumber ?? "",
     });
     setModalOpen(true);
   }, [canUpdateClients]);

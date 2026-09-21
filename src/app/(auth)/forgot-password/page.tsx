@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowLeft, Mail, PawPrint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import Image from "next/image";
 
@@ -99,9 +100,9 @@ export default function ForgotPasswordPage() {
         ) : null}
 
         <div>
-          <label className="mb-2 block text-sm font-semibold text-foreground/88">
+          <Label required className="mb-2 text-sm font-semibold text-foreground/88">
             Correo electrónico
-          </label>
+          </Label>
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input

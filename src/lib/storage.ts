@@ -247,20 +247,25 @@ export async function storeGeneratedReport(params: { clinicId: number; fileName:
   return toS3StorageRef(key);
 }
 
-export async function serializeAttachment<T extends { fileName: string; fileType?: string | null; url: string }>(
+export async function serializeAttachment<T extends { fileName: string; displayName?: string | null; originalFilename?: string | null; fileType?: string | null; fileSizeBytes?: number | null; url: string }>(
   attachment: T
 ) {
   const storageRef = attachment.url;
+  const displayName = attachment.displayName?.trim() || attachment.fileName;
+  const originalFilename = attachment.originalFilename?.trim() || attachment.fileName;
 
   return {
     ...attachment,
+    displayName,
+    originalFilename,
+    storageKey: isS3StorageRef(storageRef) ? fromS3StorageRef(storageRef) : storageRef,
     storageRef,
     url: await resolveStoredFileUrl(storageRef, {
-      fileName: attachment.fileName,
+      fileName: originalFilename,
     }),
     downloadUrl: await resolveStoredFileUrl(storageRef, {
       download: true,
-      fileName: attachment.fileName,
+      fileName: originalFilename,
     }),
   };
 }

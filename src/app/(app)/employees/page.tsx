@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { KeyRound, LoaderCircle, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import AppPageHero from "@/components/shared/AppPageHero";
+import Modal from "@/components/shared/Modal";
 import DataTablePagination from "@/components/shared/DataTablePagination";
 import SearchableSelect from "@/components/shared/SearchableSelect";
 import SearchInput from "@/components/shared/SearchInput";
@@ -156,6 +157,7 @@ export default function EmployeesPage() {
   const [memberSearch, setMemberSearch] = useState("");
   const [permissionSearch, setPermissionSearch] = useState("");
   const [memberStatus, setMemberStatus] = useState("ALL");
+  const [memberRole, setMemberRole] = useState("ALL");
   const [pendingMemberId, setPendingMemberId] = useState<number | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<{ member: Member; roleId: number; roleName: string } | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Member | null>(null);
@@ -387,15 +389,16 @@ export default function EmployeesPage() {
     const query = memberSearch.trim().toLowerCase();
     return members.filter((member) => {
       const statusMatches = memberStatus === "ALL" || (memberStatus === "ACTIVE" ? member.isActive : !member.isActive);
+      const roleMatches = memberRole === "ALL" || member.role.id === Number(memberRole);
       const searchMatches = !query || [member.user.name, member.user.email].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
-      return statusMatches && searchMatches;
+      return statusMatches && roleMatches && searchMatches;
     });
-  }, [memberSearch, memberStatus, members]);
+  }, [memberSearch, memberRole, memberStatus, members]);
   const visibleMembers = filteredMembers.slice(membersPage * membersPageSize, (membersPage + 1) * membersPageSize);
 
   useEffect(() => {
     setMembersPage(0);
-  }, [membersPageSize, memberSearch, memberStatus, members.length]);
+  }, [membersPageSize, memberRole, memberSearch, memberStatus, members.length]);
 
   return (
     <div className="space-y-6">
@@ -441,23 +444,32 @@ export default function EmployeesPage() {
       ) : null}
 
       <Card className="app-panel-strong overflow-hidden p-0 shadow-none">
-        <div className="flex items-center justify-between gap-3 border-b border-border/70 px-5 py-4">
+          <div className="flex flex-col gap-4 border-b border-border/70 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="font-semibold text-foreground">Miembros</div>
             <p className="text-sm text-muted-foreground">
               Administra acceso, rol y estado operativo del equipo.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
             <SearchInput value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} onClear={() => setMemberSearch("")} placeholder="Buscar por nombre o correo..." className="sm:max-w-md" />
             <Select value={memberStatus} onValueChange={setMemberStatus}>
-              <SelectTrigger className="sm:w-44"><SelectValue placeholder="Estado" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Todos</SelectItem>
                 <SelectItem value="ACTIVE">Activos</SelectItem>
                 <SelectItem value="INACTIVE">Inactivos</SelectItem>
               </SelectContent>
             </Select>
+            <SearchableSelect
+              options={[{ value: "ALL", label: "Todos los roles" }, ...roles.filter((role) => role.id).map((role) => ({ value: String(role.id), label: role.name }))]}
+              value={memberRole}
+              onValueChange={setMemberRole}
+              placeholder="Todos los roles"
+              searchPlaceholder="Buscar rol..."
+              emptyMessage="No hay roles disponibles."
+              buttonClassName="w-full sm:w-44"
+            />
           </div>
           {!capabilities.canUpdateEmployees ? <Badge variant="outline">Solo lectura</Badge> : null}
         </div>
@@ -702,19 +714,19 @@ export default function EmployeesPage() {
               {invites.map((invite) => (
                 <div
                   key={invite.id}
-                  className="app-panel-muted flex items-start justify-between gap-3 p-4"
+                  className="app-panel-muted flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div>
                     <p className="font-medium text-foreground">{invite.invitedUser?.name || "Nombre no disponible"}</p>
                     <p className="text-sm text-muted-foreground">{invite.email}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{invite.role.name}</p>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-2 text-right text-xs text-muted-foreground">
+                  <div className="flex shrink-0 flex-col items-start gap-2 text-left text-xs text-muted-foreground sm:items-end sm:text-right">
                     <p className="font-semibold uppercase tracking-[0.16em]">{new Date(invite.expiresAt) > new Date() ? "Expira" : "Expirada"}</p>
                     <p className="mt-1 text-sm normal-case tracking-normal text-foreground">
                       {new Date(invite.expiresAt).toLocaleString("es-BO")}
                     </p>
-                    <div className="flex flex-wrap justify-end gap-2">
+                    <div className="flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:justify-end">
                       {capabilities.canResendInvite ? <Button variant="outline" size="sm" onClick={() => setResendTarget(invite)}>Reenviar invitación</Button> : null}
                       {capabilities.canDeactivate ? <Button variant="outline" size="sm" onClick={() => setCancelTarget(invite)}>Anular invitación</Button> : null}
                     </div>
@@ -726,17 +738,23 @@ export default function EmployeesPage() {
         </Card>
       </div>
 
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Crear empleado</DialogTitle>
-            <DialogDescription>
-              Se genera el usuario y el enlace de invitacion.
-            </DialogDescription>
-          </DialogHeader>
+      <Modal open={inviteOpen} size="sm" onClose={setInviteOpen} title="Crear empleado" description="Se le enviará un correo electrónico con la invitación." footer={
+          <>
+            <Button variant="outline" onClick={() => setInviteOpen(false)}>
+              Cerrar
+            </Button>
+            <Button
+              onClick={submitInvite}
+              disabled={!inviteForm.name || !inviteForm.email || !inviteForm.roleId || inviteSubmitting}
+            >
+              {inviteSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {inviteSubmitting ? "Creando..." : "Crear empleado"}
+            </Button>
+          </>
+        }>
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label>Nombre</Label>
+              <Label required>Nombre</Label>
               <Input
                 value={inviteForm.name}
                 onChange={(e) =>
@@ -745,7 +763,7 @@ export default function EmployeesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label required>Email</Label>
               <Input
                 type="email"
                 value={inviteForm.email}
@@ -755,7 +773,7 @@ export default function EmployeesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Rol</Label>
+              <Label required>Rol</Label>
               <SearchableSelect
                 options={roleOptions.map((role) => ({ value: String(role.id), label: role.name }))}
                 value={inviteForm.roleId}
@@ -799,20 +817,7 @@ export default function EmployeesPage() {
               </Card>
             ) : null} */}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>
-              Cerrar
-            </Button>
-            <Button
-              onClick={submitInvite}
-              disabled={!inviteForm.name || !inviteForm.email || !inviteForm.roleId || inviteSubmitting}
-            >
-              {inviteSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {inviteSubmitting ? "Creando..." : "Crear empleado"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </Modal>
 
       <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }}>
         <DialogContent>
@@ -838,18 +843,21 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={roleOpen} onOpenChange={(open) => { if (!roleSubmitting) setRoleOpen(open); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{roleForm.id ? "Editar rol" : "Nuevo rol"}</DialogTitle>
-            <DialogDescription>
-              Asigna los permisos que este rol podra usar en la app.
-            </DialogDescription>
-          </DialogHeader>
+      <Modal open={roleOpen} onClose={(open) => { if (!roleSubmitting) setRoleOpen(open); }} size="lg" title={roleForm.id ? "Editar rol" : "Nuevo rol"} description="Asigna los permisos que este rol podrá usar en la app." footer={
+          <>
+            <Button variant="outline" disabled={roleSubmitting} onClick={() => setRoleOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={submitRole} disabled={!roleForm.name || !roleForm.key || roleSubmitting}>
+              {roleSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {roleSubmitting ? "Guardando..." : "Guardar"}
+            </Button>
+          </>
+        }>
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Nombre</Label>
+                <Label required>Nombre</Label>
                 <Input
                   disabled={roleSubmitting}
                   value={roleForm.name}
@@ -863,7 +871,7 @@ export default function EmployeesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Clave</Label>
+                <Label required>Clave</Label>
                 <Input
                   disabled={!!roleForm.id}
                   readOnly={roleSubmitting}
@@ -885,7 +893,7 @@ export default function EmployeesPage() {
                 }
               />
             </div>
-            <div className="app-panel-muted flex items-center justify-between p-4">
+            <div className="app-panel-muted flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="font-medium text-foreground">Rol activo</div>
                 <div className="text-sm text-muted-foreground">
@@ -1005,17 +1013,7 @@ export default function EmployeesPage() {
               })()}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" disabled={roleSubmitting} onClick={() => setRoleOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={submitRole} disabled={!roleForm.name || !roleForm.key || roleSubmitting}>
-              {roleSubmitting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {roleSubmitting ? "Guardando..." : "Guardar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </Modal>
     </div>
   );
 }

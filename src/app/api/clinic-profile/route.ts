@@ -53,6 +53,9 @@ async function readProfile(clinicId: number) {
       currency: true,
       timezone: true,
       inventoryExpiryAlertDays: true,
+      cashEntitled: true,
+      cashEnabled: true,
+      requireCashSessionForCash: true,
       logoUrl: true,
       slogan: true,
       owner: true,
@@ -136,6 +139,14 @@ export async function PUT(req: Request) {
     const previousProfile = await readProfile(clinicId);
 
     await prisma.$transaction(async (tx) => {
+      if (clinicData.cashEnabled === true) {
+        const entitlement = await tx.clinic.findUnique({ where: { id: clinicId }, select: { cashEntitled: true } });
+        if (!entitlement?.cashEntitled) throw new Error("CASH_NOT_ENTITLED");
+      }
+      if (clinicData.cashEnabled === false) {
+        const open = await tx.cashSession.count({ where: { clinicId, status: "OPEN" } });
+        if (open > 0) throw new Error("CASH_OPEN_SESSIONS");
+      }
       await tx.clinic.update({
         where: { id: clinicId },
         data: {
@@ -144,6 +155,10 @@ export async function PUT(req: Request) {
           ...(socialMedia ? { socialMedia: { ...socialMedia } } : {}),
         },
       });
+      if (clinicData.cashEnabled === true) {
+        const register = await tx.cashRegister.findFirst({ where: { clinicId }, select: { id: true } });
+        if (!register) await tx.cashRegister.create({ data: { clinicId, name: "Caja principal" } });
+      }
 
       if (schedule) {
         const entries = Object.entries(schedule) as Array<
@@ -203,6 +218,8 @@ export async function PUT(req: Request) {
 
     return NextResponse.json(emailWarning ? { ...profile, emailWarning } : profile);
   } catch (e: any) {
+    if (e?.message === "CASH_NOT_ENTITLED") return NextResponse.json({ error: "Esta clínica no tiene Caja Premium habilitada." }, { status: 403 });
+    if (e?.message === "CASH_OPEN_SESSIONS") return NextResponse.json({ error: "Hay sesiones de caja abiertas. Debes cerrarlas antes de desactivar el control de caja." }, { status: 409 });
     return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 });
   }
 }

@@ -221,6 +221,7 @@ const clinicAdminSelect = {
   mobile: true,
   address: true,
   plan: true,
+  cashEntitled: true,
   isActive: true,
   subscriptionStatus: true,
   subscriptionEndDate: true,
@@ -257,6 +258,7 @@ async function serializeClinic(clinic: {
   mobile: string | null;
   address: string | null;
   plan: string | null;
+  cashEntitled: boolean;
   isActive: boolean;
   subscriptionStatus: SubscriptionStatus;
   subscriptionEndDate: Date | null;
@@ -282,6 +284,7 @@ async function serializeClinic(clinic: {
     phone: clinic.phone ?? clinic.mobile ?? null,
     address: clinic.address,
     plan: clinic.plan ?? null,
+    cashEntitled: clinic.cashEntitled,
     isActive: clinic.isActive,
     subscriptionStatus: toClientSubscriptionStatus(clinic.subscriptionStatus),
     subscriptionEndDate: clinic.subscriptionEndDate?.toISOString().slice(0, 10) ?? null,

@@ -88,6 +88,22 @@ enum NotificationStatus {
   CANCELLED
 }
 
+enum ClientIdentificationType {
+  CEDULA
+  RNC
+  PASSPORT_OTHER
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+}
+
 enum ClinicalReportJobStatus {
   PENDING
   PROCESSING
@@ -181,6 +197,9 @@ model User {
   stockMovements     StockMovement[] @relation("StockMovementCreatedBy")
   clinicalVisits     ClinicalVisit[] @relation("ClinicalVisitVet")
   clinicalReportJobs ClinicalReportJob[]
+  openedCashSessions CashSession[] @relation("CashSessionOpenedBy")
+  closedCashSessions CashSession[] @relation("CashSessionClosedBy")
+  cashMovements     CashMovement[]
 
   notificationRecipients  NotificationRecipient[]
   createdNotifications    Notification[]   @relation("NotificationCreatedBy")
@@ -320,9 +339,12 @@ model Clinic {
   phone    String?
   email    String?
   address  String?
-  currency String  @default("USD")
+  currency String  @default("DOP")
   timezone String  @default("America/Santo_Domingo")
   inventoryExpiryAlertDays Int @default(5)
+  cashEntitled Boolean @default(false)
+  cashEnabled Boolean @default(false)
+  requireCashSessionForCash Boolean @default(false)
 
   logoUrl  String? @db.Text
   slogan   String?
@@ -367,6 +389,9 @@ model Clinic {
   services           Service[]
   products           Product[]
   invoices           Invoice[]
+  cashSessions       CashSession[]
+  cashRegisters      CashRegister[]
+  invoiceCounters    InvoiceCounter[]
   visits             ClinicalVisit[]
   clinicalReportJobs ClinicalReportJob[]
   vaccines           VaccineCatalog[]
@@ -432,6 +457,8 @@ model Client {
   email    String?
   address  String?
   notes    String? @db.Text
+  identificationType   ClientIdentificationType?
+  identificationNumber String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -468,6 +495,12 @@ model Pet {
   microchip String?
   weightKg  Float?
   notes     String?    @db.Text
+
+  allergies          String? @db.Text
+  chronicConditions  String? @db.Text
+  clinicalHistory    String? @db.Text
+  currentMedications String? @db.Text
+  clinicalWarnings   String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -562,6 +595,7 @@ model TodayTurn {
   ownerPhone String
 
   type        AppointmentType @default(GROOMING)
+  serviceId   Int?
   serviceName String
   notes       String? @db.Text
 
@@ -577,7 +611,9 @@ model TodayTurn {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
   pet    Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   encounterItems EncounterItem[]
+  visit  ClinicalVisit?
   invoice Invoice?
 
   @@index([clinicId, arrivalAt])
@@ -611,6 +647,7 @@ model Service {
   invoiceItems InvoiceItem[]
   encounterItems EncounterItem[]
   appointments Appointment[]
+  todayTurns TodayTurn[]
 
   @@unique([clinicId, name])
   @@index([clinicId, isActive])
@@ -653,6 +690,7 @@ model Product {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   stockMovements StockMovement[]
+  batches         ProductBatch[]
   invoiceItems   InvoiceItem[]
   encounterItems  EncounterItem[]
   vaccineCatalog  VaccineCatalog?
@@ -669,6 +707,7 @@ model StockMovement {
   id        Int @id @default(autoincrement())
   clinicId  Int
   productId Int
+  batchId   Int?
   type      StockMovementType
 
   quantity      Int
@@ -684,13 +723,35 @@ model StockMovement {
 
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch   ProductBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, createdAt])
   @@index([productId])
   @@index([createdById])
   @@index([invoiceId])
+  @@index([batchId])
   @@map("stockmovement")
+}
+
+model ProductBatch {
+  id             Int      @id @default(autoincrement())
+  productId      Int
+  lotNumber      String
+  expirationDate DateTime? @db.Date
+  quantity       Int      @default(0)
+  cost           Decimal? @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  movements StockMovement[]
+  vaccinations VaccinationRecord[]
+
+  @@unique([productId, lotNumber])
+  @@index([productId, expirationDate])
+  @@index([productId, quantity])
+  @@map("productbatch")
 }
 
 //
@@ -706,7 +767,7 @@ model Invoice {
 
   petId         Int?
   appointmentId Int? @unique
-  todayTurnId   Int? @unique
+  todayTurnId    Int? @unique
 
   number String
   status InvoiceStatus @default(ISSUED)
@@ -722,6 +783,11 @@ model Invoice {
 
   notes String? @db.Text
 
+  // Reservados para futura implementación fiscal. No se generan valores automáticamente.
+  fiscalDocumentType String?
+  ncf               String?
+  eNcf              String?
+
   createdById String?
   createdBy   User? @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -732,7 +798,7 @@ model Invoice {
   client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   pet         Pet?         @relation(fields: [petId], references: [id], onDelete: SetNull)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  todayTurn   TodayTurn? @relation(fields: [todayTurnId], references: [id], onDelete: SetNull)
+  todayTurn    TodayTurn? @relation(fields: [todayTurnId], references: [id], onDelete: SetNull)
 
   items    InvoiceItem[]
   payments Payment[]
@@ -744,6 +810,18 @@ model Invoice {
   @@index([clinicId, status])
   @@index([clientId])
   @@map("invoice")
+}
+
+model InvoiceCounter {
+  clinicId    Int
+  counterDate DateTime @db.Date
+  value       Int      @default(0)
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@id([clinicId, counterDate])
+  @@index([counterDate])
+  @@map("invoicecounter")
 }
 
 model InvoiceItem {
@@ -778,6 +856,7 @@ model Payment {
   amount    Decimal       @db.Decimal(12, 2)
   method    PaymentMethod @default(CASH)
   reference String?
+  cashSessionId Int?
 
   paidAt DateTime @default(now())
 
@@ -785,11 +864,76 @@ model Payment {
   createdBy   User? @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([paidAt])
   @@index([createdById])
+  @@index([cashSessionId])
   @@map("payment")
+}
+
+model CashSession {
+  id            Int              @id @default(autoincrement())
+  clinicId      Int
+  registerId    Int
+  openedById    String
+  openedAt      DateTime         @default(now())
+  openingFloat  Decimal          @db.Decimal(12, 2)
+  status        CashSessionStatus @default(OPEN)
+  closedById    String?
+  closedAt      DateTime?
+  expectedCash  Decimal?         @db.Decimal(12, 2)
+  countedCash   Decimal?         @db.Decimal(12, 2)
+  difference    Decimal?         @db.Decimal(12, 2)
+  closingNotes  String?          @db.Text
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  openedBy User   @relation("CashSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy User?  @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  payments Payment[]
+  movements CashMovement[]
+
+  @@index([clinicId, openedAt])
+  @@index([registerId, openedAt])
+  @@index([clinicId, status])
+  @@map("cashsession")
+}
+
+model CashRegister {
+  id        Int      @id @default(autoincrement())
+  clinicId  Int
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic   Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  sessions CashSession[]
+
+  @@unique([clinicId, name])
+  @@index([clinicId, isActive])
+  @@map("cashregister")
+}
+
+model CashMovement {
+  id          Int              @id @default(autoincrement())
+  cashSessionId Int
+  type        CashMovementType
+  amount      Decimal          @db.Decimal(12, 2)
+  concept     String
+  note        String?          @db.Text
+  createdById String
+  createdAt   DateTime         @default(now())
+
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([cashSessionId, createdAt])
+  @@map("cashmovement")
 }
 
 model EncounterItem {
@@ -835,6 +979,7 @@ model ClinicalVisit {
   petId    Int
 
   appointmentId Int? @unique
+  todayTurnId    Int? @unique
   vetId         String?
 
   visitAt      DateTime @default(now())
@@ -844,6 +989,11 @@ model ClinicalVisit {
   diagnosis String? @db.Text
   treatment String? @db.Text
   notes     String? @db.Text
+  anamnesis          String?   @db.Text
+  heartRateBpm       Int?
+  respiratoryRatePpm Int?
+  carePlan           String?   @db.Text
+  nextReviewAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -852,6 +1002,7 @@ model ClinicalVisit {
   client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   pet         Pet          @relation(fields: [petId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  todayTurn    TodayTurn? @relation(fields: [todayTurnId], references: [id], onDelete: SetNull)
   vet         User?        @relation("ClinicalVisitVet", fields: [vetId], references: [id], onDelete: SetNull)
 
   attachments  MedicalAttachment[]
@@ -870,7 +1021,10 @@ model MedicalAttachment {
   visitId  Int
 
   fileName String
+  displayName String?
+  originalFilename String?
   fileType String?
+  fileSizeBytes Int?
   url      String @db.Text
 
   createdAt DateTime @default(now())
@@ -922,6 +1076,7 @@ model VaccinationRecord {
   nextDueAt DateTime?
 
   batchNumber String?
+  batchId     Int?
   notes       String? @db.Text
 
   createdAt DateTime @default(now())
@@ -930,6 +1085,7 @@ model VaccinationRecord {
   pet     Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
   vaccine VaccineCatalog? @relation(fields: [vaccineId], references: [id], onDelete: SetNull)
   visit   ClinicalVisit? @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  batch   ProductBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, nextDueAt])
   @@index([petId])

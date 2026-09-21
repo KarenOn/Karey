@@ -25,8 +25,12 @@ export type CurrentUserProfile = {
   welcomeSeenAt: string | null;
   clinicId: number | null;
   clinicName: string | null;
+  clinicCurrency: string;
+  clinicTimezone: string;
   clinicLogoUrl: string | null;
   clinicIsActive: boolean | null;
+  cashEntitled: boolean;
+  cashEnabled: boolean;
   clinicSetupRequired: boolean;
   subscriptionStatus: "active" | "inactive" | "past_due" | null;
   subscriptionEndDate: string | null;
@@ -174,12 +178,16 @@ export async function readCurrentUserProfile(): Promise<CurrentUserProfile> {
     welcomeSeenAt: row.user.welcomeSeenAt?.toISOString() ?? null,
     clinicId: row.clinicId,
     clinicName: row.membership?.clinic.name ?? null,
+    clinicCurrency: row.membership?.clinic.currency ?? "DOP",
+    clinicTimezone: row.membership?.clinic.timezone ?? "America/Santo_Domingo",
     clinicLogoUrl: await resolveStoredFileUrl(row.membership?.clinic.logoUrl, {
       fileName: row.membership?.clinicId
         ? `logo-clinica-${row.membership.clinicId}.png`
         : "logo-clinica.png",
     }),
     clinicIsActive: row.membership?.clinic.isActive ?? null,
+    cashEntitled: row.membership?.clinic.cashEntitled ?? false,
+    cashEnabled: row.membership?.clinic.cashEnabled ?? false,
     clinicSetupRequired: isClinicSetupRequired(row.membership?.clinic),
     subscriptionStatus: toClientSubscriptionStatus(row.membership?.clinic.subscriptionStatus),
     subscriptionEndDate: row.membership?.clinic.subscriptionEndDate?.toISOString().slice(0, 10) ?? null,

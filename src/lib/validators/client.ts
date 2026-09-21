@@ -15,6 +15,22 @@ export const ClientFormSchema = z.object({
   email: optionalEmailSchema,
   address: optionalTrimmedString(200),
   notes: optionalTrimmedString(2000),
+  identificationType: z.union([z.literal(""), z.enum(["CEDULA", "RNC", "PASSPORT_OTHER"])]).optional(),
+  identificationNumber: optionalTrimmedString(30),
+}).superRefine((data, ctx) => {
+  const number = data.identificationNumber?.replace(/[\s-]/g, "") ?? "";
+  if (!data.identificationType && number) {
+    ctx.addIssue({ code: "custom", path: ["identificationType"], message: "Selecciona el tipo de identificación" });
+  }
+  if (data.identificationType && !number) {
+    ctx.addIssue({ code: "custom", path: ["identificationNumber"], message: "Indica el número de identificación" });
+  }
+  if (number && data.identificationType === "CEDULA" && !/^\d{11}$/.test(number)) {
+    ctx.addIssue({ code: "custom", path: ["identificationNumber"], message: "La cédula debe tener 11 dígitos" });
+  }
+  if (number && data.identificationType === "RNC" && !/^\d{9,11}$/.test(number)) {
+    ctx.addIssue({ code: "custom", path: ["identificationNumber"], message: "El RNC debe tener 9 u 11 dígitos" });
+  }
 });
 
 export type ClientFormValues = z.infer<typeof ClientFormSchema>;

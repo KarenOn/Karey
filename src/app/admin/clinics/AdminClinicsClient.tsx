@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import ClinicAvatar from "@/components/shared/ClinicAvatar";
 import DataTablePagination from "@/components/shared/DataTablePagination";
+import Modal from "@/components/shared/Modal";
 import PhoneInput from "@/components/shared/PhoneInput";
 import SearchInput from "@/components/shared/SearchInput";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,7 @@ type EditForm = {
   email: string;
   phone: string;
   plan: string;
+  cashEntitled: boolean;
   isActive: boolean;
   subscriptionStatus: AdminClinicSubscriptionStatus;
   subscriptionEndDate: string;
@@ -153,6 +155,7 @@ function createEditForm(clinic: AdminClinicRecord): EditForm {
     email: clinic.email ?? "",
     phone: clinic.phone ?? "",
     plan: clinic.plan ?? "",
+    cashEntitled: clinic.cashEntitled,
     isActive: clinic.isActive,
     subscriptionStatus: clinic.subscriptionStatus,
     subscriptionEndDate: clinic.subscriptionEndDate ?? "",
@@ -165,7 +168,9 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
   const [clinics, setClinics] = useState(initialClinics);
   const [busyClinicId, setBusyClinicId] = useState<number | null>(null);
   const [viewClinic, setViewClinic] = useState<AdminClinicRecord | null>(null);
+  const [deactivationTarget, setDeactivationTarget] = useState<AdminClinicRecord | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [editSnapshot, setEditSnapshot] = useState<EditForm | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(emptyCreateForm);
@@ -202,6 +207,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
   }, [clinics, search]);
 
   const orderedClinics = filteredClinics.slice(page * pageSize, (page + 1) * pageSize);
+  const editHasChanges = Boolean(editForm && editSnapshot && JSON.stringify(editForm) !== JSON.stringify(editSnapshot));
 
   function mergeClinic(updated: AdminClinicRecord) {
     setClinics((current) => {
@@ -215,6 +221,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
 
     setViewClinic((current) => (current?.id === updated.id ? updated : current));
     setEditForm((current) => (current?.id === updated.id ? createEditForm(updated) : current));
+    setEditSnapshot((current) => (current?.id === updated.id ? createEditForm(updated) : current));
   }
 
   async function updateClinic(
@@ -247,11 +254,26 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
   }
 
   async function toggleClinic(clinic: AdminClinicRecord) {
+    if (clinic.isActive) {
+      setDeactivationTarget(clinic);
+      return;
+    }
+
     await updateClinic(
       clinic.id,
       { action: clinic.isActive ? "deactivate" : "activate" },
       clinic.isActive ? "Clínica desactivada" : "Clínica activada"
     );
+  }
+
+  async function confirmDeactivation() {
+    if (!deactivationTarget) return;
+    const updated = await updateClinic(
+      deactivationTarget.id,
+      { action: "deactivate" },
+      "Clínica desactivada",
+    );
+    if (updated) setDeactivationTarget(null);
   }
 
   async function resendOwnerInvitation(clinic: AdminClinicRecord) {
@@ -273,6 +295,11 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
       return;
     }
 
+    const currentClinic = clinics.find((clinic) => clinic.id === editForm.id);
+    if (currentClinic?.cashEntitled && !editForm.cashEntitled && !window.confirm("¿Retirar Caja Premium? Las sesiones abiertas deben cerrarse antes.")) {
+      return;
+    }
+
     try {
       setSavingEdit(true);
       const updated = await updateClinic(
@@ -283,6 +310,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
           email: editForm.email,
           phone: editForm.phone,
           plan: editForm.plan,
+          cashEntitled: editForm.cashEntitled,
           isActive: editForm.isActive,
           subscriptionStatus: editForm.subscriptionStatus,
           subscriptionEndDate: editForm.subscriptionEndDate,
@@ -294,6 +322,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
 
       if (updated) {
         setEditForm(null);
+        setEditSnapshot(null);
       }
     } finally {
       setSavingEdit(false);
@@ -369,7 +398,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
             <div className="flex flex-wrap items-center justify-end gap-2">
               <SearchInput
                 aria-label="Buscar clínicas u owners"
-                className="min-w-[18rem] sm:w-80"
+                className="w-full sm:min-w-[18rem] sm:w-80"
                 onChange={(event) => {
                   setSearch(event.target.value);
                   setPage(0);
@@ -400,6 +429,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               <TableHead>Teléfono</TableHead>
               <TableHead>Pago</TableHead>
               <TableHead>Plan</TableHead>
+              <TableHead>Caja Premium</TableHead>
               <TableHead>Proximo pago</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -441,6 +471,11 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                     </Badge>
                   </TableCell>
                   <TableCell>{clinic.plan ?? "Manual"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={clinic.cashEntitled ? statusClassName.active : statusClassName.inactive}>
+                      {clinic.cashEntitled ? "Activa" : "No contratada"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{formatDate(clinic.subscriptionEndDate)}</TableCell>
                   <TableCell className="whitespace-normal">
                     <div className="flex flex-wrap justify-end gap-2">
@@ -471,7 +506,11 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setEditForm(createEditForm(clinic))}
+                        onClick={() => {
+                          const nextForm = createEditForm(clinic);
+                          setEditForm(nextForm);
+                          setEditSnapshot(nextForm);
+                        }}
                       >
                         <PencilLine className="size-4" />
                         Editar
@@ -507,19 +546,43 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
         )}
       </section>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Nueva clínica</DialogTitle>
-            <DialogDescription>
-              Crea la clínica y su usuario owner inicial para que el cliente pueda entrar a la app.
-            </DialogDescription>
-          </DialogHeader>
+      <Modal
+        open={createOpen}
+        onClose={(open) => {
+          if (!open && !creatingClinic) setCreateOpen(false);
+        }}
+        title="Nueva clínica"
+        description="Crea la clínica y su usuario owner inicial para que el cliente pueda entrar a la app."
+        size="lg"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creatingClinic}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void createClinic()}
+              disabled={
+                creatingClinic ||
+                !createForm.clinicName.trim() ||
+                !createForm.ownerName.trim() ||
+                !createForm.ownerEmail.trim()
+              }
+            >
+              {creatingClinic ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 size-4" />
+              )}
+              Crear clínica
+            </Button>
+          </div>
+        }
+      >
 
           <div className="grid gap-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="create-clinic-name">Nombre de la clínica</Label>
+                <Label htmlFor="create-clinic-name" required>Nombre de la clínica</Label>
                 <Input
                   id="create-clinic-name"
                   value={createForm.clinicName}
@@ -649,7 +712,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-owner-name">Nombre owner</Label>
+                <Label htmlFor="create-owner-name" required>Nombre owner</Label>
                 <Input
                   id="create-owner-name"
                   value={createForm.ownerName}
@@ -677,7 +740,7 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-owner-email">Email owner</Label>
+                <Label htmlFor="create-owner-email" required>Email owner</Label>
                 <Input
                   id="create-owner-email"
                   type="email"
@@ -709,35 +772,48 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+      </Modal>
+
+      <Modal
+        open={!!deactivationTarget}
+        onClose={(open) => {
+          if (!open && !busyClinicId) setDeactivationTarget(null);
+        }}
+        title={deactivationTarget ? `¿Desactivar ${deactivationTarget.name}?` : "Desactivar clínica"}
+        description="La clínica se marcará como inactiva y su suscripción quedará inactiva. Los datos se conservarán y podrás reactivarla posteriormente. Las solicitudes protegidas dejarán de autorizarse mientras permanezca inactiva."
+        size="sm"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setDeactivationTarget(null)}
+              disabled={!!busyClinicId}
+            >
               Cancelar
             </Button>
             <Button
-              onClick={() => void createClinic()}
-              disabled={
-                creatingClinic ||
-                !createForm.clinicName.trim() ||
-                !createForm.ownerName.trim() ||
-                !createForm.ownerEmail.trim()
-              }
+              variant="destructive"
+              onClick={() => void confirmDeactivation()}
+              disabled={!!busyClinicId}
             >
-              {creatingClinic ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              Crear clínica
+              {busyClinicId === deactivationTarget?.id ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : null}
+              Desactivar clínica
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        }
+      >
+        <p className="text-sm leading-6 text-muted-foreground">
+          Esta acción no elimina pacientes, clientes, facturas, inventario ni demás información registrada.
+        </p>
+      </Modal>
 
       <Dialog
         open={!!ownerAccessResult}
         onOpenChange={(open) => !open && setOwnerAccessResult(null)}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Acceso creado</DialogTitle>
             <DialogDescription>
@@ -794,14 +870,20 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!viewClinic} onOpenChange={(open) => !open && setViewClinic(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Detalle de clínica</DialogTitle>
-            <DialogDescription>
-              Resumen operativo y estado actual de la suscripción.
-            </DialogDescription>
-          </DialogHeader>
+      <Modal
+        open={!!viewClinic}
+        onClose={(open) => !open && setViewClinic(null)}
+        title="Detalle de clínica"
+        description="Resumen operativo y estado actual de la suscripción."
+        size="lg"
+        footer={
+          <div className="flex w-full justify-end">
+            <Button variant="outline" onClick={() => setViewClinic(null)}>
+              Cerrar
+            </Button>
+          </div>
+        }
+      >
 
           {viewClinic ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -877,22 +959,50 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
               </div>
             </div>
           ) : null}
-        </DialogContent>
-      </Dialog>
+      </Modal>
 
-      <Dialog open={!!editForm} onOpenChange={(open) => !open && setEditForm(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Editar clínica</DialogTitle>
-            <DialogDescription>
-              Ajusta acceso, plan y seguimiento manual de pagos.
-            </DialogDescription>
-          </DialogHeader>
+      <Modal
+        open={!!editForm}
+        onClose={(open) => {
+          if (!open && !savingEdit) {
+            setEditForm(null);
+            setEditSnapshot(null);
+          }
+        }}
+        title="Editar clínica"
+        description="Ajusta acceso, plan y seguimiento manual de pagos."
+        size="lg"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditForm(null);
+                setEditSnapshot(null);
+              }}
+              disabled={savingEdit}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void saveEdit()}
+              disabled={savingEdit || !editForm?.name.trim() || !editHasChanges}
+            >
+              {savingEdit ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="mr-2 size-4" />
+              )}
+              Guardar cambios
+            </Button>
+          </div>
+        }
+      >
 
           {editForm ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="clinic-name">Nombre</Label>
+                <Label htmlFor="clinic-name" required>Nombre</Label>
                 <Input
                   id="clinic-name"
                   value={editForm.name}
@@ -960,6 +1070,18 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
                 />
               </div>
 
+              <div className="app-panel-muted flex items-center justify-between gap-4 p-4 sm:col-span-2">
+                <div>
+                  <p className="font-semibold text-foreground">Caja Premium</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Permite a esta clínica utilizar el módulo de control de caja.</p>
+                </div>
+                <Switch
+                  checked={editForm.cashEntitled}
+                  onCheckedChange={(checked) => setEditForm((current) => current ? { ...current, cashEntitled: checked } : current)}
+                  disabled={savingEdit}
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label>Estado de suscripción</Label>
                 <Select
@@ -1020,26 +1142,9 @@ export default function AdminClinicsClient({ initialClinics }: AdminClinicsClien
             </div>
           ) : null}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditForm(null)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => void saveEdit()}
-              disabled={savingEdit || !editForm?.name.trim()}
-            >
-              {savingEdit ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ShieldCheck className="size-4" />
-              )}
-              Guardar cambios
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </Modal>
       <Dialog open={!!confirmPaymentClinic} onOpenChange={(open) => !open && setConfirmPaymentClinic(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
           <DialogHeader><DialogTitle>Confirmar pago</DialogTitle><DialogDescription>Registra manualmente el pago de la suscripción de {confirmPaymentClinic?.name}. Se calculará el siguiente vencimiento.</DialogDescription></DialogHeader>
           <DialogFooter><Button variant="outline" onClick={() => setConfirmPaymentClinic(null)}>Cancelar</Button><Button onClick={() => confirmPaymentClinic && void markPaid(confirmPaymentClinic)}>Marcar como pagado</Button></DialogFooter>
         </DialogContent>

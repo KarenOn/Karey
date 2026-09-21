@@ -144,7 +144,6 @@
 
 import { useRef, useState } from "react";
 import { Upload, Plus, AlertCircle, FileArchive } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils"; // O la función que uses para combinar clases
 
 export type UploadScope = "clinic-logo" | "medical-attachment" | "user-avatar";
@@ -162,13 +161,16 @@ export type LocalFile = {
 };
 export type UploadedFile = {
   fileName: string;
+  originalFilename: string;
   fileType: string;
+  fileSizeBytes: number;
   storageRef: string;
 };
 
 type Props = {
   accept?: string;
   className?: string;
+  compact?: boolean;
   disabled?: boolean;
   maxSizeBytes?: number;
   onError?: (message: string) => void;
@@ -212,8 +214,10 @@ export async function uploadFileToStorage(
     throw new Error("No se pudo subir el archivo al almacenamiento");
   return {
     fileName: localFile.file.name,
+    originalFilename: localFile.file.name,
     fileType:
       signData.contentType || localFile.file.type || "application/octet-stream",
+    fileSizeBytes: localFile.file.size,
     storageRef: signData.storageRef,
   };
 }
@@ -233,6 +237,7 @@ function matchesAccept(file: File, accept?: string) {
 export default function SignedFileUploader({
   accept,
   className,
+  compact = false,
   disabled = false,
   maxSizeBytes = 10 * 1024 * 1024,
   onError,
@@ -317,32 +322,41 @@ export default function SignedFileUploader({
         onDragLeave={handleDrag}
         onDrop={handleDrop}
         onClick={() => !disabled && inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === " ") && !disabled) {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-label="Seleccionar archivo"
         className={cn(
-          "relative flex flex-col items-center justify-center w-full py-8 px-4 border-2 border-dashed rounded-[2rem] transition-all cursor-pointer select-none",
+          "relative flex flex-col items-center justify-center w-full border-2 border-dashed transition-all cursor-pointer select-none",
+          compact ? "h-full min-h-10 rounded-lg p-0" : "py-8 px-4 rounded-xl",
           isDragActive
             ? "border-primary bg-primary/5 scale-[0.99]"
             : "border-blue-900/40 hover:border-primary/60 bg-transparent",
           disabled && "opacity-50 cursor-not-allowed pointer-events-none"
         )}
       >
-        {/* Icono Mas / Plus centralizado */}
-        <div className="flex items-center justify-center w-10 h-10 rounded-full border border-blue-600/30 text-blue-600 mb-3 bg-blue-50/50 dark:bg-blue-950/20">
-          <Plus className="h-5 w-5 stroke-[2.5]" />
+        <div className={cn("flex items-center justify-center rounded-full border border-primary/30 text-primary bg-primary/5", compact ? "h-7 w-7" : "mb-3 h-10 w-10")}>
+          {compact ? <Upload className="h-4 w-4" /> : <Plus className="h-5 w-5 stroke-[2.5]" />}
         </div>
 
         {/* Textos Informativos */}
-        <p className="text-sm text-muted-foreground font-medium text-center">
+        {!compact ? <p className="text-sm text-muted-foreground font-medium text-center">
           Arrastra o{" "}
           <span className="text-blue-600 font-semibold hover:underline">
             buscar archivo
           </span>
-        </p>
+        </p> : null}
 
         {/* Alerta de tamaño máximo en Rojo */}
-        <div className="flex items-center gap-1.5 mt-3 text-red-600 dark:text-red-400">
+        {!compact ? <div className="flex items-center gap-1.5 mt-3 text-amber-700 dark:text-amber-400">
           <AlertCircle className="h-4 w-4" />
           <span className="text-xs font-semibold">Tamaño máximo: {maxSizeMB}MB</span>
-        </div>
+        </div> : null}
       </div>
 
       {/* Vista previa del Archivo Seleccionado (Tarjeta Inferior sin acciones) */}

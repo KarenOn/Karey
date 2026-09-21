@@ -226,6 +226,13 @@
     padding: 1.5rem;
   }
 
+  @media (max-width: 639px) {
+    .app-page-hero {
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+  }
+
   .app-page-hero::before {
     content: "";
     position: absolute;

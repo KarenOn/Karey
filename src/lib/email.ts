@@ -74,6 +74,18 @@ type SubscriptionReminderEmailInput = {
   to: string;
 };
 
+export type ClinicalReminderEmailInput = {
+  audience: "admin" | "client";
+  clientName: string;
+  clinicName: string;
+  dueDate: Date;
+  kind: "vaccine-upcoming" | "vaccine-overdue" | "clinical-follow-up";
+  petName: string;
+  recipientName?: string | null;
+  to: string;
+  vaccineName?: string;
+};
+
 export class MailConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -665,5 +677,23 @@ export async function sendSubscriptionReminderEmail({ clinicName, date, kind, re
     subject: "Renovación de suscripción Karey Vet",
     text: `${introName}, ${copy}\n\nAbrir Karey Vet: ${getAppBaseUrl()}`,
     to,
+  });
+}
+
+export async function sendClinicalReminderEmail(input: ClinicalReminderEmailInput) {
+  const reason = input.kind === "clinical-follow-up" ? "próximo control clínico" : `vacuna de ${input.vaccineName ?? "vacunación"}`;
+  const action = input.kind === "vaccine-overdue" ? "contactar al propietario y regularizar la vacuna" : "agendar o confirmar la atención";
+  const date = formatDate(input.dueDate);
+  await sendEmail({
+    html: buildEmailShell({
+      bodyHtml: `<p style="margin:0 0 16px;font-size:15px;line-height:1.7;">${escapeHtml(input.recipientName?.trim() || "Hola")}, hay un recordatorio clínico para ${escapeHtml(input.petName)}.</p>${buildInfoList([{ label: "Paciente", value: input.petName }, { label: "Propietario", value: input.clientName }, { label: "Motivo", value: reason }, { label: "Fecha", value: date }, { label: "Acción recomendada", value: action }])}`,
+      ctaHref: getAppUrl("/pets"),
+      ctaLabel: "Abrir pacientes",
+      intro: "Recordatorio clínico de Karey Vet.",
+      title: "Recordatorio clínico",
+    }),
+    subject: `Recordatorio clínico de ${input.petName}`,
+    text: `Paciente: ${input.petName}\nPropietario: ${input.clientName}\nMotivo: ${reason}\nFecha: ${date}\nAcción recomendada: ${action}`,
+    to: input.to,
   });
 }

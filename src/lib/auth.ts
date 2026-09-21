@@ -114,6 +114,9 @@ export async function getActiveClinicMembershipForUser(userId: string) {
           subscriptionEndDate: true,
           plan: true,
           timezone: true,
+          currency: true,
+          cashEnabled: true,
+          cashEntitled: true,
         },
       },
       role: {

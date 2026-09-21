@@ -31,6 +31,7 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogGroup[] = [
   { module: "inventoryMovements", label: "Movimientos de inventario", actions: ["read", "create"] },
   { module: "invoices", label: "Facturación", actions: ["read", "viewDrafts", "create", "edit", "issue", "annul", "sendToBilling", "download", "print", "delete"] },
   { module: "payments", label: "Pagos", actions: ["read", "create", "register"] },
+  { module: "cash", label: "Caja", actions: ["read", "open", "operate", "close", "closeAny"] },
 ] as const;
 
 export type PermissionKey = `${string}.${string}`;
@@ -52,6 +53,7 @@ export type ClinicAccess = {
     visits: boolean;
     vaccines: boolean;
     inventoryMovements: boolean;
+    cash: boolean;
   };
   actions: {
     clinic: { read: boolean; update: boolean };
@@ -78,6 +80,7 @@ export type ClinicAccess = {
     encounters: { manage: boolean; addConsumptions: boolean };
     invoices: { read: boolean; create: boolean; update: boolean; edit: boolean; viewDrafts: boolean; issue: boolean; annul: boolean; sendToBilling: boolean; download: boolean; print: boolean; delete: boolean };
     payments: { read: boolean; register: boolean };
+    cash: { read: boolean; open: boolean; operate: boolean; close: boolean; closeAny: boolean };
     visits: { read: boolean; create: boolean; update: boolean; edit: boolean; delete: boolean; attachDocuments: boolean };
     vaccines: { read: boolean; create: boolean; update: boolean; edit: boolean; delete: boolean };
     inventoryMovements: { read: boolean; create: boolean; update: boolean; delete: boolean };
@@ -95,6 +98,8 @@ export const NOTIFICATION_REQUIRED_PERMISSIONS: Record<string, readonly string[]
   INVOICE_ISSUED: ["invoices.issue"],
   INVOICE_PARTIAL_PAYMENT: ["payments.register"],
   INVOICE_PAID: ["payments.register"],
+  VACCINE_REMINDER: ["vaccines.read"],
+  CLINICAL_FOLLOW_UP_REMINDER: ["visits.read"],
 };
 
 const LEGACY_UPDATE_MODULES = new Set(["appointments", "clients", "pets", "visits", "vaccines", "services", "inventory", "invoices"]);
@@ -232,6 +237,11 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
   const invoicesDelete = allow("invoices.delete");
   const paymentsRead = allow("payments.read", ["invoices.read"]);
   const paymentsRegister = allow("payments.register", ["payments.create"]);
+  const cashRead = allow("cash.read");
+  const cashOpen = allow("cash.open");
+  const cashOperate = allow("cash.operate");
+  const cashClose = allow("cash.close");
+  const cashCloseAny = allow("cash.closeAny");
   const encountersManage = allow("encounters.manage");
   const encountersAddConsumptions = allow("encounters.addConsumptions");
 
@@ -272,6 +282,7 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
     visits: visitsRead,
     vaccines: vaccinesRead,
     inventoryMovements: inventoryMovementsRead,
+    cash: cashRead,
   };
 
   return {
@@ -357,6 +368,7 @@ export function buildClinicAccess(roleKey?: string | null, perms?: unknown): Cli
       },
       encounters: { manage: encountersManage, addConsumptions: encountersAddConsumptions },
       payments: { read: paymentsRead, register: paymentsRegister },
+      cash: { read: cashRead, open: cashOpen, operate: cashOperate, close: cashClose, closeAny: cashCloseAny },
       visits: { read: visitsRead, create: visitsCreate, update: visitsUpdate, edit: visitsEdit, delete: visitsDelete, attachDocuments: visitsAttachDocuments },
       vaccines: { read: vaccinesRead, create: vaccinesCreate, update: vaccinesUpdate, edit: vaccinesEdit, delete: vaccinesDelete },
       inventoryMovements: { read: inventoryMovementsRead, create: inventoryMovementsCreate, update: inventoryMovementsUpdate, delete: inventoryMovementsDelete },

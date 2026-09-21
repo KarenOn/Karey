@@ -15,7 +15,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     where: { id, clinicId },
     select: {
       id: true,
-      clinic: { select: { name: true } },
+      clinic: { select: { name: true, taxName: true, taxId: true } },
       number: true,
       status: true,
       appointmentId: true,
@@ -28,7 +28,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       discount: true,
       total: true,
       notes: true,
-      client: { select: { id: true, fullName: true, phone: true, email: true } },
+      createdBy: { select: { name: true, email: true } },
+      client: { select: { id: true, fullName: true, phone: true, email: true, address: true, identificationType: true, identificationNumber: true } },
       pet: { select: { id: true, name: true } },
       items: {
         orderBy: { id: "asc" },
@@ -36,7 +37,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       },
       payments: {
         orderBy: { paidAt: "desc" },
-        select: { id: true, amount: true, method: true, reference: true, paidAt: true },
+        select: { id: true, amount: true, method: true, reference: true, paidAt: true, createdBy: { select: { name: true, email: true } } },
       },
     },
   });

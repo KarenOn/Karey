@@ -15,6 +15,7 @@ export type AdminClinicRecord = {
   phone: string | null;
   address: string | null;
   plan: string | null;
+  cashEntitled: boolean;
   isActive: boolean;
   subscriptionStatus: AdminClinicSubscriptionStatus;
   subscriptionEndDate: string | null;

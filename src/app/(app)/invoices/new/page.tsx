@@ -68,10 +68,6 @@ type PosItem = {
   requiresPrescription?: boolean;
 };
 
-function money(n: number) {
-  return n.toLocaleString("es-DO", { style: "currency", currency: "DOP" });
-}
-
 function num(v: unknown) {
   const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : 0;
   return Number.isFinite(n) ? n : 0;

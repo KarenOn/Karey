@@ -1,6 +1,7 @@
 
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { formatMoney } from "@/lib/formatters";
 
 export function startOfDay(d: Date) {
   const x = new Date(d);
@@ -14,7 +15,7 @@ export function endOfDay(d: Date) {
   return x;
 }
 
-export function safeDate(value: any): Date | null {
+export function safeDate(value: Date | string | number | null | undefined): Date | null {
   if (!value) return null;
   const d = typeof value === "string" ? parseISO(value) : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -39,20 +40,22 @@ export function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60_000);
 }
 
-export function toMoney(v: unknown) {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : 0;
-  return n.toLocaleString("es-DO", { style: "currency", currency: "DOP" });
+export function toMoney(v: unknown, currency = "DOP", locale = "es-DO") {
+  return formatMoney(v, currency, locale);
 }
 
 export function formatCurrency(
   amount: number,
   currency: string = 'DOP',
+  locale = "es-DO",
 ): string {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  // }).format(Math.abs(amount));
-  }).format(amount);
+  return formatMoney(amount, currency, locale);
+}
+
+/** Preserves the calendar date from API ISO values without UTC midnight shifting. */
+export function calendarDateKey(value: Date | string | number) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10);
+  }
+  return format(new Date(value), "yyyy-MM-dd");
 }

@@ -64,7 +64,7 @@ export default function GlobalSearch({ entityGroups = [] }: GlobalSearchProps) {
       <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium">Ctrl K</kbd>
     </Button>
     <Button type="button" variant="outline" size="icon" className="md:hidden" aria-label="Abrir búsqueda global" onClick={() => setOpen(true)}><Search className="h-4 w-4" /></Button>
-    <CommandDialog open={open} onOpenChange={setOpen} title="Búsqueda global" description="Busca y navega por Karey Vet">
+    <CommandDialog open={open} onOpenChange={setOpen} title="Búsqueda global" className="w-lg" description="Busca y navega por Karey Vet">
       <CommandInput placeholder="Buscar pacientes, clientes, citas, facturas..." />
       <CommandList>
         <CommandEmpty>No encontramos resultados. Prueba con otro término.</CommandEmpty>

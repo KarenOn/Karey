@@ -13,6 +13,8 @@ export const ProductCreateSchema = z.object({
   stockOnHand: z.coerce.number().int().min(0).default(0),
   minStock: z.coerce.number().int().min(0).default(5),
   expirationDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida.").nullable().optional(),
+  initialBatchNumber: z.string().trim().optional().nullable(),
+  initialExpirationDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida.").nullable().optional(),
 
   isActive: z.coerce.boolean().default(true),
 
@@ -29,3 +31,12 @@ export const ProductUpdateSchema = ProductCreateSchema.refine(
 
 export type ProductCreateInput = z.infer<typeof ProductCreateSchema>;
 export type ProductUpdateInput = z.infer<typeof ProductUpdateSchema>;
+
+export function zodFieldErrors(err: z.ZodError) {
+  const out: Record<string, string> = {};
+  for (const issue of err.issues) {
+    const key = issue.path.join(".") || "form";
+    if (!out[key]) out[key] = issue.message;
+  }
+  return out;
+}

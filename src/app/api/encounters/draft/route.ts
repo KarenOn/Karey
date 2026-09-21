@@ -10,7 +10,7 @@ const LinkSchema = z.object({
 }).refine((value) => Boolean(value.appointmentId) !== Boolean(value.todayTurnId), "Indica una cita o un turno.");
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("encounters.manage");
+  const { clinicId, session } = await requireClinicPermission("encounters.manage");
   const parsed = LinkSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message }, { status: 422 });
 
@@ -81,6 +81,7 @@ export async function POST(req: Request) {
         tax: new Prisma.Decimal(0),
         discount: new Prisma.Decimal(0),
         total: new Prisma.Decimal(subtotal.toFixed(2)),
+        createdById: session.user.id,
         items: { create: invoiceItems },
       },
       select: { id: true, status: true, number: true },

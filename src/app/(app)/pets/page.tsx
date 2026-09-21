@@ -60,6 +60,11 @@ type PatientFormState = {
   color: string;
   microchip: string;
   notes: string;
+  allergies: string;
+  chronicConditions: string;
+  clinicalHistory: string;
+  currentMedications: string;
+  clinicalWarnings: string;
 };
 
 type QuickClientFormState = {
@@ -79,6 +84,7 @@ const emptyPatientForm: PatientFormState = {
   color: "",
   microchip: "",
   notes: "",
+  allergies: "", chronicConditions: "", clinicalHistory: "", currentMedications: "", clinicalWarnings: "",
 };
 
 const emptyQuickClientForm: QuickClientFormState = {
@@ -186,6 +192,7 @@ export default function PatientsPage() {
       color: pet.color ?? "",
       microchip: pet.microchip ?? "",
       notes: pet.notes ?? "",
+      allergies: pet.allergies ?? "", chronicConditions: pet.chronicConditions ?? "", clinicalHistory: pet.clinicalHistory ?? "", currentMedications: pet.currentMedications ?? "", clinicalWarnings: pet.clinicalWarnings ?? "",
     });
     setPatientModalOpen(true);
   }
@@ -500,11 +507,8 @@ export default function PatientsPage() {
             <FormField label="Nombre" name="name" value={formData.name} onChange={handlePatientChange} required />
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground/90">
+              <Label className="text-sm font-semibold text-foreground/90" required>
                 Dueño / responsable
-                <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-600">
-                  (Obligatorio)
-                </span>
               </Label>
               <SearchableSelect
                 allowCustomValue
@@ -557,6 +561,12 @@ export default function PatientsPage() {
             <FormField label="Peso (kg)" name="weightKg" type="number" value={formData.weightKg} onChange={handlePatientChange} />
             <FormField label="Color / pelaje" name="color" value={formData.color} onChange={handlePatientChange} />
             <FormField label="Microchip" name="microchip" value={formData.microchip} onChange={handlePatientChange} />
+            <p className="text-sm font-semibold text-foreground sm:col-span-2">Información clínica permanente</p>
+            <FormField label="Alergias" name="allergies" type="textarea" value={formData.allergies} onChange={handlePatientChange} />
+            <FormField label="Condiciones / enfermedades crónicas" name="chronicConditions" type="textarea" value={formData.chronicConditions} onChange={handlePatientChange} />
+            <FormField label="Antecedentes clínicos importantes" name="clinicalHistory" type="textarea" value={formData.clinicalHistory} onChange={handlePatientChange} />
+            <FormField label="Medicamentos actuales" name="currentMedications" type="textarea" value={formData.currentMedications} onChange={handlePatientChange} />
+            <FormField label="Advertencias clínicas" name="clinicalWarnings" type="textarea" value={formData.clinicalWarnings} onChange={handlePatientChange} className="sm:col-span-2" />
             <FormField
               label="Notas"
               name="notes"

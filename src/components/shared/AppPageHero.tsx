@@ -48,9 +48,9 @@ export default function AppPageHero({
   return (
     <section className={cn("space-y-4", className)}>
       <div className="app-page-hero">
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex items-center gap-3">
+        <div className="relative flex min-w-0 flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-3xl">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               {back ? (
                 <BackButton href={backHref} />
               ) : null}
@@ -63,7 +63,7 @@ export default function AppPageHero({
               ) : null}
             </div>
 
-            <h2 className="app-heading mt-3 text-[2.15rem] text-foreground sm:text-[2.45rem]">
+            <h2 className="app-heading mt-3 break-words text-[2.15rem] text-foreground sm:text-[2.45rem]">
               {title}
             </h2>
             {description ? (
@@ -74,7 +74,7 @@ export default function AppPageHero({
           </div>
 
           {actions ? (
-            <div className="flex flex-wrap items-center gap-3">{actions}</div>
+            <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto">{actions}</div>
           ) : null}
         </div>
       </div>

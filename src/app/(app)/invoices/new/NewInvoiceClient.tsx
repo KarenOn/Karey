@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import SearchableSelect from "@/components/shared/SearchableSelect";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 import FormSkeleton from "@/components/shared/FormSkeleton";
 
@@ -42,6 +43,8 @@ import {
   preparePrintWindow,
 } from "@/lib/printing/browser-printer";
 import { usePrintSettings } from "@/lib/printing/usePrintSettings";
+import { useCurrentUserProfile } from "@/components/layout/current-user-context";
+import { formatMoney } from "@/lib/formatters";
 
 type Client = { id: number; fullName: string; phone: string | null; email: string | null };
 type Pet = { id: number; name: string; species: string; breed: string | null };
@@ -76,8 +79,8 @@ type PosItem = {
   requiresPrescription?: boolean;
 };
 
-function money(n: number) {
-  return n.toLocaleString("es-DO", { style: "currency", currency: "DOP" });
+function money(n: number, currency = "DOP") {
+  return formatMoney(n, currency);
 }
 
 function num(v: unknown) {
@@ -89,6 +92,8 @@ export default function NewInvoicePOSPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { settings: printSettings } = usePrintSettings();
+  const profile = useCurrentUserProfile();
+  const currency = profile?.clinicCurrency ?? "DOP";
 
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
@@ -119,6 +124,8 @@ export default function NewInvoicePOSPage() {
 
   // cobrar ahora
   const [payNow, setPayNow] = useState<boolean>(false);
+  const [paymentCashSessions, setPaymentCashSessions] = useState<Array<{ id: number; register: { id: number; name: string } }>>([]);
+  const [paymentCashSessionId, setPaymentCashSessionId] = useState("");
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "TRANSFER">("CASH");
   const [payRef, setPayRef] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -189,6 +196,13 @@ export default function NewInvoicePOSPage() {
       })));
     })().catch(() => undefined);
   }, [loading, prefilledAppointmentId, prefilledEncounterId, prefilledTodayTurnId, products.length, services.length]);
+
+  useEffect(() => {
+    void fetch("/api/cash-sessions/open", { cache: "no-store" }).then((response) => response.ok ? response.json() : []).then((data: Array<{ id: number; register: { id: number; name: string } }>) => {
+      setPaymentCashSessions(data);
+      if (data.length === 1) setPaymentCashSessionId(String(data[0].register.id));
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -452,18 +466,19 @@ export default function NewInvoicePOSPage() {
     if (submitting) return;
     setErr(null);
 
-    if (!clientId) {
-      setErr("Selecciona un cliente.");
+    const hasAttention = Boolean(prefilledAppointmentId || prefilledTodayTurnId || draftAppointmentId || draftTodayTurnId);
+    if (!clientId && hasAttention) {
+      toast.error("Selecciona un cliente.");
       return;
     }
     if (items.length === 0) {
-      setErr("Agrega al menos un concepto.");
+      toast.error("Agrega al menos un concepto.");
       return;
     }
 
     setSubmitting(true);
     const payload = {
-      clientId: Number(clientId),
+      clientId: clientId ? Number(clientId) : undefined,
       petId: petId ? Number(petId) : null,
       appointmentId: prefilledAppointmentId ? Number(prefilledAppointmentId) : draftAppointmentId,
       todayTurnId: prefilledTodayTurnId ? Number(prefilledTodayTurnId) : draftTodayTurnId,
@@ -489,6 +504,7 @@ export default function NewInvoicePOSPage() {
               amount: payAmount,
               method: payMethod,
               reference: payRef ? payRef : null,
+              registerId: paymentCashSessionId ? Number(paymentCashSessionId) : undefined,
             }
           : null,
     };
@@ -507,7 +523,7 @@ export default function NewInvoicePOSPage() {
     if (!res.ok) {
       closePreparedPrintWindow(preparedWindow);
       const data = await res.json().catch(() => null);
-      setErr(data?.error ?? "Error creando factura");
+      toast.error(data?.error ?? "Error creando factura");
       setSubmitting(false);
       return;
     }
@@ -535,7 +551,7 @@ export default function NewInvoicePOSPage() {
         : `/invoices/${created.id}`
     );
     } catch (error) {
-      setErr(error instanceof Error ? error.message : "No se pudo crear la factura");
+      toast.error(error instanceof Error ? error.message : "No se pudo crear la factura");
       setSubmitting(false);
     }
   };
@@ -612,7 +628,12 @@ export default function NewInvoicePOSPage() {
               </p>
             ) : null}
           </div>
-        ) : null}
+        ) : (
+          <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm text-foreground">
+            <p className="font-semibold">Venta general</p>
+            <p className="mt-1 text-muted-foreground">Sin cliente, paciente ni atención vinculada. Puedes seleccionar un cliente si necesitas identificar la venta.</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* LEFT */}
@@ -642,13 +663,13 @@ export default function NewInvoicePOSPage() {
                       <TooltipTrigger asChild>
                         <span className="text-primary cursor-help"><HelpCircle className="w-4 h-4" /></span>
                       </TooltipTrigger>
-                      <TooltipContent>Requerido. Si no aparece, revisa que el cliente tenga el mismo clinicId.</TooltipContent>
+                      <TooltipContent>Opcional para venta general. Las atenciones requieren cliente.</TooltipContent>
                     </Tooltip>
                   </div>
 
                   <SearchableSelect
                     options={clients.map((client) => ({ value: String(client.id), label: client.fullName, keywords: [client.phone ?? "", client.email ?? ""] }))}
-                    placeholder="Seleccionar cliente"
+                     placeholder="Seleccionar cliente (opcional en venta general)"
                     searchPlaceholder="Buscar cliente..."
                     value={clientId}
                     onValueChange={(v) => {
@@ -769,7 +790,7 @@ export default function NewInvoicePOSPage() {
               {/* Selector por lista (servicios / productos) */}
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1">
-                  <Label>
+                  <Label required>
                     {selectedType === "SERVICE" ? "Servicios" : "Productos"}
                   </Label>
                   <SearchableSelect
@@ -786,7 +807,7 @@ export default function NewInvoicePOSPage() {
                 </div>
 
                 <div className="w-full md:w-38">
-                  <Label>Cantidad</Label>
+                  <Label required>Cantidad</Label>
                   <Input
                     className="mt-1.5"
                     type="number"
@@ -836,11 +857,6 @@ export default function NewInvoicePOSPage() {
                               <div className="flex flex-wrap gap-2">
                                 {it.stockInfo ? (
                                   <span className="text-xs text-muted-foreground">{it.stockInfo}</span>
-                                ) : null}
-                                {it.requiresPrescription ? (
-                                  <Badge className="bg-rose-100 text-rose-700 border border-rose-200">
-                                    Requiere receta
-                                  </Badge>
                                 ) : null}
                               </div>
                             </div>
@@ -958,7 +974,7 @@ export default function NewInvoicePOSPage() {
 
                 <div className="pt-3 border-t flex justify-between text-lg font-bold">
                   <span>Total</span>
-                  <span className="text-primary">{money(total)}</span>
+                  <span className="text-primary">{money(total, currency)}</span>
                 </div>
               </div>
             </div>
@@ -979,7 +995,7 @@ export default function NewInvoicePOSPage() {
               {payNow ? (
                 <>
                   <div>
-                    <label className="text-xs text-muted-foreground">Monto</label>
+                    <Label required className="text-xs text-muted-foreground">Monto</Label>
                     <Input value={payAmount} onChange={(e) => setPayAmount(e.target.value)} type="number" />
                   </div>
                   <div className="flex gap-2">
@@ -1009,6 +1025,8 @@ export default function NewInvoicePOSPage() {
                     </Button>
                   </div>
 
+                  {paymentCashSessions.length > 1 ? <div><Label className="text-xs text-muted-foreground">Cobrar en</Label><select className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={paymentCashSessionId} onChange={(event) => setPaymentCashSessionId(event.target.value)}><option value="">Seleccionar caja</option>{paymentCashSessions.map((session) => <option key={session.id} value={session.register.id}>{session.register.name}</option>)}</select></div> : null}
+
                   <div>
                     <Label className="text-xs text-muted-foreground">Referencia (opcional)</Label>
                     <Input className="mt-1.5" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="voucher / transacción" />
@@ -1027,7 +1045,7 @@ export default function NewInvoicePOSPage() {
 
               <Button
                 className="flex-1 gap-2"
-                disabled={!clientId || items.length === 0 || submitting}
+                disabled={(Boolean(prefilledAppointmentId || prefilledTodayTurnId || draftAppointmentId || draftTodayTurnId) && !clientId) || items.length === 0 || submitting}
                 onClick={() => submit(payNow ? "SAVE_AND_PAY" : "SAVE")}
               >
                 {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="w-4 h-4" />}

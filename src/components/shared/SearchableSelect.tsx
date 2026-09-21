@@ -82,7 +82,7 @@ export default function SearchableSelect({
         <Button
           aria-expanded={open}
           className={cn(
-            "h-11 w-full justify-between rounded-lg border border-border bg-background px-3 font-normal text-foreground shadow-none",
+            "h-11 min-w-0 w-full justify-between rounded-lg border border-border bg-background px-3 font-normal text-foreground shadow-none",
             !selectedOption && !value && "text-muted-foreground",
             buttonClassName
           )}
@@ -98,7 +98,7 @@ export default function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className={cn("w-(--radix-popover-trigger-width) p-0", className)}>
+      <PopoverContent align="start" className={cn("min-w-0 w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] overflow-hidden p-0", className)}>
         <Command shouldFilter>
           <CommandInput
              onValueChange={(value) => {

@@ -9,6 +9,7 @@ import {
 import { requireClinicPermission } from "@/lib/server-auth";
 import { AppointmentUpdateSchema } from "@/lib/validators/appointments";
 import { calculateAppointmentEnd, getAppointmentEnd, isAppointmentActive, rangesOverlap } from "@/lib/appointment-helpers";
+import { hasPermission, isElevatedClinicRole } from "@/lib/permissions";
 
 function zodDetails(err: unknown) {
   if (!(err instanceof z.ZodError)) return [];
@@ -22,10 +23,36 @@ const appointmentInclude = {
   pet: { select: { id: true, name: true, species: true, clientId: true } },
   client: { select: { id: true, fullName: true, phone: true } },
   vet: { select: { id: true, name: true, email: true } },
-  visit: { select: { id: true, _count: { select: { vaccinations: true } } } },
+  visit: {
+    select: {
+      id: true,
+      visitAt: true,
+      diagnosis: true,
+      treatment: true,
+      notes: true,
+      vet: { select: { id: true, name: true } },
+      vaccinations: { select: { id: true, vaccineName: true, appliedAt: true } },
+    },
+  },
+  invoice: { select: { id: true, number: true, status: true } },
   encounterItems: { select: { id: true } },
   service: { select: { id: true, name: true, durationMins: true } },
 } as const;
+
+function protectAppointment<T extends { visit: unknown; invoice: { status: string } | null }>(appointment: T, member: { role: { key: string; permissions: unknown } }) {
+  const elevated = isElevatedClinicRole(member.role.key);
+  const canReadVisits = elevated || hasPermission(member.role.permissions, "visits.read") || hasPermission(member.role.permissions, "pets.read");
+  const canReadVaccines = elevated || hasPermission(member.role.permissions, "vaccines.read") || hasPermission(member.role.permissions, "pets.read");
+  const canReadInvoices = elevated || hasPermission(member.role.permissions, "invoices.read");
+  const canViewDrafts = elevated || hasPermission(member.role.permissions, "invoices.viewDrafts") || hasPermission(member.role.permissions, "invoices.read");
+  const visit = canReadVisits && appointment.visit && typeof appointment.visit === "object"
+    ? { ...appointment.visit as Record<string, unknown>, vaccinations: canReadVaccines ? (appointment.visit as { vaccinations?: unknown[] }).vaccinations ?? [] : [] }
+    : null;
+  const invoice = canReadInvoices && appointment.invoice && (appointment.invoice.status !== "DRAFT" || canViewDrafts)
+    ? appointment.invoice
+    : null;
+  return { ...appointment, visit, invoice };
+}
 const DEFAULT_APPOINTMENT_DURATION_MINUTES = 30;
 
 function addMinutes(date: Date, minutes: number) {
@@ -145,7 +172,7 @@ async function validateAppointmentSchedule(params: {
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("appointments.read");
+  const { clinicId, member } = await requireClinicPermission("appointments.read");
   if (!clinicId) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
   }
@@ -161,7 +188,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   }
 
-  return NextResponse.json(appointment);
+  return NextResponse.json(protectAppointment(appointment, member));
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {

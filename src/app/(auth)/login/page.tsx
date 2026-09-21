@@ -10,6 +10,7 @@ import { authClient } from "@/lib/auth-client";
 import { getFriendlyVerificationMessage } from "@/lib/auth-feedback";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import PasswordInput from "@/components/shared/PasswordInput";
 import Image from "next/image";
 
@@ -180,7 +181,7 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Correo electrónico</label>
+              <Label required className="mb-2 text-sm font-semibold text-foreground/88">Correo electrónico</Label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="nombre@ejemplo.com" autoComplete="email" className="h-12 pl-11 pr-4 font-semibold" required />
@@ -188,7 +189,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground/88">Contraseña</label>
+              <Label required className="mb-2 text-sm font-semibold text-foreground/88">Contraseña</Label>
               <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Escribe tu contraseña" autoComplete="current-password" className="h-12 font-semibold" leadingIcon required />
             </div>
 

@@ -13,6 +13,8 @@ import {
 import { z } from "zod";
 import { getWalkInClientId } from "@/lib/pos/getWalkInClient";
 import { notifyInvoiceEvent } from "@/lib/in-app-notifications";
+import { consumeProductStockFEFO } from "@/lib/server/inventory-batches";
+import { CASH_REGISTER_REQUIRED, CASH_SESSION_REQUIRED, resolvePaymentCashSessionForRegister } from "@/lib/server/cash";
 
 function yyyymmdd(d: Date) {
   const y = d.getFullYear();
@@ -21,26 +23,20 @@ function yyyymmdd(d: Date) {
   return `${y}${m}${day}`;
 }
 
-async function nextInvoiceNumber(clinicId: number, issueDate: Date) {
+async function nextInvoiceNumber(tx: Prisma.TransactionClient, clinicId: number, issueDate: Date) {
   const start = new Date(issueDate);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  const last = await prisma.invoice.findFirst({
-    where: { clinicId, issueDate: { gte: start, lt: end }, number: { startsWith: "FAC-" } },
-    orderBy: { number: "desc" },
-    select: { number: true },
-  });
-
-  let seq = 1;
-  if (last?.number) {
-    const parts = last.number.split("-");
-    const lastSeq = Number(parts[parts.length - 1]);
-    if (!Number.isNaN(lastSeq)) seq = lastSeq + 1;
-  }
-
-  return `FAC-${yyyymmdd(issueDate)}-${String(seq).padStart(4, "0")}`;
+  const counterDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+  const rows = await tx.$queryRaw<Array<{ value: number }>>(Prisma.sql`
+    INSERT INTO "invoicecounter" ("clinicId", "counterDate", "value")
+    VALUES (${clinicId}, ${counterDate}::date, 1)
+    ON CONFLICT ("clinicId", "counterDate")
+    DO UPDATE SET "value" = "invoicecounter"."value" + 1
+    RETURNING "value"
+  `);
+  const sequence = rows[0]?.value;
+  if (!sequence) throw new Error("No se pudo reservar el número de factura.");
+  return `FAC-${yyyymmdd(issueDate)}-${String(sequence).padStart(4, "0")}`;
 }
 
 const ItemSchema = z.object({
@@ -73,6 +69,7 @@ const CreateInvoiceSchema = z.object({
       amount: z.coerce.number().positive(),
       method: z.nativeEnum(PaymentMethod).optional().default(PaymentMethod.CASH),
       reference: z.string().trim().max(120).nullable().optional(),
+      registerId: z.number().int().positive().nullable().optional(),
     })
     .nullable()
     .optional(),
@@ -122,7 +119,7 @@ export async function GET(req: Request) {
       client: { select: { id: true, fullName: true } },
       pet: { select: { id: true, name: true } },
       _count: { select: { items: true, payments: true } },
-      payments: { select: { method: true }, orderBy: { paidAt: "desc" }, take: 1 },
+      payments: { select: { method: true, amount: true }, orderBy: { paidAt: "desc" } },
     },
   });
 
@@ -138,13 +135,14 @@ export async function GET(req: Request) {
     itemsCount: r._count.items,
     paymentsCount: r._count.payments,
     lastPaymentMethod: r.payments?.[0]?.method ?? null,
+    paidTotal: r.payments.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2),
   }));
 
   return NextResponse.json(data);
 }
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("invoices.create");
+  const { clinicId, session } = await requireClinicPermission("invoices.create");
 
   const body = await req.json().catch(() => null);
   const parsed = CreateInvoiceSchema.safeParse(body);
@@ -201,22 +199,26 @@ export async function POST(req: Request) {
     if (data.petId === undefined) data.petId = todayTurn.petId;
   }
 
-  const existingEncounterInvoice = await prisma.invoice.findFirst({
-    where: {
-      clinicId,
-      status: { not: InvoiceStatus.VOID },
-      ...(data.appointmentId ? { appointmentId: data.appointmentId } : {}),
-      ...(data.todayTurnId ? { todayTurnId: data.todayTurnId } : {}),
-    },
-    select: { id: true, status: true },
-  });
+  const existingEncounterInvoice = data.appointmentId || data.todayTurnId
+    ? await prisma.invoice.findFirst({
+        where: {
+          clinicId,
+          status: { not: InvoiceStatus.VOID },
+          ...(data.appointmentId ? { appointmentId: data.appointmentId } : {}),
+          ...(data.todayTurnId ? { todayTurnId: data.todayTurnId } : {}),
+        },
+        select: { id: true, number: true, status: true },
+      })
+    : null;
   if (existingEncounterInvoice && existingEncounterInvoice.status !== InvoiceStatus.DRAFT) {
     return NextResponse.json({ error: "Esta atención ya tiene una factura emitida." }, { status: 409 });
   }
 
   const resolvedClientId = data.clientId ?? (await getWalkInClientId(clinicId));
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result;
+  try {
+  result = await prisma.$transaction(async (tx) => {
     // Crea invoice + items
     const payAmountValue = data.payment?.amount ?? total;
 
@@ -227,7 +229,7 @@ export async function POST(req: Request) {
         appointmentId: data.appointmentId ?? null,
         todayTurnId: data.todayTurnId ?? null,
 
-        number: (await nextInvoiceNumber(clinicId!, new Date())).toString(),
+        number: existingEncounterInvoice?.number ?? await nextInvoiceNumber(tx, clinicId, new Date()),
         status: data.payNow
           ? new Prisma.Decimal(payAmountValue).lessThan(new Prisma.Decimal(total))
             ? InvoiceStatus.PARTIALLY_PAID
@@ -243,7 +245,7 @@ export async function POST(req: Request) {
         total: new Prisma.Decimal(total),
 
         notes: data.notes ?? null,
-        createdById: null,
+        createdById: session.user.id,
 
         items: { create: data.items.map((it) => ({
           type: it.type,
@@ -288,14 +290,16 @@ export async function POST(req: Request) {
 
     // Si payNow -> crea payment
     if (data.payNow) {
+      const cashSessionId = await resolvePaymentCashSessionForRegister(tx, clinicId, data.payment?.method ?? PaymentMethod.CASH, data.payment?.registerId);
       await tx.payment.create({
         data: {
           invoiceId: invoice.id,
           amount: new Prisma.Decimal(payAmountValue),
           method: data.payment?.method ?? PaymentMethod.CASH,
           reference: data.payment?.reference ?? null,
+          cashSessionId,
           paidAt: new Date(),
-          createdById: null,
+          createdById: session.user.id,
         },
       });
     }
@@ -310,30 +314,15 @@ export async function POST(req: Request) {
 
       const product = await tx.product.findFirst({
         where: { id: it.productId, clinicId },
-        select: { id: true, trackStock: true, stockOnHand: true },
+        select: { id: true, trackStock: true },
       });
 
       if (product?.trackStock) {
         const qty = Number(it.quantity);
-
-        await tx.product.update({
-          where: { id: product.id },
-          data: { stockOnHand: Math.max(0, product.stockOnHand - qty) },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            clinicId,
-            productId: product.id,
-            type: "OUT",
-            quantity: qty,
-            reason: "Venta / Factura",
-            referenceType: "INVOICE",
-            referenceId: invoice.number,
-            invoiceId: invoice.id,
-            createdById: null,
-          },
-        });
+        const allocations = await consumeProductStockFEFO(tx, { clinicId, productId: product.id, quantity: qty });
+        await Promise.all(allocations.map((allocation) => tx.stockMovement.create({
+          data: { clinicId, productId: product.id, batchId: allocation.batchId, type: "OUT", quantity: allocation.quantity, reason: "Venta / Factura", referenceType: "INVOICE", referenceId: invoice.number, invoiceId: invoice.id, createdById: session.user.id },
+        })));
       }
     }
 
@@ -361,6 +350,14 @@ export async function POST(req: Request) {
 
     return invoice;
   });
+  } catch (error) {
+    if (error instanceof Error && error.message === CASH_SESSION_REQUIRED) {
+      return NextResponse.json({ error: "Debes abrir una caja antes de registrar un pago en efectivo." }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === CASH_REGISTER_REQUIRED) return NextResponse.json({ error: "Selecciona la caja donde registrar este pago." }, { status: 409 });
+    if (error instanceof Error && error.message === "CASH_REGISTER_INVALID") return NextResponse.json({ error: "La caja seleccionada no está disponible." }, { status: 409 });
+    throw error;
+  }
 
   await syncInvoicePaymentReminderNotifications(result.id);
   await notifyInvoiceEvent(result.id, result.status === InvoiceStatus.PARTIALLY_PAID ? "PARTIAL_PAYMENT" : result.status === InvoiceStatus.PAID ? "PAID" : result.status === InvoiceStatus.DRAFT ? "DRAFT" : "ISSUED");

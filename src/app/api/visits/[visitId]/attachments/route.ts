@@ -3,6 +3,7 @@ import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { serializeAttachment } from "@/lib/storage";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
+import { deriveAttachmentDisplayName } from "@/lib/attachments";
 
 export const runtime = "nodejs";
 
@@ -85,14 +86,19 @@ export async function POST(
     return visit;
   }
 
-  const { fileName, fileType, storageRef, url } = parsed.data;
+  const { fileName, displayName, originalFilename, fileType, fileSizeBytes, storageRef, url } = parsed.data;
+  const resolvedOriginalFilename = originalFilename || fileName;
+  const resolvedDisplayName = displayName || deriveAttachmentDisplayName(resolvedOriginalFilename);
 
   const created = await prisma.medicalAttachment.create({
     data: {
       clinicId: visit.clinicId,
       visitId,
-      fileName,
+      fileName: resolvedDisplayName,
+      displayName: resolvedDisplayName,
+      originalFilename: resolvedOriginalFilename,
       fileType: fileType || null,
+      fileSizeBytes: fileSizeBytes ?? null,
       url: storageRef ?? url ?? "",
     },
   });

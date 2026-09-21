@@ -5,10 +5,12 @@ import { Download, Eye, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type Props = { fileName: string; fileType?: string | null; size?: number | null; url?: string | null; downloadUrl?: string | null; onDelete?: () => void; deleting?: boolean };
+type Props = { fileName: string; displayName?: string | null; originalFilename?: string | null; fileType?: string | null; size?: number | null; url?: string | null; downloadUrl?: string | null; onDelete?: () => void; deleting?: boolean };
 
-export default function DocumentAttachment({ fileName, fileType, size, url, downloadUrl, onDelete, deleting }: Props) {
+export default function DocumentAttachment({ fileName, displayName, originalFilename, fileType, size, url, downloadUrl, onDelete, deleting }: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  const visibleName = displayName?.trim() || fileName;
+  const downloadName = originalFilename?.trim() || fileName;
   const type = fileType || "application/octet-stream";
   const canPreview = type.startsWith("image/") || type === "application/pdf";
   const sizeLabel = size ? `${Math.ceil(size / 1024)} KB` : null;
@@ -20,7 +22,7 @@ export default function DocumentAttachment({ fileName, fileType, size, url, down
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">{fileName}</p>
+          <p className="font-medium text-foreground">{visibleName}</p>
           <p className="truncate text-xs text-muted-foreground">
             {type}
             {sizeLabel ? ` · ${sizeLabel}` : ""}
@@ -40,7 +42,7 @@ export default function DocumentAttachment({ fileName, fileType, size, url, down
         ) : null}
         {downloadUrl ? (
           <Button asChild type="button" size="sm" variant="ghost">
-            <a href={downloadUrl} download>
+            <a href={downloadUrl} download={downloadName}>
               <Download className="mr-1 h-4 w-4" />
               Descargar
             </a>
@@ -54,16 +56,16 @@ export default function DocumentAttachment({ fileName, fileType, size, url, down
             className="cursor-pointer"
             onClick={onDelete}
             disabled={deleting}
-            aria-label={`Eliminar ${fileName}`}
+            aria-label={`Eliminar ${visibleName}`}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
         ) : null}
       </div>
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl">
+        <DialogContent className="w-2xl max-h-[90vh] max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{fileName}</DialogTitle>
+            <DialogTitle>{visibleName}</DialogTitle>
             <DialogDescription>
               {canPreview
                 ? "Previsualización del archivo"
@@ -73,21 +75,21 @@ export default function DocumentAttachment({ fileName, fileType, size, url, down
           {canPreview && url ? (
             type === "application/pdf" ? (
               <iframe
-                title={fileName}
+                title={visibleName}
                 src={url}
                 className="h-[65vh] w-full rounded-md border"
               />
             ) : (
               <img
                 src={url}
-                alt={fileName}
+                alt={visibleName}
                 className="max-h-[65vh] w-full object-contain"
               />
             )
           ) : downloadUrl ? (
             <div className="flex justify-center">
-              <Button asChild>
-                <a href={downloadUrl} download>
+                <Button asChild>
+                <a href={downloadUrl} download={downloadName}>
                   Descargar archivo
                 </a>
               </Button>

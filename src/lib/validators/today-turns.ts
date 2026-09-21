@@ -74,6 +74,7 @@ export const TodayTurnCreateSchema = z
 
     // COMMON
     service: TodayTurnServiceSchema,
+    serviceId: z.coerce.number().int().positive().optional(),
     serviceName: z.preprocess(
       (v) => (typeof v === "string" ? v.trim() : v),
       z.string().min(1, "Debes indicar el servicio.")

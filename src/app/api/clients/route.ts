@@ -27,7 +27,7 @@ export async function GET(req: Request) {
       },
       orderBy: { fullName: "asc" },
       take,
-      select: { id: true, fullName: true, phone: true, email: true },
+      select: { id: true, fullName: true, phone: true, email: true, identificationType: true, identificationNumber: true },
     });
 
     return NextResponse.json(clients);
@@ -47,6 +47,8 @@ export async function GET(req: Request) {
       email: client.email,
       address: client.address,
       notes: client.notes,
+      identificationType: client.identificationType,
+      identificationNumber: client.identificationNumber,
       petsCount: client._count.pets,
     }))
   );
@@ -86,6 +88,8 @@ export async function POST(req: Request) {
       email: parsed.data.email ?? null,
       address: parsed.data.address ?? null,
       notes: parsed.data.notes ?? null,
+      identificationType: parsed.data.identificationType || null,
+      identificationNumber: parsed.data.identificationNumber ?? null,
     },
   });
 
@@ -97,6 +101,8 @@ export async function POST(req: Request) {
       email: client.email,
       address: client.address,
       notes: client.notes,
+      identificationType: client.identificationType,
+      identificationNumber: client.identificationNumber,
       petsCount: 0,
     },
     { status: 201 }

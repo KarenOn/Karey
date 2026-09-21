@@ -23,7 +23,7 @@ export default async function ClientDetailPage({
   const { clinicId } = await requireClinicPermission("clients.read");
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, currency: true },
   });
   if (!clinic) notFound();
 
@@ -36,6 +36,8 @@ export default async function ClientDetailPage({
       email: true,
       address: true,
       notes: true,
+      identificationType: true,
+      identificationNumber: true,
       createdAt: true,
     },
   });
@@ -101,6 +103,7 @@ export default async function ClientDetailPage({
   return (
     <ClientDetailView
       clinicName={clinic.name}
+      currency={clinic.currency}
       client={{
         ...client,
         createdAt: client.createdAt.toISOString(),

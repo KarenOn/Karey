@@ -62,7 +62,11 @@ export const ClinicProfileSchema = z
     website: optStr().optional(),
 
     address: optStr().optional(),
+    currency: z.string().trim().min(3).max(3).optional(),
+    timezone: z.string().trim().min(1).max(100).optional(),
     inventoryExpiryAlertDays: z.coerce.number().int().min(1).max(365).default(5),
+    cashEnabled: z.boolean().optional(),
+    requireCashSessionForCash: z.boolean().optional(),
 
     socialMedia: z
       .object({

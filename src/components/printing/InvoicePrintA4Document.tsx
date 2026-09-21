@@ -2,18 +2,12 @@
 
 import { useEffect } from "react";
 import type { InvoicePrintData } from "@/lib/print/getInvoicePrintData";
+import { formatDecimal, formatMoney } from "@/lib/formatters";
 
-function money(value: number | string) {
+function money(value: number | string, currency = "DOP") {
   const numeric = typeof value === "string" ? Number(value) : value;
 
-  if (!Number.isFinite(numeric)) {
-    return "0.00";
-  }
-
-  return numeric.toLocaleString("es-DO", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoney(numeric, currency);
 }
 
 function formatDateTime(value?: string | null, timezone?: string | null) {
@@ -380,6 +374,7 @@ export default function InvoicePrintA4Document({
             )}
             <div>
               <div className="invoice-title">{data.clinic.name}</div>
+              {hasValue(data.clinic.fiscalName) && data.clinic.fiscalName !== data.clinic.name ? <div className="invoice-muted">Nombre fiscal: {data.clinic.fiscalName}</div> : null}
               {hasValue(data.clinic.address) ? (
                 <div className="invoice-muted">{data.clinic.address}</div>
               ) : null}
@@ -419,6 +414,7 @@ export default function InvoicePrintA4Document({
                   <span>Nombre</span>
                   <span>{data.client.fullName}</span>
                 </div>
+                {hasValue(data.client.identificationNumber) ? <div className="invoice-kv-row"><span>{data.client.identificationType === "CEDULA" ? "Cédula" : data.client.identificationType === "RNC" ? "RNC" : "Identificación"}</span><span>{data.client.identificationNumber}</span></div> : null}
                 {hasValue(data.client.phone) ? (
                   <div className="invoice-kv-row">
                     <span>Teléfono</span>
@@ -454,23 +450,23 @@ export default function InvoicePrintA4Document({
               <div className="invoice-kv">
                 <div className="invoice-kv-row">
                   <span>Subtotal</span>
-                  <span>{money(data.invoice.subtotal)}</span>
+                  <span>{money(data.invoice.subtotal, data.clinic.currency ?? "DOP")}</span>
                 </div>
                 <div className="invoice-kv-row">
                   <span>ITBIS</span>
-                  <span>{money(data.invoice.tax)}</span>
+                  <span>{money(data.invoice.tax, data.clinic.currency ?? "DOP")}</span>
                 </div>
                 <div className="invoice-kv-row">
                   <span>Descuento</span>
-                  <span>-{money(data.invoice.discount)}</span>
+                  <span>-{money(data.invoice.discount, data.clinic.currency ?? "DOP")}</span>
                 </div>
                 <div className="invoice-kv-row">
                   <span>Pagado</span>
-                  <span>{money(paidTotal)}</span>
+                  <span>{money(paidTotal, data.clinic.currency ?? "DOP")}</span>
                 </div>
                 <div className="invoice-kv-row">
                   <span>Balance</span>
-                  <span>{money(balance)}</span>
+                  <span>{money(balance, data.clinic.currency ?? "DOP")}</span>
                 </div>
               </div>
             </div>
@@ -500,10 +496,10 @@ export default function InvoicePrintA4Document({
                       <div className="invoice-item-meta">{item.type}</div>
                     ) : null}
                   </td>
-                  <td className="invoice-right">{money(item.quantity)}</td>
-                  <td className="invoice-right">{money(item.unitPrice)}</td>
+                  <td className="invoice-right">{formatDecimal(item.quantity)}</td>
+                  <td className="invoice-right">{money(item.unitPrice, data.clinic.currency ?? "DOP")}</td>
                   <td className="invoice-right">
-                    <strong>{money(item.lineTotal)}</strong>
+                    <strong>{money(item.lineTotal, data.clinic.currency ?? "DOP")}</strong>
                   </td>
                 </tr>
               ))}
@@ -555,7 +551,7 @@ export default function InvoicePrintA4Document({
                           {payment.reference ? ` (${payment.reference})` : ""}
                         </span>
                         <span>
-                          {money(payment.amount)} |{" "}
+                          {money(payment.amount, data.clinic.currency ?? "DOP")} |{" "}
                           {formatDateTime(payment.paidAt, data.clinic.timezone)}
                         </span>
                       </div>
@@ -570,31 +566,31 @@ export default function InvoicePrintA4Document({
               <div style={{ marginTop: 12 }}>
                 <div className="invoice-total-row">
                   <span>Subtotal</span>
-                  <span>{money(data.invoice.subtotal)}</span>
+                  <span>{money(data.invoice.subtotal, data.clinic.currency ?? "DOP")}</span>
                 </div>
                 {Number(data.invoice.discount) > 0 ? (
                   <div className="invoice-total-row">
                     <span>Descuento</span>
-                    <span>-{money(data.invoice.discount)}</span>
+                  <span>-{money(data.invoice.discount, data.clinic.currency ?? "DOP")}</span>
                   </div>
                 ) : null}
                 {Number(data.invoice.tax) > 0 ? (
                   <div className="invoice-total-row">
                     <span>ITBIS</span>
-                    <span>{money(data.invoice.tax)}</span>
+                  <span>{money(data.invoice.tax, data.clinic.currency ?? "DOP")}</span>
                   </div>
                 ) : null}
                 <div className="invoice-total-row">
                   <span>Pagado</span>
-                  <strong>{money(paidTotal)}</strong>
+                  <strong>{money(paidTotal, data.clinic.currency ?? "DOP")}</strong>
                 </div>
                 <div className="invoice-total-row">
                   <span>Balance</span>
-                  <strong>{money(balance)}</strong>
+                  <strong>{money(balance, data.clinic.currency ?? "DOP")}</strong>
                 </div>
                 <div className="invoice-grand-total">
                   <span>Total</span>
-                  <span>{money(data.invoice.total)}</span>
+                  <span>{money(data.invoice.total, data.clinic.currency ?? "DOP")}</span>
                 </div>
               </div>
             </div>

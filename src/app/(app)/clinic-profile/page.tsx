@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import SignedFileUploader, { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import AttachmentUploadModal from "@/components/shared/AttachmentUploadModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ import PrintSettingsCard from "@/components/printing/PrintSettingsCard";
   
 import PhoneInput from "@/components/shared/PhoneInput";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const dayNames: Record<string, string> = {
   monday: "Lunes",
@@ -39,6 +41,9 @@ type ClinicProfile = {
   currency: string;
   timezone: string;
   inventoryExpiryAlertDays: number;
+  cashEntitled: boolean;
+  cashEnabled: boolean;
+  requireCashSessionForCash: boolean;
 
   logoUrl: string | null;
   logoStorageRef: string | null;
@@ -91,6 +96,8 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<LocalFile | null>(null);
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
+  const [logoPickerFile, setLogoPickerFile] = useState<LocalFile | null>(null);
   const canUpdateClinic = !!access?.actions.clinic.update;
 
 
@@ -131,7 +138,10 @@ export default function ProfilePage() {
 
   const cancelEdit = () => {
     if (logoFile) URL.revokeObjectURL(logoFile.previewUrl);
+    if (logoPickerFile) URL.revokeObjectURL(logoPickerFile.previewUrl);
     setLogoFile(null);
+    setLogoPickerFile(null);
+    setLogoPickerOpen(false);
     if (snapshot) setProfile(snapshot);
     setIsEditing(true);
     setErr(null);
@@ -159,7 +169,11 @@ export default function ProfilePage() {
         website: profile.website ?? "",
 
         address: profile.address ?? "",
+        currency: profile.currency,
+        timezone: profile.timezone,
         inventoryExpiryAlertDays: profile.inventoryExpiryAlertDays,
+        cashEnabled: profile.cashEnabled,
+        requireCashSessionForCash: profile.requireCashSessionForCash,
         // city: profile.city ?? "",
         // state: profile.state ?? "",
         // zipCode: profile.zipCode ?? "",
@@ -219,12 +233,25 @@ export default function ProfilePage() {
     return JSON.stringify(profile) !== JSON.stringify(snapshot);
   }, [profile, snapshot]);
 
-  const handleLogoSelected = (file: LocalFile) => {
-    if (logoFile) URL.revokeObjectURL(logoFile.previewUrl);
-    setLogoFile(file);
-    if (!profile) return;
-    setProfile({ ...profile, logoUrl: file.previewUrl });
+  const handleLogoPickerFile = (file: LocalFile | null) => {
+    if (logoPickerFile) URL.revokeObjectURL(logoPickerFile.previewUrl);
+    setLogoPickerFile(file);
+  };
+
+  const confirmLogoSelection = () => {
+    if (!logoPickerFile || !profile) return;
+    if (logoFile && logoFile !== logoPickerFile) URL.revokeObjectURL(logoFile.previewUrl);
+    setLogoFile(logoPickerFile);
+    setProfile({ ...profile, logoUrl: logoPickerFile.previewUrl });
+    setLogoPickerFile(null);
+    setLogoPickerOpen(false);
     setErr(null);
+  };
+
+  const cancelLogoSelection = () => {
+    if (logoPickerFile) URL.revokeObjectURL(logoPickerFile.previewUrl);
+    setLogoPickerFile(null);
+    setLogoPickerOpen(false);
   };
 
   const updateSchedule = (day: DayKey, field: "open" | "close" | "closed", value: string | boolean) => {
@@ -260,7 +287,7 @@ export default function ProfilePage() {
       <div className="app-page-hero">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
-        <div className="relative flex flex-col md:flex-row items-start md:items-center gap-6">
+        <div className="relative flex flex-col items-start gap-6 md:flex-row md:items-center">
           {/* Logo */}
           <div className="relative group">
             <div className="app-panel-muted flex h-28 w-28 items-center justify-center overflow-hidden rounded-[1.75rem] border-2">
@@ -273,14 +300,16 @@ export default function ProfilePage() {
 
             {isEditing && (
               <div className="absolute -bottom-2 -right-2">
-                <SignedFileUploader
-                  accept="image/*"
+                <Button
+                  type="button"
+                  size="icon"
+                  aria-label="Actualizar logo de la clínica"
                   className="h-8 w-8 rounded-full bg-primary p-0 text-primary-foreground"
-                  disabled={!isEditing || saving}
-                  maxSizeBytes={2 * 1024 * 1024}
-                  onError={(message) => setErr(message)}
-                  onFileSelected={() => handleLogoSelected}
-                />
+                  disabled={saving}
+                  onClick={() => setLogoPickerOpen(true)}
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
               </div>
             )}
           </div>
@@ -310,20 +339,20 @@ export default function ProfilePage() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 md:w-auto">
             {isEditing ? (
               <>
                 {isDirty ? <Button variant="outline" onClick={cancelEdit} className="gap-2" disabled={saving}>
                   <X className="w-4 h-4" /> Descartar cambios
                 </Button> : null}
-                <Button onClick={handleSave} className="gap-2" disabled={saving || !isDirty}>
+                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={saving || !isDirty}>
                   {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                   {saved ? "Guardado" : saving ? "Guardando..." : "Guardar"}
                 </Button>
               </>
             ) : (
               canUpdateClinic ? (
-                <Button onClick={startEdit} className="gap-2">
+                <Button onClick={startEdit} className="w-full gap-2 sm:w-auto">
                   <Pencil className="w-4 h-4" />
                   Editar Perfil
                 </Button>
@@ -332,6 +361,23 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <AttachmentUploadModal
+        open={logoPickerOpen}
+        onClose={cancelLogoSelection}
+        title="Actualizar logo de la clínica"
+        description="Selecciona una imagen. Se aplicará al guardar los cambios del perfil."
+        showNameField={false}
+        initialName={logoPickerFile?.fileName}
+        displayName=""
+        file={logoPickerFile}
+        accept="image/*"
+        saving={false}
+        onDisplayNameChange={() => undefined}
+        onFileSelected={handleLogoPickerFile}
+        onError={setErr}
+        onSave={confirmLogoSelection}
+      />
 
       {/* Tabs */}
       <div className="inline-flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-muted p-1">
@@ -362,7 +408,7 @@ export default function ProfilePage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              <div className="space-y-2 md:col-span-2">
+              {/* <div className="space-y-2 md:col-span-2">
                 <Label>Logo de la clínica</Label>
                 <div className="rounded-2xl border border-dashed border-border p-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -388,7 +434,8 @@ export default function ProfilePage() {
                           disabled={saving}
                           maxSizeBytes={2 * 1024 * 1024}
                           onError={(message) => setErr(message)}
-                          onFileSelected={() => handleLogoSelected}
+                          onFileSelected={handleLogoSelected}
+                          currentFile={logoFile}
                         />
                         <Button
                           type="button"
@@ -407,7 +454,7 @@ export default function ProfilePage() {
                     ) : null}
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               <div className="space-y-2">
                 <Label className="font-semibold">Nombre de la Clínica</Label>
@@ -437,6 +484,55 @@ export default function ProfilePage() {
                 <Label className="font-semibold">Sitio Web</Label>
                 <Input value={profile.website ?? ""} onChange={(e) => setProfile({ ...profile, website: e.target.value })} disabled={!isEditing} />
               </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">Moneda</Label>
+                <Select
+                  // className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={profile.currency}
+                  onValueChange={(value) => setProfile({ ...profile, currency: value })}
+                  disabled={!isEditing}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DOP">Pesos dominicanos (DOP)</SelectItem>
+                    <SelectItem value="USD">Dólares estadounidenses (USD)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* <p className="text-xs text-muted-foreground">DOP se muestra como RD$ con dos decimales.</p> */}
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">Zona horaria</Label>
+                <Select
+                  // className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={profile.timezone}
+                  onValueChange={(value) => setProfile({ ...profile, timezone: value })}
+                  disabled={!isEditing}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleccionar zona horaria" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/Santo_Domingo">República Dominicana (America/Santo_Domingo)</SelectItem>
+                    <SelectItem value="America/La_Paz">Bolivia (America/La_Paz)</SelectItem>
+                    <SelectItem value="America/New_York">Este de EE. UU. (America/New_York)</SelectItem>
+                    <SelectItem value="UTC">UTC</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* <p className="text-xs text-muted-foreground">Se usa para fechas y horas de la clínica.</p> */}
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-6">
+              <h3 className="mb-1 flex items-center gap-2 font-semibold text-foreground"><CreditCard className="h-5 w-5 text-primary" /> Control de caja</h3>
+              {profile.cashEntitled ? (
+                <>
+                  <p className="mb-4 text-sm text-muted-foreground">Permite controlar cobros, entradas, salidas y cierres de caja.</p>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-4"><div><Label>Usar control de caja</Label><p className="text-xs text-muted-foreground">Activa el módulo administrativo de Caja.</p></div><Switch checked={profile.cashEnabled} onCheckedChange={(checked) => setProfile({ ...profile, cashEnabled: checked })} disabled={!isEditing} /></div>
+                    <div className="flex items-center justify-between gap-4"><div><Label>Requerir caja abierta para efectivo</Label><p className="text-xs text-muted-foreground">Bloquea pagos CASH cuando no existe una sesión abierta.</p></div><Switch checked={profile.requireCashSessionForCash} onCheckedChange={(checked) => setProfile({ ...profile, requireCashSessionForCash: checked })} disabled={!isEditing || !profile.cashEnabled} /></div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Caja es una funcionalidad Premium disponible para clínicas con acceso contratado.</p>
+              )}
             </div>
 
             <div className="border-t border-border pt-6">
@@ -520,15 +616,16 @@ export default function ProfilePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2 space-y-2">
-                <Label className="font-semibold">Razón Social</Label>
-                <Input value={profile.taxName ?? ""} onChange={(e) => setProfile({ ...profile, taxName: e.target.value })} disabled={!isEditing} />
+                <Label className="font-semibold">Nombre fiscal</Label>
+                <Input value={profile.taxName ?? ""} onChange={(e) => setProfile({ ...profile, taxName: e.target.value })} disabled={!isEditing} placeholder="Nombre fiscal" />
               </div>
 
               <div className="space-y-2">
-                <Label className="font-semibold">RNC / Identificación Fiscal</Label>
-                <Input value={profile.taxId ?? ""} onChange={(e) => setProfile({ ...profile, taxId: e.target.value })} disabled={!isEditing} />
+                <Label className="font-semibold">RNC</Label>
+                <Input value={profile.taxId ?? ""} onChange={(e) => setProfile({ ...profile, taxId: e.target.value })} disabled={!isEditing} placeholder="RNC" />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">Preparado para futura implementación fiscal; no constituye integración/certificación DGII.</p>
 
             <div className="pt-6 border-t border-border">
               <h3 className="font-semibold text-foreground flex items-center gap-2 mb-4">

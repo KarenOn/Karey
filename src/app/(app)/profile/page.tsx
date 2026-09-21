@@ -13,7 +13,8 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import SignedFileUploader, { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import { UPLOAD_SCOPES, uploadFileToStorage, type LocalFile } from "@/components/shared/SignedFileUploader";
+import AttachmentUploadModal from "@/components/shared/AttachmentUploadModal";
 import PasswordInput from "@/components/shared/PasswordInput";
 import AppPageHero from "@/components/shared/AppPageHero";
 import { AppAlert, type AppAlertVariant } from "@/components/shared/AppAlert";
@@ -84,6 +85,8 @@ export default function UserProfilePage() {
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [avatarFile, setAvatarFile] = useState<LocalFile | null>(null);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [avatarPickerFile, setAvatarPickerFile] = useState<LocalFile | null>(null);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alert, setAlert] = useState<{
     variant: AppAlertVariant;
@@ -164,15 +167,32 @@ export default function UserProfilePage() {
     }
 
     if (avatarFile) URL.revokeObjectURL(avatarFile.previewUrl);
+    if (avatarPickerFile) URL.revokeObjectURL(avatarPickerFile.previewUrl);
     setAvatarFile(null);
+    setAvatarPickerFile(null);
+    setAvatarPickerOpen(false);
     setProfile(snapshot);
     setEditing(false);
   };
 
-  const handleAvatarSelected = (file: LocalFile) => {
-    if (avatarFile) URL.revokeObjectURL(avatarFile.previewUrl);
-    setAvatarFile(file);
-    setProfile((current) => current ? { ...current, avatarUrl: file.previewUrl } : current);
+  const handleAvatarPickerFile = (file: LocalFile | null) => {
+    if (avatarPickerFile) URL.revokeObjectURL(avatarPickerFile.previewUrl);
+    setAvatarPickerFile(file);
+  };
+
+  const confirmAvatarSelection = () => {
+    if (!avatarPickerFile || !profile) return;
+    if (avatarFile && avatarFile !== avatarPickerFile) URL.revokeObjectURL(avatarFile.previewUrl);
+    setAvatarFile(avatarPickerFile);
+    setProfile({ ...profile, avatarUrl: avatarPickerFile.previewUrl });
+    setAvatarPickerFile(null);
+    setAvatarPickerOpen(false);
+  };
+
+  const cancelAvatarSelection = () => {
+    if (avatarPickerFile) URL.revokeObjectURL(avatarPickerFile.previewUrl);
+    setAvatarPickerFile(null);
+    setAvatarPickerOpen(false);
   };
 
   const removeAvatar = async () => {
@@ -181,6 +201,7 @@ export default function UserProfilePage() {
     }
 
     if (avatarFile) { URL.revokeObjectURL(avatarFile.previewUrl); setAvatarFile(null); }
+    if (avatarPickerFile) { URL.revokeObjectURL(avatarPickerFile.previewUrl); setAvatarPickerFile(null); }
     setProfile({
       ...profile,
       avatarStorageRef: null,
@@ -326,22 +347,15 @@ export default function UserProfilePage() {
 
               {editing ? (
                 <div className="absolute -bottom-3 -right-3 flex gap-2">
-                  <SignedFileUploader
-                    accept="image/*"
-                    // buttonLabel=""
+                  <Button
+                    aria-label="Actualizar foto de perfil"
                     className="h-10 w-10 rounded-full bg-primary p-0 text-primary-foreground dark:bg-primary/80"
                     disabled={saving}
-                    maxSizeBytes={2 * 1024 * 1024}
-                    onError={(message) => {
-                      setAlert({
-                        variant: "destructive",
-                        title: "No pudimos subir la foto",
-                        description: message,
-                      });
-                      setAlertOpen(true);
-                    }}
-                    onFileSelected={() => handleAvatarSelected}
-                  />
+                    onClick={() => setAvatarPickerOpen(true)}
+                    type="button"
+                  >
+                    <UserRound className="h-4 w-4" />
+                  </Button>
                   <Button
                     className="h-10 w-10 rounded-full p-0 dark:bg-destructive/80"
                     onClick={() => void removeAvatar()}
@@ -385,7 +399,7 @@ export default function UserProfilePage() {
 
           <div className="mt-6 grid gap-5 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="profile-name">Nombre completo</Label>
+              <Label htmlFor="profile-name" required>Nombre completo</Label>
               <Input
                 disabled={!editing}
                 id="profile-name"
@@ -480,7 +494,7 @@ export default function UserProfilePage() {
 
             <div className="mt-5 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="current-password">Contraseña actual</Label>
+                <Label htmlFor="current-password" required>Contraseña actual</Label>
                 <PasswordInput
                   id="current-password"
                   onChange={(event) =>
@@ -493,7 +507,7 @@ export default function UserProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="new-password">Nueva contraseña</Label>
+                <Label htmlFor="new-password" required>Nueva contraseña</Label>
                 <PasswordInput
                   id="new-password"
                   onChange={(event) =>
@@ -506,7 +520,7 @@ export default function UserProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirmar nueva contraseña</Label>
+                <Label htmlFor="confirm-password" required>Confirmar nueva contraseña</Label>
                 <PasswordInput
                   id="confirm-password"
                   onChange={(event) =>
@@ -553,6 +567,29 @@ export default function UserProfilePage() {
           </section>
         </div>
       </div>
+
+      <AttachmentUploadModal
+        open={avatarPickerOpen}
+        onClose={cancelAvatarSelection}
+        title="Actualizar foto de perfil"
+        description="Selecciona una imagen. Se aplicará al guardar los cambios de tu perfil."
+        showNameField={false}
+        initialName={avatarPickerFile?.fileName}
+        displayName=""
+        file={avatarPickerFile}
+        accept="image/*"
+        onDisplayNameChange={() => undefined}
+        onFileSelected={handleAvatarPickerFile}
+        onError={(message) => {
+          setAlert({
+            variant: "destructive",
+            title: "No pudimos seleccionar la foto",
+            description: message,
+          });
+          setAlertOpen(true);
+        }}
+        onSave={confirmAvatarSelection}
+      />
 
       <AppAlert
         description={alert.description}

@@ -36,6 +36,8 @@ type ClientDTO = {
   email: string | null;
   address: string | null;
   notes: string | null;
+  identificationType: "CEDULA" | "RNC" | "PASSPORT_OTHER" | null;
+  identificationNumber: string | null;
   createdAt: string;
 };
 
@@ -117,8 +119,10 @@ export default function ClientDetailView({
   appointments,
   invoices,
   totalSpent,
+  currency,
 }: {
   clinicName: string;
+  currency: string;
   client: ClientDTO;
   pets: PetDTO[];
   appointments: AppointmentDTO[];
@@ -138,10 +142,12 @@ export default function ClientDetailView({
     email: clientData.email ?? "",
     address: clientData.address ?? "",
     notes: clientData.notes ?? "",
+    identificationType: clientData.identificationType ?? "",
+    identificationNumber: clientData.identificationNumber ?? "",
   });
 
   function openEdit() {
-    setFormValues({ fullName: clientData.fullName, phone: clientData.phone ?? "", email: clientData.email ?? "", address: clientData.address ?? "", notes: clientData.notes ?? "" });
+    setFormValues({ fullName: clientData.fullName, phone: clientData.phone ?? "", email: clientData.email ?? "", address: clientData.address ?? "", notes: clientData.notes ?? "", identificationType: clientData.identificationType ?? "", identificationNumber: clientData.identificationNumber ?? "" });
     setErrors({});
     setEditOpen(true);
   }
@@ -167,19 +173,20 @@ export default function ClientDetailView({
 
   return (
     <div className="space-y-6">
-      <div className="app-page-hero flex items-center gap-4">
+      <div className="app-page-hero flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <BackButton href="/clients" />
 
-        <div className="flex-1 justify-between flex">
+        <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="app-kicker mb-3 inline-flex border-0">Detalle de cliente</p>
             <h2 className="app-heading text-3xl sm:text-4xl">{clientData.fullName}</h2>
             <p className="mt-2 text-muted-foreground">
               Cliente desde {format(parseISO(client.createdAt), "MMMM yyyy", { locale: es })}
             </p>
+            {clientData.identificationNumber ? <p className="mt-1 text-sm text-muted-foreground">{clientData.identificationType === "CEDULA" ? "Cédula" : clientData.identificationType === "RNC" ? "RNC" : "Pasaporte/Otro"}: {clientData.identificationNumber}</p> : null}
           </div>
           
-          <div className="self-end">
+          <div className="self-start sm:self-end">
             {canEditClient && !isReservedClient ? <Button size="sm" variant="outline" className="mt-4" onClick={openEdit}><UserRound className="mr-1 h-4 w-4" />Editar cliente</Button> : null}
           </div>
         </div>
@@ -214,12 +221,12 @@ export default function ClientDetailView({
             </div>
           ) : null}
 
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-border/70 pt-4">
+          <div className="mt-6 grid grid-cols-1 gap-3 border-t border-border/70 pt-4 min-[430px]:grid-cols-3">
             <MiniStat label="Mascotas" value={pets.length} tone="text-primary" />
             <MiniStat label="Citas" value={appointments.length} tone="text-[var(--brand-navy)] dark:text-blue-300" />
             <MiniStat
               label="Total"
-              value={formatCurrency(totalSpent)}
+              value={formatCurrency(totalSpent, currency)}
               tone="text-emerald-600 dark:text-emerald-300"
             />
           </div>
@@ -322,7 +329,7 @@ export default function ClientDetailView({
 
                     <div className="text-right">
                       <p className="font-bold text-foreground">
-                        {formatCurrency(inv.total)}
+                        {formatCurrency(inv.total, currency)}
                       </p>
                       <Badge className={invoiceStatusColors[inv.status]}>
                         {invoiceStatusLabel[inv.status]}

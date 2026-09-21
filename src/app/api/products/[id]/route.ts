@@ -37,6 +37,7 @@ async function findProductOrFail(id: number, clinicId: number) {
       requiresPrescription: true,
       createdAt: true,
       updatedAt: true,
+      batches: { orderBy: { expirationDate: { sort: "asc", nulls: "last" } }, select: { id: true, lotNumber: true, expirationDate: true, quantity: true, cost: true } },
     },
   });
 }

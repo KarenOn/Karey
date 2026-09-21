@@ -3,6 +3,7 @@ import { processQueuedNotifications } from "@/lib/reminders";
 import { reconcileOverdueAppointments } from "@/lib/reconcile-appointments";
 import { processClinicalReportJobs } from "@/lib/clinical-report-jobs";
 import { reconcileSubscriptions } from "@/lib/subscription-lifecycle";
+import { syncClinicalReminderNotifications } from "@/lib/reminders";
 
 function isAuthorized(req: Request) {
   const cronHeader = req.headers.get("x-vercel-cron");
@@ -27,6 +28,7 @@ async function handle(req: Request) {
   }
 
   const subscriptions = await reconcileSubscriptions();
+  const clinicalReminders = await syncClinicalReminderNotifications();
   const processed = await processQueuedNotifications(100);
   const reportJobs = await processClinicalReportJobs(2);
   const reconciled = await reconcileOverdueAppointments();
@@ -36,6 +38,7 @@ async function handle(req: Request) {
     ...processed,
     ...reportJobs,
     ...subscriptions,
+    ...clinicalReminders,
   });
 }
 

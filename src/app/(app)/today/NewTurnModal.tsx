@@ -1,21 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  CheckCircle2,
-  Clock3,
-  LoaderCircle,
-  PawPrint,
-  Phone,
-  Search,
-  Sparkles,
-  UserPlus,
-} from "lucide-react";
+import { CheckCircle2, Clock3, LoaderCircle, PawPrint, Sparkles } from "lucide-react";
 import Modal from "@/components/shared/Modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -24,12 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { PET_SPECIES_OPTIONS } from "@/lib/pet-options";
 import type { PetSpecies } from "@/types/common";
 import SearchableSelect from "@/components/shared/SearchableSelect";
 import PhoneInput from "@/components/shared/PhoneInput";
 import { getServiceDuration } from "@/lib/appointment-helpers";
+import { formatMoney } from "@/lib/formatters";
 
 type TodayTurnStatus =
   | "WAITING"
@@ -54,6 +46,7 @@ type TodayTurnItem = {
   petName: string;
   service: TodayTurnService;
   serviceName: string;
+  serviceId: number | null;
   status: TodayTurnStatus;
 };
 
@@ -122,15 +115,6 @@ function mapServiceToTurnType(service: ServiceRecord): TodayTurnService {
   }
 
   return "OTHER";
-}
-
-function formatMoney(value: string) {
-  const amount = Number(value);
-  return new Intl.NumberFormat("es-DO", {
-    style: "currency",
-    currency: "DOP",
-    minimumFractionDigits: 2,
-  }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 function scoreResult(result: SearchResult, query: string) {
@@ -357,6 +341,7 @@ export default function NewTurnModal({
           estimatedDuration: getServiceDuration(selectedService.durationMins),
           notes: notes.trim() || null,
           service: mapServiceToTurnType(selectedService),
+          serviceId: selectedService.id,
           serviceName: selectedService.name,
         }),
       });
@@ -402,95 +387,57 @@ export default function NewTurnModal({
       ) : (
         <div className="space-y-6">
           <section className="rounded-[1.4rem] border border-border/70 bg-muted/20 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div className="min-w-0 flex-1">
-                <Label htmlFor="turn-search" className="text-sm font-semibold text-foreground">
-                  Buscar cliente o mascota
-                </Label>
-                <div className="relative mt-2">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="turn-search"
-                    className="pl-9"
-                    onChange={(event) => {
-                      setMode("search");
-                      setQuery(event.target.value);
+            <div className="space-y-4">
+              {mode === "search" ? (
+                <div className="space-y-2">
+                  <Label required>Buscar cliente o mascota</Label>
+                  <SearchableSelect
+                    options={filteredResults.map((result) => ({
+                      value: `${result.clientId}:${result.petId}`,
+                      label: `${result.petName} · ${result.clientName}`,
+                      keywords: [result.petName, result.clientName, result.ownerPhone ?? ""],
+                    }))}
+                    value={selectedResult ? `${selectedResult.clientId}:${selectedResult.petId}` : ""}
+                    onSearchChange={(value) => setQuery(value)}
+                    onValueChange={(value) => {
+                      const result = results.find(
+                        (item) => `${item.clientId}:${item.petId}` === value
+                      );
+                      setSelectedResult(result ?? null);
                     }}
-                    placeholder="Buscar cliente o mascota..."
-                    value={query}
+                    placeholder="Seleccionar cliente o mascota"
+                    searchPlaceholder="Buscar cliente o mascota..."
+                    emptyMessage="No encontramos coincidencias."
                   />
                 </div>
-              </div>
+              ) : null}
 
-              <Button
-                type="button"
-                variant={mode === "walkin" ? "default" : "outline"}
-                className={cn("rounded-xl", mode !== "walkin" && "bg-transparent")}
-                onClick={() => {
-                  setMode("walkin");
-                  setSelectedResult(null);
-                }}
-              >
-                <UserPlus className="mr-2 h-4 w-4" />
-                Registrar sin paciente
-              </Button>
+              <label className="flex items-start gap-3 text-sm text-foreground">
+                <Checkbox
+                  aria-describedby="walk-in-help"
+                  checked={mode === "walkin"}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setMode(enabled ? "walkin" : "search");
+                    setSelectedResult(null);
+                    setQuery("");
+                    setDebouncedQuery("");
+                    if (!enabled) setCreateForm(emptyCreateForm);
+                  }}
+                />
+                <span>
+                  <span className="font-semibold">Atender sin paciente registrado</span>
+                  <span id="walk-in-help" className="mt-1 block text-muted-foreground">
+                    Usa los datos de la persona y la mascota solo para este turno.
+                  </span>
+                </span>
+              </label>
             </div>
 
-            {mode === "search" ? (
-              <div className="mt-4 space-y-2">
-                {filteredResults.length > 0 ? (
-                  filteredResults.map((result) => {
-                    const active =
-                      selectedResult?.clientId === result.clientId &&
-                      selectedResult?.petId === result.petId;
-
-                    return (
-                      <button
-                        key={`${result.clientId}-${result.petId}`}
-                        type="button"
-                        className={cn(
-                          "flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition",
-                          active
-                            ? "border-primary/40 bg-primary/8 shadow-sm"
-                            : "border-border/70 bg-background hover:border-primary/25 hover:bg-muted/30"
-                        )}
-                        onClick={() => {
-                          setMode("search");
-                          setSelectedResult(result);
-                        }}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">
-                            {result.petName}
-                          </p>
-                          <p className="truncate text-sm text-muted-foreground">
-                            {result.clientName}
-                          </p>
-                        </div>
-
-                        <div className="ml-4 shrink-0 text-right text-xs text-muted-foreground">
-                          {result.ownerPhone ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Phone className="h-3.5 w-3.5" />
-                              {result.ownerPhone}
-                            </span>
-                          ) : (
-                            <span>Sin telefono</span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-lg border border-dashed border-border bg-background/80 px-4 py-5 text-sm text-muted-foreground">
-                    No encontramos coincidencias. Puedes registrar la llegada sin crear un cliente o paciente.
-                  </div>
-                )}
-              </div>
-            ) : (
+            {mode === "walkin" ? (
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="clientName">Cliente</Label>
+                  <Label htmlFor="clientName" required>Cliente</Label>
                   <Input
                     id="clientName"
                     onChange={(event) =>
@@ -520,7 +467,7 @@ export default function NewTurnModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="petName">Mascota</Label>
+                  <Label htmlFor="petName" required>Mascota</Label>
                   <Input
                     id="petName"
                     onChange={(event) =>
@@ -558,7 +505,7 @@ export default function NewTurnModal({
                   </Select>
                 </div>
               </div>
-            )}
+            ) : null}
           </section>
 
           <section className="rounded-[1.4rem] border border-border/70 bg-background p-4">
@@ -571,7 +518,7 @@ export default function NewTurnModal({
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
                 <div className="space-y-2">
-                  <Label>Servicio</Label>
+                  <Label required>Servicio</Label>
                   <SearchableSelect
                     options={services.map((service) => ({ value: String(service.id), label: service.name, keywords: [service.category ?? ""] }))}
                     value={selectedServiceId}

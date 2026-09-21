@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { SubscriptionStatus } from "@/generated/prisma/client";
+import { Prisma, SubscriptionStatus } from "@/generated/prisma/client";
 import { getAdminClinicById, normalizeAdminPhone, toPrismaSubscriptionStatus } from "@/lib/admin-clinics";
 import { getAppUrl, sendClinicWelcomeEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +27,7 @@ const updateClinicSchema = z.discriminatedUnion("action", [
       .optional(),
     subscriptionReminderDays: z.number().int().min(0).max(30).optional(),
     subscriptionGraceDays: z.number().int().min(0).max(30).optional(),
+    cashEntitled: z.boolean().optional(),
   }),
 ]);
 
@@ -85,7 +86,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
 
     const current = await prisma.clinic.findUnique({
       where: { id: clinicId },
-      select: { id: true, isActive: true, subscriptionStatus: true },
+      select: { id: true, isActive: true, subscriptionStatus: true, cashEntitled: true },
     });
 
     if (!current) {
@@ -125,22 +126,31 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
         nextSubscriptionStatus = SubscriptionStatus.ACTIVE;
       }
 
-      await prisma.clinic.update({
-        where: { id: clinicId },
-        data: {
-          name: parsed.data.name.trim(),
-          email: toNullishString(parsed.data.email),
-          phone: normalizeAdminPhone(parsed.data.phone),
-          plan: toNullishString(parsed.data.plan),
-          isActive: nextIsActive,
-          subscriptionStatus: nextSubscriptionStatus,
-          subscriptionEndDate:
-            parsed.data.subscriptionEndDate === undefined
-              ? undefined
-              : toDateOnly(parsed.data.subscriptionEndDate),
-          subscriptionReminderDays: parsed.data.subscriptionReminderDays,
-          subscriptionGraceDays: parsed.data.subscriptionGraceDays,
-        },
+      const cashEntitled = parsed.data.action === "update" ? parsed.data.cashEntitled : undefined;
+
+      const updateData = {
+        name: parsed.data.name.trim(),
+        email: toNullishString(parsed.data.email),
+        phone: normalizeAdminPhone(parsed.data.phone),
+        plan: toNullishString(parsed.data.plan),
+        isActive: nextIsActive,
+        subscriptionStatus: nextSubscriptionStatus,
+        subscriptionEndDate:
+          parsed.data.subscriptionEndDate === undefined
+            ? undefined
+            : toDateOnly(parsed.data.subscriptionEndDate),
+        subscriptionReminderDays: parsed.data.subscriptionReminderDays,
+        subscriptionGraceDays: parsed.data.subscriptionGraceDays,
+        cashEntitled,
+      };
+
+      await prisma.$transaction(async (tx) => {
+        if (cashEntitled === false) {
+          await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "clinic" WHERE "id" = ${clinicId} FOR UPDATE`);
+          const openSessions = await tx.cashSession.count({ where: { clinicId, status: "OPEN" } });
+          if (openSessions > 0) throw new Error("CASH_OPEN_SESSIONS");
+        }
+        await tx.clinic.update({ where: { id: clinicId }, data: updateData });
       });
     }
 
@@ -148,8 +158,8 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     return NextResponse.json(clinic);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo actualizar la clinica";
-    const status = message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : message === "SUBSCRIPTION_ALREADY_PAID" ? 409 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const status = message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : message === "SUBSCRIPTION_ALREADY_PAID" || message === "CASH_OPEN_SESSIONS" ? 409 : 500;
+    return NextResponse.json({ error: message === "CASH_OPEN_SESSIONS" ? "Cierra las sesiones de Caja abiertas antes de retirar Caja Premium." : message }, { status });
   }
 }
 
