@@ -1016,14 +1016,14 @@ export default function TodayWorkspace({
         //         Cerrar
         //       </Button>
         //     </div>
-        <Modal
+            <Modal
                 open={!!encounter}
                 onClose={(open) => {
                   if (!open) setEncounter(null);
                 }}
                 title="Atención clínica"
                 size="xl"
-                scrollContent
+                // scrollContent
               >
             <EncounterWorkflow
               petId={encounter.petId}
