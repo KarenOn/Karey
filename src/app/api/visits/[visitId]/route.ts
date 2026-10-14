@@ -3,13 +3,14 @@ import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
 import { deriveAttachmentDisplayName } from "@/lib/attachments";
+import { storageRefBelongsToMedicalAttachment } from "@/lib/storage";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ visitId: string }> }) {
   const { clinicId } = await requireClinicPermission("visits.update");
   const visitId = Number((await params).visitId);
   const parsed = ClinicalVisitCreateSchema.safeParse(await req.json().catch(() => null));
   if (!Number.isFinite(visitId) || !parsed.success) return NextResponse.json({ message: "Datos de visita inválidos" }, { status: 422 });
-  const visit = await prisma.clinicalVisit.findFirst({ where: { id: visitId, clinicId }, select: { id: true } });
+  const visit = await prisma.clinicalVisit.findFirst({ where: { id: visitId, clinicId }, select: { id: true, petId: true } });
   if (!visit) return NextResponse.json({ message: "Visita no encontrada" }, { status: 404 });
   const data = parsed.data;
   const updated = await prisma.clinicalVisit.update({
@@ -18,9 +19,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ visitId:
     include: { attachments: true, vet: { select: { id: true, name: true, email: true } }, appointment: { select: { reason: true } } },
   });
   if (data.attachment) {
+    if (data.attachment.storageRef && !storageRefBelongsToMedicalAttachment(data.attachment.storageRef, { clinicId, petId: visit.petId, visitId })) {
+      return NextResponse.json({ message: "El archivo no fue generado para esta visita" }, { status: 403 });
+    }
     const originalFilename = data.attachment.originalFilename || data.attachment.fileName;
     const displayName = data.attachment.displayName || deriveAttachmentDisplayName(originalFilename);
-    await prisma.medicalAttachment.create({ data: { clinicId, visitId, fileName: displayName, displayName, originalFilename, fileType: data.attachment.fileType || null, fileSizeBytes: data.attachment.fileSizeBytes ?? null, url: data.attachment.storageRef ?? data.attachment.url ?? "" } });
+    await prisma.medicalAttachment.create({ data: { clinicId, petId: visit.petId, visitId, fileName: displayName, displayName, originalFilename, fileType: data.attachment.fileType || null, fileSizeBytes: data.attachment.fileSizeBytes ?? null, url: data.attachment.storageRef ?? data.attachment.url ?? "" } });
   }
   return NextResponse.json(updated);
 }

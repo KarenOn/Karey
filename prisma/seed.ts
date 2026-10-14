@@ -2738,6 +2738,7 @@ async function seedClinic(tx: Prisma.TransactionClient, clinic: ClinicSeed) {
         await tx.medicalAttachment.create({
           data: {
             clinicId: createdClinic.id,
+            petId: pet.id,
             visitId: visit.id,
             fileName: attachment.fileName,
             fileType: attachment.fileType,

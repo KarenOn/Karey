@@ -182,6 +182,7 @@ export async function uploadFileToStorage(
   localFile: LocalFile,
   scope: UploadScope,
   visitId?: number | null,
+  petId?: number | null,
 ): Promise<UploadedFile> {
   const signRes = await fetch("/api/uploads/sign", {
     method: "POST",
@@ -190,7 +191,12 @@ export async function uploadFileToStorage(
       fileName: localFile.file.name,
       fileType: localFile.file.type,
       scope,
-      ...(scope === "medical-attachment" ? { visitId } : {}),
+      ...(scope === "medical-attachment"
+        ? {
+            ...(visitId ? { visitId } : {}),
+            ...(petId ? { petId } : {}),
+          }
+        : {}),
     }),
   });
   const signData = (await signRes.json().catch(() => null)) as {

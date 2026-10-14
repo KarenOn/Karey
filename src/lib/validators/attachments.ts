@@ -1,7 +1,13 @@
 import { z } from "zod";
 
+const optionalPositiveId = z.preprocess(
+  (value) => (value === null || value === "" ? undefined : value),
+  z.coerce.number().int().positive().optional(),
+);
+
 export const MedicalAttachmentCreateSchema = z
   .object({
+    visitId: optionalPositiveId,
     fileName: z.string().trim().min(1).max(255),
     displayName: z.string().trim().max(255).optional().or(z.literal("")),
     originalFilename: z.string().trim().max(255).optional().or(z.literal("")),

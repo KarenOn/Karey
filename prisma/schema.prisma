@@ -514,6 +514,7 @@ model Pet {
   vaccinations VaccinationRecord[]
   invoices     Invoice[]
   encounterItems EncounterItem[]
+  medicalAttachments MedicalAttachment[]
 
   @@unique([clinicId, microchip])
   @@index([clinicId])
@@ -1018,7 +1019,8 @@ model ClinicalVisit {
 model MedicalAttachment {
   id       Int @id @default(autoincrement())
   clinicId Int
-  visitId  Int
+  petId    Int
+  visitId  Int?
 
   fileName String
   displayName String?
@@ -1030,8 +1032,10 @@ model MedicalAttachment {
   createdAt DateTime @default(now())
 
   clinic Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  visit  ClinicalVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  pet    Pet           @relation(fields: [petId], references: [id], onDelete: Cascade)
+  visit  ClinicalVisit? @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
+  @@index([petId, createdAt])
   @@index([visitId])
   @@index([clinicId, createdAt])
   @@map("medicalattachment")

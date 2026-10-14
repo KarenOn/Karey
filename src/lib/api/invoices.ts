@@ -60,6 +60,13 @@ export type InvoiceDetail = {
   }>;
 };
 
+export type PatientInvoiceListResponse = {
+  data: Array<Pick<InvoiceListRow, "id" | "number" | "status" | "issueDate" | "total" | "paidTotal" | "client" | "pet" | "paymentsCount"> & { dueDate: string | null }>;
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export async function apiListInvoices(params?: { q?: string; status?: string; take?: number }): Promise<InvoiceListRow[]> {
   const sp = new URLSearchParams();
   if (params?.q) sp.set("q", params.q);
@@ -120,4 +127,13 @@ export async function apiCreatePayment(invoiceId: number, data: PaymentCreateInp
     throw new Error(message);
   }
   return payload;
+}
+
+export async function apiListPetInvoices(petId: number, params?: { q?: string; status?: string; page?: number; pageSize?: number }): Promise<PatientInvoiceListResponse> {
+  const sp = new URLSearchParams({ page: String(params?.page ?? 0), pageSize: String(params?.pageSize ?? 10) });
+  if (params?.q) sp.set("q", params.q);
+  if (params?.status) sp.set("status", params.status);
+  const res = await fetch(`/api/pets/${petId}/invoices?${sp.toString()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("No se pudieron cargar las facturas");
+  return res.json();
 }

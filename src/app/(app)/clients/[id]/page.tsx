@@ -60,7 +60,6 @@ export default async function ClientDetailPage({
     prisma.appointment.findMany({
       where: { clinicId: clinic.id, clientId: client.id },
       orderBy: { startAt: "desc" },
-      take: 20,
       select: {
         id: true,
         startAt: true,
@@ -69,19 +68,24 @@ export default async function ClientDetailPage({
         pet: {
           select: { id: true, name: true, species: true },
         },
+        vet: {
+          select: { id: true, name: true },
+        },
       },
     }),
 
     prisma.invoice.findMany({
       where: { clinicId: clinic.id, clientId: client.id },
       orderBy: { issueDate: "desc" },
-      take: 20,
       select: {
         id: true,
         number: true,
         status: true,
         issueDate: true,
         total: true, // Decimal
+        pet: {
+          select: { id: true, name: true },
+        },
         payments: {
           select: {
             id: true,
@@ -117,6 +121,7 @@ export default async function ClientDetailPage({
         pet: a.pet
           ? { id: a.pet.id, name: a.pet.name, species: a.pet.species }
           : null,
+        vet: a.vet ? { id: a.vet.id, name: a.vet.name } : null,
       }))}
       invoices={invoices.map((i) => ({
         id: i.id,
@@ -124,6 +129,7 @@ export default async function ClientDetailPage({
         status: i.status,
         issueDate: i.issueDate.toISOString(),
         total: i.total.toNumber(),
+        pet: i.pet ? { id: i.pet.id, name: i.pet.name } : null,
       }))}
       totalSpent={totalSpent}
     />

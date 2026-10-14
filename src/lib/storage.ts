@@ -27,6 +27,7 @@ type StorageConfig = {
 
 type CreateUploadUrlParams = {
   clinicId: number;
+  petId?: number | null;
   fileName: string;
   fileType?: string | null;
   scope: StorageScope;
@@ -129,7 +130,9 @@ function buildStorageKey(params: CreateUploadUrlParams) {
       ? `clinic/${params.clinicId}/branding`
       : params.scope === "user-avatar"
         ? `clinic/${params.clinicId}/users/avatars`
-      : `clinic/${params.clinicId}/visits/${params.visitId ?? "pending"}/attachments`;
+      : params.visitId
+        ? `clinic/${params.clinicId}/visits/${params.visitId}/attachments`
+        : `clinic/${params.clinicId}/pets/${params.petId}/attachments`;
 
   return `${prefix}/${randomUUID()}-${safeFileName}`;
 }
@@ -268,4 +271,16 @@ export async function serializeAttachment<T extends { fileName: string; displayN
       fileName: originalFilename,
     }),
   };
+}
+
+export function storageRefBelongsToMedicalAttachment(
+  ref: string,
+  params: { clinicId: number; petId: number; visitId?: number | null },
+) {
+  if (!storageRefBelongsToClinic(ref, params.clinicId)) return false;
+  const key = fromS3StorageRef(ref);
+  if (params.visitId) {
+    return key.startsWith(`clinic/${params.clinicId}/visits/${params.visitId}/attachments/`);
+  }
+  return key.startsWith(`clinic/${params.clinicId}/pets/${params.petId}/attachments/`);
 }

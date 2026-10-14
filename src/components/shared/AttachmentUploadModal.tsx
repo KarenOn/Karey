@@ -25,6 +25,7 @@ type AttachmentUploadModalProps = {
   onFileSelected: (file: LocalFile | null) => void;
   onError?: (message: string) => void;
   onSave: () => void;
+  children?: React.ReactNode;
 };
 
 export default function AttachmentUploadModal({
@@ -43,6 +44,7 @@ export default function AttachmentUploadModal({
   onFileSelected,
   onError,
   onSave,
+  children,
 }: AttachmentUploadModalProps) {
   const visibleName = getAttachmentDisplayName(displayName || initialName, file?.fileName);
 
@@ -98,6 +100,7 @@ export default function AttachmentUploadModal({
             />
           </div>
         ) : null}
+        {children}
       </div>
     </Modal>
   );

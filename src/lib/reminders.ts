@@ -16,7 +16,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isValidWhatsAppPhone, sendWhatsAppMessage } from "@/lib/whatsapp";
 import { createInAppNotification } from "@/lib/in-app-notifications";
-import { getClinicDateKey } from "@/lib/appointment-time";
+import { resolveClinicalReminderKind } from "@/lib/clinical-reminder-rules";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const APPOINTMENT_CONFIRM_IDENTIFIER_PREFIX = "appointment-confirmation:";
@@ -833,15 +833,8 @@ export async function syncInvoicePaymentReminderNotifications(invoiceId: number)
   await Promise.all(notifications);
 }
 
-const CLINICAL_REMINDER_WINDOW_DAYS = 30;
 // Desparasitación queda fuera hasta disponer de fecha, producto o pauta estructurada.
 // No derivar recordatorios desde texto libre ni desde AppointmentType.DEWORMING.
-
-function localDayDistance(date: Date, now: Date, timeZone: string) {
-  const due = Date.parse(`${getClinicDateKey(date, timeZone)}T00:00:00Z`);
-  const today = Date.parse(`${getClinicDateKey(now, timeZone)}T00:00:00Z`);
-  return Math.round((due - today) / DAY_IN_MS);
-}
 
 async function createClinicalReminderNotifications(params: {
   sourceId: number;
@@ -883,17 +876,16 @@ export async function syncClinicalReminderNotifications(now = new Date()) {
   let created = 0;
   for (const vaccination of vaccinations) {
     if (!vaccination.nextDueAt) continue;
-    const distance = localDayDistance(vaccination.nextDueAt, now, vaccination.clinic.timezone || "America/Santo_Domingo");
-    const kind = distance < 0 ? "vaccine-overdue" : distance <= CLINICAL_REMINDER_WINDOW_DAYS ? "vaccine-upcoming" : null;
+    const kind = resolveClinicalReminderKind({ source: "vaccine", dueDate: vaccination.nextDueAt, now, timeZone: vaccination.clinic.timezone || "America/Santo_Domingo" });
     if (!kind) continue;
     await createClinicalReminderNotifications({ sourceId: vaccination.id, clinicId: vaccination.clinic.id, clinicName: vaccination.clinic.name, client: vaccination.pet.client, dueDate: vaccination.nextDueAt, kind, petName: vaccination.pet.name, vaccineName: vaccination.vaccineName });
     created += 1;
   }
   for (const visit of visits) {
     if (!visit.nextReviewAt) continue;
-    const distance = localDayDistance(visit.nextReviewAt, now, visit.clinic.timezone || "America/Santo_Domingo");
-    if (distance < 0 || distance > CLINICAL_REMINDER_WINDOW_DAYS) continue;
-    await createClinicalReminderNotifications({ sourceId: visit.id, clinicId: visit.clinic.id, clinicName: visit.clinic.name, client: visit.pet.client, dueDate: visit.nextReviewAt, kind: "clinical-follow-up", petName: visit.pet.name });
+    const kind = resolveClinicalReminderKind({ source: "visit", dueDate: visit.nextReviewAt, now, timeZone: visit.clinic.timezone || "America/Santo_Domingo" });
+    if (!kind) continue;
+    await createClinicalReminderNotifications({ sourceId: visit.id, clinicId: visit.clinic.id, clinicName: visit.clinic.name, client: visit.pet.client, dueDate: visit.nextReviewAt, kind, petName: visit.pet.name });
     created += 1;
   }
   return { clinicalReminders: created };

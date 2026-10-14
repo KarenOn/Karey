@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
-import { serializeAttachment } from "@/lib/storage";
+import { serializeAttachment, storageRefBelongsToMedicalAttachment } from "@/lib/storage";
 import { ClinicalVisitCreateSchema } from "@/lib/validators/visits";
 
 export async function GET(
@@ -97,6 +97,10 @@ export async function POST(
 
   const data = { ...parsed.data, vetId: member?.role.key === "vet" ? session.user.id : parsed.data.vetId };
 
+  if (data.attachment?.storageRef && !storageRefBelongsToMedicalAttachment(data.attachment.storageRef, { clinicId, petId })) {
+    return NextResponse.json({ message: "El archivo no fue generado para este paciente" }, { status: 403 });
+  }
+
   const visit = await prisma.clinicalVisit.create({
     data: {
       clinicId,
@@ -123,6 +127,7 @@ export async function POST(
     await prisma.medicalAttachment.create({
       data: {
         clinicId,
+        petId,
         visitId: visit.id,
         fileName: data.attachment.fileName,
         fileType: data.attachment.fileType || null,

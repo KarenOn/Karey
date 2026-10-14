@@ -108,6 +108,7 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
             attachment,
             UPLOAD_SCOPES.medicalAttachment,
             visitId,
+            petId,
           )
         : null;
       const response = await fetch(

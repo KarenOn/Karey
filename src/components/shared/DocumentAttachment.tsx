@@ -5,9 +5,31 @@ import { Download, Eye, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type Props = { fileName: string; displayName?: string | null; originalFilename?: string | null; fileType?: string | null; size?: number | null; url?: string | null; downloadUrl?: string | null; onDelete?: () => void; deleting?: boolean };
+type Props = {
+  fileName: string;
+  displayName?: string | null;
+  originalFilename?: string | null;
+  fileType?: string | null;
+  size?: number | null;
+  url?: string | null;
+  downloadUrl?: string | null;
+  viewName?: boolean | null;
+  onDelete?: () => void;
+  deleting?: boolean;
+};
 
-export default function DocumentAttachment({ fileName, displayName, originalFilename, fileType, size, url, downloadUrl, onDelete, deleting }: Props) {
+export default function DocumentAttachment({
+  fileName,
+  displayName,
+  originalFilename,
+  fileType,
+  size,
+  url,
+  downloadUrl,
+  viewName = true,
+  onDelete,
+  deleting,
+}: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const visibleName = displayName?.trim() || fileName;
   const downloadName = originalFilename?.trim() || fileName;
@@ -17,17 +39,22 @@ export default function DocumentAttachment({ fileName, displayName, originalFile
   return (
     <>
       <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm">
-        <FileText
-          className="h-4 w-4 shrink-0 text-primary"
-          aria-hidden="true"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">{visibleName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {type}
-            {sizeLabel ? ` · ${sizeLabel}` : ""}
-          </p>
-        </div>
+       {viewName && ( 
+          <>
+            <FileText
+              className="h-4 w-4 shrink-0 text-primary"
+              aria-hidden="true"
+            />
+            
+              <div className="min-w-0 flex-1">
+              <p className="font-medium text-foreground">{visibleName}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {type}
+                {sizeLabel ? ` · ${sizeLabel}` : ""}
+              </p>
+            </div>
+          </>
+        )}
         {url ? (
           <Button
             type="button"
@@ -88,7 +115,7 @@ export default function DocumentAttachment({ fileName, displayName, originalFile
             )
           ) : downloadUrl ? (
             <div className="flex justify-center">
-                <Button asChild>
+              <Button asChild>
                 <a href={downloadUrl} download={downloadName}>
                   Descargar archivo
                 </a>
