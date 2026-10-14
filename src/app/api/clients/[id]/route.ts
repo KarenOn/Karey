@@ -48,6 +48,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       email: parsed.data.email ?? null,
       address: parsed.data.address ?? null,
       notes: parsed.data.notes ?? null,
+      identificationType: parsed.data.identificationType || null,
+      identificationNumber: parsed.data.identificationNumber ?? null,
     },
   });
 
@@ -60,6 +62,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     email: updated.email,
     address: updated.address,
     notes: updated.notes,
+    identificationType: updated.identificationType,
+    identificationNumber: updated.identificationNumber,
     petsCount,
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText, LoaderCircle, Plus, Stethoscope, Syringe, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +12,7 @@ import ClinicalVisitForm from "@/components/shared/ClinicalVisitForm";
 import { VaccinationRecordCreateSchema } from "@/lib/validators/vaccination";
 import FormField from "./FormField";
 import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { formatMoney } from "@/lib/formatters";
 
 type Vaccine = { id: number; name: string; species?: string | null };
 type CatalogItem = { id: number; name: string; price: string; sku?: string | null };
@@ -75,6 +76,7 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
   const items = itemType === "SERVICE" ? catalogServices : catalogProducts;
+  const visitInitialValues = useMemo(() => ({ vetId: assignedVetId ?? "" }), [assignedVetId]);
 
   useEffect(() => {
     void (async () => {
@@ -218,7 +220,7 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
     <div className="space-y-4">
       {!registered && todayTurnId ? <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950"><label className="flex items-start gap-3 text-sm font-semibold"><input type="checkbox" checked={linkEnabled} onChange={(event) => setLinkEnabled(event.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" /> <span>Crear o vincular cliente y paciente para guardar historial clínico.<span className="mt-1 block font-normal text-amber-900/80">Necesitas un paciente registrado para guardar visitas y vacunas.</span></span></label>{linkEnabled ? <div className="mt-4 space-y-4 border-t border-amber-200 pt-4"><div className="flex gap-2"><Button type="button" size="sm" variant={linkMode === "search" ? "default" : "outline"} onClick={() => setLinkMode("search")}>Buscar cliente existente</Button><Button type="button" size="sm" variant={linkMode === "create" ? "default" : "outline"} onClick={() => setLinkMode("create")}>Crear cliente</Button></div>{linkMode === "search" ? <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label>Cliente</Label><SearchableSelect options={clients.map((client) => ({ value: String(client.id), label: client.fullName }))} value={selectedClientId} onValueChange={(value) => { setSelectedClientId(value); setSelectedPetId(""); }} placeholder="Buscar cliente" searchPlaceholder="Buscar cliente..." /></div><div className="space-y-2"><Label>Paciente</Label><SearchableSelect options={pets.filter((pet) => !selectedClientId || pet.clientId === Number(selectedClientId)).map((pet) => ({ value: String(pet.id), label: `${pet.name} (${pet.species})` }))} value={selectedPetId} onValueChange={setSelectedPetId} placeholder="Buscar paciente" searchPlaceholder="Buscar paciente..." /></div></div> : <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="encounter-client-name">Cliente</Label><Input id="encounter-client-name" value={newClientName} onChange={(event) => setNewClientName(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="encounter-client-phone">Teléfono</Label><Input id="encounter-client-phone" value={newClientPhone} onChange={(event) => setNewClientPhone(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="encounter-pet-name">Paciente</Label><Input id="encounter-pet-name" value={newPetName} onChange={(event) => setNewPetName(event.target.value)} /></div></div>}<Button type="button" onClick={() => void linkPatient()} disabled={linking}>{linking ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}{linking ? "Vinculando..." : "Vincular y habilitar historial"}</Button></div> : null}</section> : null}
       <Tabs defaultValue={registered ? "visit" : "billing"}>
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="visit" disabled={!registered}>
             <Stethoscope className="h-4 w-4" />
             Visita
@@ -238,7 +240,9 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
           <ClinicalVisitForm
             petId={linkedPetId ?? 0}
             vets={catalogVets}
-            initialValues={{ vetId: assignedVetId ?? "" }}
+            appointmentId={appointmentId}
+            todayTurnId={todayTurnId}
+            initialValues={visitInitialValues}
             onSaved={onSaved ?? (() => undefined)}
           />
         </TabsContent>
@@ -410,21 +414,21 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
               Productos
             </Button>
           </div>
-          <div className="flex gap-3 w-xl max-w-full">
+          {/* <div className="flex w-full max-w-full flex-col items-stretch gap-3 sm:flex-row sm:items-end">
             <SearchableSelect
               options={items.map((item) => ({
                 value: String(item.id),
                 label: `${item.name} · ${item.price}`,
                 keywords: [item.name, item.sku ?? ""],
               }))}
-              className="w-lg"
+              className="min-w-0 flex-1 sm:w-lg"
               value={selectedItem}
               onValueChange={setSelectedItem}
               placeholder={`Seleccionar ${itemType === "SERVICE" ? "servicio" : "producto"}`}
               searchPlaceholder="Buscar..."
             />
             <input
-              className="h-10 w-20 rounded-md border px-3"
+              className="h-10 w-full rounded-md border px-3 sm:w-20"
               type="number"
               min={1}
               value={quantity}
@@ -436,21 +440,71 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
               type="button"
               onClick={() => void addItem()}
               disabled={!selectedItem || savingItem}
+              className="w-full sm:w-auto"
             >
               <Plus className="mr-2 h-4 w-4" />
               Agregar
             </Button>
-          </div>
+          </div> */}
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
+  {/* Contenedor del Buscador: min-w-0 y flex-1 son vitales para evitar el desborde */}
+  <div className="min-w-0 flex-1">
+    <SearchableSelect
+      options={items.map((item) => ({
+        value: String(item.id),
+        label: `${item.name} · ${formatMoney(item.price)}`,
+        keywords: [item.name, item.sku ?? ""],
+      }))}
+      // CAMBIO: Eliminamos sm:w-lg que rompía el flujo y dejamos que ocupe todo el espacio libre de forma segura
+      className="w-full" 
+      value={selectedItem}
+      onValueChange={setSelectedItem}
+      placeholder={`Seleccionar ${itemType === "SERVICE" ? "servicio" : "producto"}`}
+      searchPlaceholder="Buscar..."
+    />
+  </div>
+
+  {/* Contenedor de Cantidad y Botón agrupados de forma responsiva */}
+  <div className="flex w-full items-center gap-2 sm:w-auto shrink-0">
+    <div className="w-20 sm:w-16">
+      <input
+        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        type="number"
+        min={1}
+        value={quantity}
+        onChange={(event) =>
+          setQuantity(Math.max(1, Number(event.target.value) || 1))
+        }
+      />
+    </div>
+
+    <Button
+      type="button"
+      onClick={() => void addItem()}
+      disabled={!selectedItem || savingItem}
+      className="flex-1 sm:w-auto px-4"
+    >
+      <Plus className="mr-2 h-4 w-4" />
+      Agregar
+    </Button>
+  </div>
+</div>
+
           {draftItems.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+              className="flex flex-col gap-3 rounded-md border px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
             >
-              <span>
-                {item.description} × {item.quantity}
-              </span>
-              <span className="flex items-center gap-3">
-                RD$ {item.unitPrice}
+              <div className="min-w-0">
+                <p className="truncate font-medium">{item.description}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Cantidad: {item.quantity}
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <span className="text-xs text-muted-foreground">
+                  Precio unitario: <span className="font-medium text-foreground">{formatMoney(item.unitPrice)}</span>
+                </span>
                 <Button
                   type="button"
                   variant="ghost"
@@ -460,7 +514,7 @@ export default function EncounterWorkflow({ petId, clientId, appointmentId, toda
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
-              </span>
+              </div>
             </div>
           ))}
           {loadingItems ? <div className="flex min-h-60 items-center justify-center"><LoaderCircle className="h-8 w-8 animate-spin text-primary" /></div> : draftItems.length === 0 ? (

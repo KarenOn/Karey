@@ -79,7 +79,7 @@ export default function QuickActions({ access }: { access: ClinicAccess }) {
     >
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Acciones rapidas</p>
+          {/* <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Acciones rapidas</p> */}
           <h3 className="font-display text-2xl font-semibold text-foreground">Funciones rápidas</h3>
         </div>
         {/* <p className="hidden max-w-sm text-right text-sm text-muted-foreground lg:block">Cada acceso mantiene el mismo lenguaje visual para que la navegacion se sienta consistente y rapida.</p> */}

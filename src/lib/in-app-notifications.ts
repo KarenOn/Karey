@@ -14,7 +14,7 @@ type NotificationInput = {
   userIds: string[];
 };
 
-async function createInAppNotification(input: NotificationInput) {
+export async function createInAppNotification(input: NotificationInput) {
   const userIds = [...new Set(input.userIds.filter(Boolean))];
   if (!userIds.length) return false;
 
@@ -167,8 +167,15 @@ export async function syncInventoryNotifications(clinicId: number) {
     where: { clinicId, isActive: true },
     select: { id: true, name: true, trackStock: true, stockOnHand: true, minStock: true, expirationDate: true },
   });
+  const batches = await prisma.productBatch.findMany({
+    where: { product: { clinicId, isActive: true, trackStock: true }, quantity: { gt: 0 }, expirationDate: { not: null } },
+    select: { id: true, lotNumber: true, expirationDate: true, product: { select: { id: true, name: true } } },
+  });
   const lowStock = products.filter((p) => p.trackStock && p.stockOnHand <= p.minStock);
-  const expiring = products.filter((p) => p.expirationDate && p.expirationDate >= today && p.expirationDate <= threshold);
+  const productsWithActiveBatches = new Set(batches.map((batch) => batch.product.id));
+  const expiring = products.filter((p) => p.expirationDate && !productsWithActiveBatches.has(p.id) && p.expirationDate >= today && p.expirationDate <= threshold);
+  const expiredBatches = batches.filter((batch) => batch.expirationDate! < today);
+  const expiringBatches = batches.filter((batch) => batch.expirationDate! >= today && batch.expirationDate! <= threshold);
   const activeKeys = new Set<string>();
   for (const product of lowStock) {
     const key = `inventory:low-stock:${product.id}`;
@@ -180,6 +187,17 @@ export async function syncInventoryNotifications(clinicId: number) {
     const key = `inventory:expiring:${product.id}`;
     activeKeys.add(key);
     await createInAppNotification({ clinicId, eventKey: key, type: "INVENTORY_EXPIRING", title: "Producto próximo a vencer", message: `${product.name} vence en ${days} días.`, targetUrl: "/inventory", userIds: (await getMembersWithPermission(clinicId, ["inventory.read"])).map((m) => m.userId) });
+  }
+  for (const batch of expiredBatches) {
+    const key = `inventory:expired-batch:${batch.id}`;
+    activeKeys.add(key);
+    await createInAppNotification({ clinicId, eventKey: key, type: "INVENTORY_EXPIRED", title: "Lote vencido", message: `${batch.product.name} · lote ${batch.lotNumber} está vencido.`, targetUrl: "/inventory", userIds: (await getMembersWithPermission(clinicId, ["inventory.read"])).map((m) => m.userId) });
+  }
+  for (const batch of expiringBatches) {
+    const days = Math.max(0, Math.ceil((batch.expirationDate!.getTime() - today.getTime()) / 86_400_000));
+    const key = `inventory:expiring-batch:${batch.id}`;
+    activeKeys.add(key);
+    await createInAppNotification({ clinicId, eventKey: key, type: "INVENTORY_EXPIRING", title: "Lote próximo a vencer", message: `${batch.product.name} · lote ${batch.lotNumber} vence en ${days} días.`, targetUrl: "/inventory", userIds: (await getMembersWithPermission(clinicId, ["inventory.read"])).map((m) => m.userId) });
   }
   const previous = await prisma.notification.findMany({ where: { clinicId, eventKey: { startsWith: "inventory:" } }, select: { id: true, eventKey: true } });
   const resolvedIds = previous.filter((n) => n.eventKey && !activeKeys.has(n.eventKey)).map((n) => n.id);

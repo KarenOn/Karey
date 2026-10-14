@@ -11,6 +11,7 @@ export const VaccinationRecordCreateSchema = z
       emptyStringToUndefined,
       z.string().trim().max(120).optional()
     ),
+    batchId: z.preprocess(emptyStringToUndefined, z.coerce.number().int().positive().optional()),
     notes: z.preprocess(
       emptyStringToUndefined,
       z.string().trim().max(2000).optional()

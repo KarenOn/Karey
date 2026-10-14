@@ -65,6 +65,7 @@ export function AppAlert({
       const icon = hideIcon ? null : iconByVariant[variant];
 
       const baseOptions = {
+        id: `app-alert-${variant}-${title}`,
         description,
         duration: autoCloseMs,
         dismissible,

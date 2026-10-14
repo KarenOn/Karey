@@ -13,6 +13,11 @@ export type PetRow = {
   microchip: string | null;
   weightKg: number | null;
   notes: string | null;
+  allergies: string | null;
+  chronicConditions: string | null;
+  clinicalHistory: string | null;
+  currentMedications: string | null;
+  clinicalWarnings: string | null;
   clientId: number;
   createdAt: string;
   updatedAt: string;

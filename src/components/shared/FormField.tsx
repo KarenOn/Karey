@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type FieldType =
   | "text"
@@ -90,15 +91,10 @@ export default function FormField({
   }));
 
   return (
-    <div className={`space-y-2 ${className}`}>
+    <div className={`min-w-0 space-y-2 ${className}`} data-field-name={name} data-invalid={error ? "true" : undefined}>
       {label ? (
-        <Label htmlFor={name} className="text-sm font-semibold text-foreground">
+        <Label htmlFor={name} className="text-sm font-semibold text-foreground" required={required}>
           {label}
-          {required ? (
-            <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              Obligatorio
-            </span>
-          ) : null}
         </Label>
       ) : null}
 
@@ -114,7 +110,8 @@ export default function FormField({
           }
           placeholder={placeholder}
           disabled={disabled}
-          className="bg-input"
+          aria-invalid={Boolean(error)}
+          className={cn("bg-input", error && "border-destructive focus-visible:ring-destructive")}
         />
       ) : type === "select" ? (
         <SearchableSelect
@@ -122,7 +119,7 @@ export default function FormField({
           emptyMessage={emptyMessage}
           onValueChange={(nextValue) => emitChange(nextValue)}
           options={normalizedOptions}
-          buttonClassName="h-11 rounded-lg"
+          buttonClassName={cn("h-11 rounded-lg", error && "border-destructive focus-visible:ring-destructive")}
           placeholder={placeholder || "Seleccionar..."}
           searchPlaceholder={searchPlaceholder || `Buscar ${label.toLowerCase()}...`}
           value={value === undefined || value === null ? "" : String(value)}
@@ -170,7 +167,8 @@ export default function FormField({
           }
           placeholder={placeholder}
           disabled={disabled}
-          className="bg-input"
+          aria-invalid={Boolean(error)}
+          className={cn("bg-input", error && "border-destructive focus-visible:ring-destructive")}
         />
       )}
 

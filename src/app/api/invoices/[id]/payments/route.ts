@@ -5,6 +5,7 @@ import { PaymentCreateSchema } from "@/lib/validators/payment";
 import { InvoiceStatus, Prisma } from "@/generated/prisma/client";
 import { zodDetails } from "@/lib/zodDetails";
 import { notifyInvoiceEvent } from "@/lib/in-app-notifications";
+import { CASH_REGISTER_REQUIRED, CASH_SESSION_REQUIRED, resolvePaymentCashSessionForRegister } from "@/lib/server/cash";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { clinicId } = await requireClinicPermission("payments.read");
@@ -32,7 +33,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { clinicId } = await requireClinicPermission("payments.register");
+  const { clinicId, session } = await requireClinicPermission("payments.register");
   const invoiceId = Number((await params).id);
 
   const body = await req.json().catch(() => null);
@@ -42,6 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const input = parsed.data;
+  try {
   const result = await prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findFirst({
       where: { id: invoiceId, clinicId },
@@ -49,13 +51,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
     if (!inv) throw new Error("NOT_FOUND");
 
+    const cashSessionId = await resolvePaymentCashSessionForRegister(tx, clinicId, input.method, input.registerId);
+
     const created = await tx.payment.create({
       data: {
         invoiceId,
         amount: new Prisma.Decimal(input.amount.toFixed(2)),
         method: input.method,
         reference: input.reference ?? null,
+        cashSessionId,
         paidAt: input.paidAt ? new Date(input.paidAt) : new Date(),
+        createdById: session.user.id,
       },
       select: { id: true },
     });
@@ -89,4 +95,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === CASH_SESSION_REQUIRED) {
+      return NextResponse.json({ error: "Debes abrir una caja antes de registrar un pago en efectivo." }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === CASH_REGISTER_REQUIRED) return NextResponse.json({ error: "Selecciona la caja donde registrar este pago." }, { status: 409 });
+    if (error instanceof Error && error.message === "CASH_REGISTER_INVALID") return NextResponse.json({ error: "La caja seleccionada no está disponible." }, { status: 409 });
+    if (error instanceof Error && error.message === "NOT_FOUND") return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+    throw error;
+  }
 }

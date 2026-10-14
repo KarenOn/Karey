@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   CircleHelp,
   Calendar,
+  Banknote,
   ChevronRight,
   ClipboardList,
   FileText,
@@ -60,6 +61,7 @@ type ModuleKey =
   | "appointments"
   | "inventory"
   | "invoices"
+  | "cash"
   | "services"
   | "employees"
   | "clinicProfile";
@@ -87,6 +89,7 @@ const routeModuleMap: Array<{ prefix: string; moduleKey: ModuleKey }> = [
   { prefix: "/appointments", moduleKey: "appointments" },
   { prefix: "/inventory", moduleKey: "inventory" },
   { prefix: "/invoices", moduleKey: "invoices" },
+  { prefix: "/cash", moduleKey: "cash" },
   { prefix: "/services", moduleKey: "services" },
   { prefix: "/employees", moduleKey: "employees" },
   { prefix: "/clinic-profile", moduleKey: "clinicProfile" },
@@ -174,6 +177,14 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
         moduleKey: "invoices",
       },
       {
+        name: "Caja",
+        icon: Banknote,
+        pageKey: "Cash",
+        href: "/cash",
+        hint: "Control diario",
+        moduleKey: "cash",
+      },
+      {
         name: "Servicios",
         icon: Stethoscope,
         pageKey: "Services",
@@ -259,7 +270,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
       return navigation;
     }
 
-    return navigation.filter((item) => currentUser.access.modules[item.moduleKey]);
+    return navigation.filter((item) => item.moduleKey === "cash" ? currentUser.cashEntitled && currentUser.cashEnabled && currentUser.access.modules[item.moduleKey] : currentUser.access.modules[item.moduleKey]);
   }, [currentUser, navigation]);
 
   const currentModuleAllowed = useMemo(() => {
@@ -271,7 +282,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
       (item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`)
     );
 
-    return match ? currentUser.access.modules[match.moduleKey] : true;
+    return match ? (match.moduleKey === "cash" ? currentUser.cashEntitled && currentUser.cashEnabled && currentUser.access.modules[match.moduleKey] : currentUser.access.modules[match.moduleKey]) : true;
   }, [currentUser, pathname]);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -292,7 +303,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
     <CurrentUserProvider value={currentUser}>
       {currentUser ? <OnboardingWelcome user={currentUser} onStartTour={() => setTourOpen(true)} /> : null}
       <ProductTour open={tourOpen} onOpenChange={setTourOpen} />
-      <div className="app-shell-bg min-h-screen">
+      <div className="app-shell-bg min-h-[100dvh]">
         <div className="app-grid pointer-events-none fixed inset-0 opacity-70" />
 
         <AnimatePresence>
@@ -311,12 +322,12 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 w-[min(16rem,85vw)] -translate-x-full transition-transform duration-200 lg:translate-x-0",
             sidebarOpen && "translate-x-0",
-            collapsed ? "w-[6.5rem]" : "w-[16rem]"
+            collapsed ? "lg:w-[6.5rem]" : "lg:w-[16rem]"
           )}
         >
-          <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar px-3 py-4">
+          <div className="flex h-full min-h-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between gap-3 px-1">
               <Link
                 href="/today"
@@ -354,7 +365,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
               </button>
             </div>
 
-            <nav className="mt-6 flex-1 space-y-1 overflow-y-auto pr-1">
+            <nav className="mt-6 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {availableNavigation.map((item) => {
                 const active = isActive(item.href);
 
@@ -438,14 +449,14 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
         <main
           className={cn(
-            "relative min-h-screen transition-[padding] duration-200",
+            "relative min-h-[100dvh] transition-[padding] duration-200",
             collapsed ? "lg:pl-[6.5rem]" : "lg:pl-[16rem]"
           )}
         >
           <AppointmentNowAlert />
           <header className="sticky top-0 z-20 border-b border-border/70 bg-header/95 backdrop-blur">
-            <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 lg:px-6">
-              <div className="flex min-w-0 items-center gap-3">
+            <div className="mx-auto flex min-h-14 max-w-[1440px] items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4 lg:h-14 lg:px-6 lg:py-0">
+              <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
@@ -458,7 +469,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                 <div data-tour-id="global-search" className="min-w-0"><GlobalSearch /></div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 {/* {canUseQuickCreate ? <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button data-tour-id="quick-create" size="sm" className="inline-flex"><Plus className="h-4 w-4" />Nuevo</Button>
@@ -471,7 +482,7 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                  <Button data-tour-id="quick-help" variant="outline" size="icon" aria-label="Ayuda y atajos"><CircleHelp className="h-4 w-4" /></Button>
+                  <Button data-tour-id="quick-help" variant="outline" size="icon" className="hidden sm:inline-flex" aria-label="Ayuda y atajos"><CircleHelp className="h-4 w-4" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64">
                     <DropdownMenuLabel>Ayuda rápida</DropdownMenuLabel>
@@ -502,7 +513,8 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
 
                 <Button 
                   variant="outline" 
-                  size="icon" 
+                  size="icon"
+                  className="hidden sm:inline-flex"
                   onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
                 >
                   <Sun className="h-[1.1rem] w-[1.1rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
@@ -541,6 +553,15 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem className="sm:hidden" onSelect={(event) => { event.preventDefault(); setTourOpen(true); }}>
+                      <CircleHelp className="h-4 w-4" />
+                      Ayuda y recorrido
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="sm:hidden" onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
+                      {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      Cambiar tema
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="sm:hidden" />
                     {currentUser?.isGlobalAdmin ? (
                       <DropdownMenuItem asChild>
                         <Link href="/admin/clinics">Administración</Link>
@@ -563,8 +584,8 @@ export default function AppShell({ children, initialUser = null }: AppSidebarPro
             </div>
           </header>
 
-          <div className="px-4 py-5 lg:px-6 lg:py-6">
-            <div className="mx-auto max-w-[1440px]">
+          <div className="min-w-0 px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
+            <div className="mx-auto min-w-0 max-w-full lg:max-w-[1440px]">
               <EmailVerificationBanner />
               {currentModuleAllowed ? (
                 children

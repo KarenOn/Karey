@@ -3,18 +3,12 @@
 import { useEffect } from "react";
 import type { InvoicePrintData } from "@/lib/print/getInvoicePrintData";
 import type { ReceiptPaperSize } from "@/lib/printing/settings";
+import { formatDecimal, formatMoney } from "@/lib/formatters";
 
-function money(value: number | string) {
+function money(value: number | string, currency = "DOP") {
   const numeric = typeof value === "string" ? Number(value) : value;
 
-  if (!Number.isFinite(numeric)) {
-    return "0.00";
-  }
-
-  return numeric.toLocaleString("es-DO", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoney(numeric, currency);
 }
 
 function formatDateTime(value?: string | null, timezone?: string | null) {
@@ -289,6 +283,7 @@ export default function InvoiceReceiptDocument({
           {hasValue(data.clinic.rnc) ? (
             <div className="receipt-muted">RNC: {data.clinic.rnc}</div>
           ) : null}
+          {hasValue(data.clinic.fiscalName) && data.clinic.fiscalName !== data.clinic.name ? <div className="receipt-muted">Nombre fiscal: {data.clinic.fiscalName}</div> : null}
         </header>
 
         <div className="receipt-rule" />
@@ -316,6 +311,7 @@ export default function InvoiceReceiptDocument({
           <div>
             <strong>Cliente:</strong> {data.client.fullName}
           </div>
+          {hasValue(data.client.identificationNumber) ? <div>Identificación: {data.client.identificationNumber}</div> : null}
           {data.pet?.name ? (
             <div>
               <strong>Paciente:</strong> {data.pet.name}
@@ -336,10 +332,10 @@ export default function InvoiceReceiptDocument({
                 <div>
                   <div className="receipt-item-name">{item.description}</div>
                   <div className="receipt-item-meta">
-                    {money(item.quantity)} x {money(item.unitPrice)}
+                    {formatDecimal(item.quantity)} x {money(item.unitPrice, data.clinic.currency ?? "DOP")}
                   </div>
                 </div>
-                <strong>{money(item.lineTotal)}</strong>
+                <strong>{money(item.lineTotal, data.clinic.currency ?? "DOP")}</strong>
               </div>
             ))}
           </div>
@@ -350,31 +346,31 @@ export default function InvoiceReceiptDocument({
         <section className="receipt-section">
           <div className="receipt-row">
             <span>Subtotal</span>
-            <span>{money(data.invoice.subtotal)}</span>
+            <span>{money(data.invoice.subtotal, data.clinic.currency ?? "DOP")}</span>
           </div>
           {Number(data.invoice.discount) > 0 ? (
             <div className="receipt-row">
               <span>Descuento</span>
-              <span>-{money(data.invoice.discount)}</span>
+              <span>-{money(data.invoice.discount, data.clinic.currency ?? "DOP")}</span>
             </div>
           ) : null}
           {Number(data.invoice.tax) > 0 ? (
             <div className="receipt-row">
               <span>ITBIS</span>
-              <span>{money(data.invoice.tax)}</span>
+              <span>{money(data.invoice.tax, data.clinic.currency ?? "DOP")}</span>
             </div>
           ) : null}
           <div className="receipt-row receipt-total">
             <span>Total</span>
-            <span>{money(data.invoice.total)}</span>
+            <span>{money(data.invoice.total, data.clinic.currency ?? "DOP")}</span>
           </div>
           <div className="receipt-row">
             <span>Pagado</span>
-            <strong>{money(paidTotal)}</strong>
+            <strong>{money(paidTotal, data.clinic.currency ?? "DOP")}</strong>
           </div>
           <div className="receipt-row">
             <span>Balance</span>
-            <strong>{money(balance)}</strong>
+            <strong>{money(balance, data.clinic.currency ?? "DOP")}</strong>
           </div>
         </section>
 
@@ -388,7 +384,7 @@ export default function InvoiceReceiptDocument({
                 <div className="receipt-section" key={`${payment.method}-${index}`}>
                   <div className="receipt-row">
                     <span>{paymentMethodLabel(payment.method)}</span>
-                    <strong>{money(payment.amount)}</strong>
+                    <strong>{money(payment.amount, data.clinic.currency ?? "DOP")}</strong>
                   </div>
                   <div className="receipt-muted">
                     {formatDateTime(payment.paidAt, data.clinic.timezone)}

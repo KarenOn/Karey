@@ -14,9 +14,14 @@ type VisitValues = {
   vetId: string;
   diagnosis: string;
   treatment: string;
+  anamnesis: string;
+  carePlan: string;
   notes: string;
   weightKg: string | number;
   temperatureC: string | number;
+  heartRateBpm: string | number;
+  respiratoryRatePpm: string | number;
+  nextReviewAt: string;
 };
 
 type ClinicalVisitFormProps = {
@@ -26,13 +31,15 @@ type ClinicalVisitFormProps = {
   initialValues?: Partial<VisitValues>;
   currentUserRole?: string | null;
   currentUserId?: string | null;
+  appointmentId?: number;
+  todayTurnId?: number;
   onSaved: () => void | Promise<void>;
   onCancel?: () => void;
 };
 
-const emptyValues: VisitValues = { visitAt: new Date().toISOString().slice(0, 10), vetId: "", diagnosis: "", treatment: "", notes: "", weightKg: "", temperatureC: "" };
+const emptyValues: VisitValues = { visitAt: new Date().toISOString().slice(0, 10), vetId: "", anamnesis: "", diagnosis: "", treatment: "", carePlan: "", notes: "", weightKg: "", temperatureC: "", heartRateBpm: "", respiratoryRatePpm: "", nextReviewAt: "" };
 
-export default function ClinicalVisitForm({ petId, visitId, vets, initialValues, currentUserRole, currentUserId, onSaved, onCancel }: ClinicalVisitFormProps) {
+export default function ClinicalVisitForm({ petId, visitId, vets, initialValues, currentUserRole, currentUserId, appointmentId, todayTurnId, onSaved, onCancel }: ClinicalVisitFormProps) {
   const [values, setValues] = useState<VisitValues>({
     ...emptyValues,
     ...initialValues,
@@ -83,6 +90,9 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
       weightKg: values.weightKg === "" ? undefined : Number(values.weightKg),
       temperatureC:
         values.temperatureC === "" ? undefined : Number(values.temperatureC),
+      heartRateBpm: values.heartRateBpm === "" ? undefined : Number(values.heartRateBpm),
+      respiratoryRatePpm: values.respiratoryRatePpm === "" ? undefined : Number(values.respiratoryRatePpm),
+      nextReviewAt: values.nextReviewAt ? new Date(values.nextReviewAt) : undefined,
     });
     if (!parsed.success) {
       setError(
@@ -98,6 +108,7 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
             attachment,
             UPLOAD_SCOPES.medicalAttachment,
             visitId,
+            petId,
           )
         : null;
       const response = await fetch(
@@ -107,6 +118,8 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...parsed.data,
+            appointmentId,
+            todayTurnId,
             attachment: uploaded ?? undefined,
           }),
         },
@@ -141,7 +154,8 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
   }
 
   return (
-    <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="space-y-5">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <FormField
         label="Fecha"
         name="visitAt"
@@ -170,6 +184,9 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
           Asignado a tu usuario veterinario.
         </p>
       ) : null}
+      </section>
+      <section className="grid grid-cols-1 gap-4 rounded-lg border border-border/70 p-4 sm:grid-cols-2">
+        <h3 className="text-sm font-semibold text-foreground sm:col-span-2">Signos vitales</h3>
       <FormField
         label="Peso en visita (kg)"
         name="weightKg"
@@ -177,13 +194,13 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
         value={values.weightKg}
         onChange={change}
       />
-      <FormField
-        label="Temperatura (°C)"
-        name="temperatureC"
-        type="number"
-        value={values.temperatureC}
-        onChange={change}
-      />
+      <FormField label="Frecuencia cardíaca (lpm)" name="heartRateBpm" type="number" value={values.heartRateBpm} onChange={change} />
+      <FormField label="Frecuencia respiratoria (rpm)" name="respiratoryRatePpm" type="number" value={values.respiratoryRatePpm} onChange={change} />
+      <FormField label="Temperatura (°C)" name="temperatureC" type="number" value={values.temperatureC} onChange={change} />
+      </section>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <h3 className="text-sm font-semibold text-foreground sm:col-span-2">Evaluación y plan</h3>
+      <FormField label="Anamnesis / historia del problema actual" name="anamnesis" type="textarea" value={values.anamnesis} onChange={change} className="sm:col-span-2" />
       <FormField
         label="Diagnóstico"
         name="diagnosis"
@@ -192,14 +209,19 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
         onChange={change}
         className="sm:col-span-2"
       />
+      <FormField label="Tratamiento" name="treatment" type="textarea" value={values.treatment} onChange={change} className="sm:col-span-2" />
       <FormField
-        label="Tratamiento"
-        name="treatment"
+        label="Plan / recomendaciones"
+        name="carePlan"
         type="textarea"
-        value={values.treatment}
+        value={values.carePlan}
         onChange={change}
         className="sm:col-span-2"
       />
+      <FormField label="Próxima fecha de control" name="nextReviewAt" type="date" value={values.nextReviewAt} onChange={change} />
+      </section>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <h3 className="text-sm font-semibold text-foreground sm:col-span-2">Notas y adjuntos</h3>
       <FormField
         label="Notas"
         name="notes"
@@ -250,6 +272,7 @@ export default function ClinicalVisitForm({ petId, visitId, vets, initialValues,
           </div>
         ) : null}
       </div>
+      </section>
 
       {error ? (
         <p className="text-sm text-destructive sm:col-span-2" role="alert">

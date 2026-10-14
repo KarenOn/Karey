@@ -55,11 +55,18 @@ export async function POST(req: Request) {
         ...(allowedMappedTypes.length ? [{ type: { in: allowedMappedTypes } }] : []),
       ],
     };
-    const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(await req.json().catch(() => null));
+    const parsed = z.object({ id: z.coerce.number().int().positive() }).or(z.object({ all: z.literal(true) })).safeParse(await req.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "Notificación inválida" }, { status: 422 });
-    const updated = await prisma.notificationRecipient.updateMany({ where: { id: parsed.data.id, userId: session.user.id, notification: notificationScope }, data: { readAt: new Date() } });
-    if (!updated.count) return NextResponse.json({ error: "Notificación no encontrada" }, { status: 404 });
-    return NextResponse.json({ ok: true });
+    const updated = await prisma.notificationRecipient.updateMany({
+      where: {
+        ...( "id" in parsed.data ? { id: parsed.data.id } : { readAt: null }),
+        userId: session.user.id,
+        notification: notificationScope,
+      },
+      data: { readAt: new Date() },
+    });
+    if (!updated.count && "id" in parsed.data) return NextResponse.json({ error: "Notificación no encontrada" }, { status: 404 });
+    return NextResponse.json({ ok: true, count: updated.count });
   } catch (error) {
     const status = error instanceof Error && error.message === "UNAUTHORIZED" ? 401 : 500;
     return NextResponse.json({ error: "No se pudo marcar la notificación" }, { status });

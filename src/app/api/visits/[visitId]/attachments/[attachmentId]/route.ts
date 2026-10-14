@@ -34,10 +34,10 @@ export async function DELETE(
   }
 
   try {
-    await deleteStoredFile(attachment.url);
     await prisma.medicalAttachment.delete({
       where: { id: attachment.id },
     });
+    await deleteStoredFile(attachment.url);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

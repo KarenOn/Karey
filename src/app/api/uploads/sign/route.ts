@@ -6,6 +6,11 @@ import { createSignedUploadUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
+const optionalPositiveId = z.preprocess(
+  (value) => (value === null || value === "" ? undefined : value),
+  z.coerce.number().int().positive().optional(),
+);
+
 const UploadSignSchema = z.discriminatedUnion("scope", [
   z.object({
     scope: z.literal("clinic-logo"),
@@ -21,7 +26,8 @@ const UploadSignSchema = z.discriminatedUnion("scope", [
     scope: z.literal("medical-attachment"),
     fileName: z.string().trim().min(1).max(255),
     fileType: z.string().trim().max(120).optional(),
-    visitId: z.coerce.number().int().positive().optional(),
+    visitId: optionalPositiveId,
+    petId: optionalPositiveId,
   }),
 ]);
 
@@ -45,10 +51,11 @@ export async function POST(req: Request) {
   }
 
   try {
+    let resolvedPetId: number | undefined;
     if (parsed.data.scope === "medical-attachment") {
       const visit = parsed.data.visitId ? await prisma.clinicalVisit.findFirst({
         where: { id: parsed.data.visitId, clinicId },
-        select: { id: true },
+        select: { id: true, petId: true },
       }) : null;
 
       if (parsed.data.visitId && !visit) {
@@ -57,6 +64,17 @@ export async function POST(req: Request) {
           { status: 404 }
         );
       }
+      if (!parsed.data.visitId && !parsed.data.petId) {
+        return NextResponse.json({ error: "El paciente es obligatorio para documentos generales" }, { status: 422 });
+      }
+      if (parsed.data.petId) {
+        const pet = await prisma.pet.findFirst({ where: { id: parsed.data.petId, clinicId }, select: { id: true } });
+        if (!pet) return NextResponse.json({ error: "El paciente no existe o no pertenece a la clínica activa" }, { status: 404 });
+      }
+      if (visit && parsed.data.petId && visit.petId !== parsed.data.petId) {
+        return NextResponse.json({ error: "La visita no corresponde al paciente" }, { status: 409 });
+      }
+      resolvedPetId = parsed.data.petId ?? visit?.petId;
     }
 
     const signed = await createSignedUploadUrl({
@@ -64,6 +82,7 @@ export async function POST(req: Request) {
       fileName: parsed.data.fileName,
       fileType: parsed.data.fileType,
       scope: parsed.data.scope,
+      petId: resolvedPetId,
       visitId: "visitId" in parsed.data ? parsed.data.visitId : undefined,
     });
 

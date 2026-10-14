@@ -17,6 +17,8 @@ export default function ClientForm({ values, errors = {}, onChange, lockName = f
       <FormField label="Teléfono" name="phone" type="tel" value={values.phone} onChange={onChange} required error={errors.phone} />
       <FormField label="Email" name="email" type="email" value={values.email} onChange={onChange} error={errors.email} />
       <FormField label="Dirección" name="address" value={values.address} onChange={onChange} error={errors.address} />
+      <FormField label="Tipo de identificación" name="identificationType" type="select" value={values.identificationType ?? ""} onChange={onChange} options={[{ value: "CEDULA", label: "Cédula" }, { value: "RNC", label: "RNC" }, { value: "PASSPORT_OTHER", label: "Pasaporte/Otro" }]} placeholder="Opcional" error={errors.identificationType} />
+      <FormField label="Número de identificación" name="identificationNumber" value={values.identificationNumber ?? ""} onChange={onChange} placeholder="Opcional" error={errors.identificationNumber} />
       <FormField label="Notas" name="notes" type="textarea" value={values.notes} onChange={onChange} className="sm:col-span-2" error={errors.notes} />
     </div>
   );

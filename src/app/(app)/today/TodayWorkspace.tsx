@@ -359,9 +359,9 @@ function PatientCard({
         </div>
 
         {item.secondaryActionLabel && onSecondaryAction ? (
-          <div className="lg:pl-2">
+          <div className="w-full lg:w-auto lg:pl-2">
             <Button
-              className={cn("h-10 rounded-lg px-3", stateUi.button)}
+              className={cn("h-10 w-full rounded-lg px-3 sm:w-auto", stateUi.button)}
               variant="outline"
               size="sm"
               disabled={busy}
@@ -376,9 +376,9 @@ function PatientCard({
           </div>
         ) : null}
         {item.primaryActionLabel && onPrimaryAction ? (
-          <div className="lg:pl-4">
+          <div className="w-full lg:w-auto lg:pl-4">
             <Button
-              className={cn("h-10 rounded-lg px-4", stateUi.button)}
+              className={cn("h-10 w-full rounded-lg px-4 sm:w-auto", stateUi.button)}
               disabled={busy}
               onClick={(event) => {
                 event.stopPropagation();
@@ -700,8 +700,7 @@ export default function TodayWorkspace({
   async function finishEncounter() {
     if (!encounter) return;
     if (encounter.todayTurnId) {
-      await requestJson(`/api/today-turns/${encounter.todayTurnId}/status`, { method: "PATCH", body: JSON.stringify({ status: "READY" }) });
-      setTurns((current) => current.map((turn) => turn.id === encounter.todayTurnId ? { ...turn, status: "READY" } : turn));
+      setTurns((current) => current.map((turn) => turn.id === encounter.todayTurnId ? { ...turn, status: "DELIVERED" } : turn));
       setEncounter(null);
       return;
     }
@@ -1017,13 +1016,14 @@ export default function TodayWorkspace({
         //         Cerrar
         //       </Button>
         //     </div>
-        <Modal
+            <Modal
                 open={!!encounter}
                 onClose={(open) => {
                   if (!open) setEncounter(null);
                 }}
                 title="Atención clínica"
                 size="xl"
+                // scrollContent
               >
             <EncounterWorkflow
               petId={encounter.petId}

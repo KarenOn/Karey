@@ -27,6 +27,7 @@ type StorageConfig = {
 
 type CreateUploadUrlParams = {
   clinicId: number;
+  petId?: number | null;
   fileName: string;
   fileType?: string | null;
   scope: StorageScope;
@@ -129,7 +130,9 @@ function buildStorageKey(params: CreateUploadUrlParams) {
       ? `clinic/${params.clinicId}/branding`
       : params.scope === "user-avatar"
         ? `clinic/${params.clinicId}/users/avatars`
-      : `clinic/${params.clinicId}/visits/${params.visitId ?? "pending"}/attachments`;
+      : params.visitId
+        ? `clinic/${params.clinicId}/visits/${params.visitId}/attachments`
+        : `clinic/${params.clinicId}/pets/${params.petId}/attachments`;
 
   return `${prefix}/${randomUUID()}-${safeFileName}`;
 }
@@ -247,20 +250,37 @@ export async function storeGeneratedReport(params: { clinicId: number; fileName:
   return toS3StorageRef(key);
 }
 
-export async function serializeAttachment<T extends { fileName: string; fileType?: string | null; url: string }>(
+export async function serializeAttachment<T extends { fileName: string; displayName?: string | null; originalFilename?: string | null; fileType?: string | null; fileSizeBytes?: number | null; url: string }>(
   attachment: T
 ) {
   const storageRef = attachment.url;
+  const displayName = attachment.displayName?.trim() || attachment.fileName;
+  const originalFilename = attachment.originalFilename?.trim() || attachment.fileName;
 
   return {
     ...attachment,
+    displayName,
+    originalFilename,
+    storageKey: isS3StorageRef(storageRef) ? fromS3StorageRef(storageRef) : storageRef,
     storageRef,
     url: await resolveStoredFileUrl(storageRef, {
-      fileName: attachment.fileName,
+      fileName: originalFilename,
     }),
     downloadUrl: await resolveStoredFileUrl(storageRef, {
       download: true,
-      fileName: attachment.fileName,
+      fileName: originalFilename,
     }),
   };
+}
+
+export function storageRefBelongsToMedicalAttachment(
+  ref: string,
+  params: { clinicId: number; petId: number; visitId?: number | null },
+) {
+  if (!storageRefBelongsToClinic(ref, params.clinicId)) return false;
+  const key = fromS3StorageRef(ref);
+  if (params.visitId) {
+    return key.startsWith(`clinic/${params.clinicId}/visits/${params.visitId}/attachments/`);
+  }
+  return key.startsWith(`clinic/${params.clinicId}/pets/${params.petId}/attachments/`);
 }

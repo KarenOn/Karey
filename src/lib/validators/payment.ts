@@ -9,6 +9,7 @@ export const PaymentCreateSchema = z.object({
   method: z.nativeEnum(PaymentMethod),
   reference: toOptionalString(),
   paidAt: toOptionalString().optional(), // ISO
+  registerId: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export type PaymentCreateInput = z.infer<typeof PaymentCreateSchema>;

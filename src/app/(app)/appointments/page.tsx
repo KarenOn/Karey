@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDays, addMinutes, format, isToday, isTomorrow, parse, startOfDay } from "date-fns";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { addDays, addMinutes, endOfMonth, endOfWeek, format, isToday, isTomorrow, parse, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { useRouter } from "next/navigation";
 import {
@@ -34,16 +34,18 @@ import { safeDate } from "@/lib/utility";
 import { cn } from "@/lib/utils";
 import DataTableSkeleton from "@/components/shared/DataTableSkeleton";
 import EncounterWorkflow from "@/components/shared/EncounterWorkflow";
-import { getClinicDateKey } from "@/lib/appointment-time";
+import { getClinicDateKey, getClinicDayRange } from "@/lib/appointment-time";
 import {
   calculateAppointmentEnd,
   DEFAULT_APPOINTMENT_DURATION_MINUTES,
-  filterAppointmentsByClinicDay,
   canPerformAction,
   isVetAvailableForRange,
   invalidateAppointmentSurfaces,
 } from "@/lib/appointment-helpers";
 import { useCurrentUserProfile } from "@/components/layout/current-user-context";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AppointmentDateRangePicker, { type AppointmentDateRangeMode } from "@/components/shared/AppointmentDateRangePicker";
+import type { DateRange } from "react-day-picker";
 
 type PetDTO = { id: number; name: string; species: string; clientId: number };
 type ClientDTO = { id: number; fullName: string; phone?: string | null };
@@ -68,7 +70,16 @@ type AppointmentDTO = {
   client: ClientDTO;
   vet: VetDTO | null;
   service: { id: number; name: string; durationMins: number | null } | null;
-  visit?: { id: number; _count: { vaccinations: number } } | null;
+  visit?: {
+    id: number;
+    visitAt: string;
+    diagnosis: string | null;
+    treatment: string | null;
+    notes: string | null;
+    vet: { id: string; name: string } | null;
+    vaccinations: Array<{ id: number; vaccineName: string; appliedAt: string }>;
+  } | null;
+  invoice?: { id: number; number: string; status: string } | null;
   encounterItems?: Array<{ id: number }>;
 };
 
@@ -290,6 +301,9 @@ function AppointmentDetailDialog({
   onEdit,
   onAttend,
   onManage,
+  onViewInvoice,
+  onViewVisit,
+  onViewVaccination,
   onReschedule,
   onCancel,
 }: {
@@ -303,6 +317,9 @@ function AppointmentDetailDialog({
   onEdit: (appointment: AppointmentDTO) => void;
   onAttend: (appointment: AppointmentDTO) => void;
   onManage: (appointment: AppointmentDTO) => void;
+  onViewInvoice: (invoiceId: number) => void;
+  onViewVisit: (appointment: AppointmentDTO, visitId: number) => void;
+  onViewVaccination: (appointment: AppointmentDTO, vaccinationId: number) => void;
   onReschedule: (appointment: AppointmentDTO) => void;
   onCancel: (appointment: AppointmentDTO) => void;
 }) {
@@ -459,6 +476,62 @@ function AppointmentDetailDialog({
       <p className="text-foreground italic leading-relaxed">{appointment.reason ?? "No se registró un motivo específico."}</p>
     </div>
 
+    {appointment.invoice ? (
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4 sm:col-span-2">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Facturación</p>
+          <a
+            href={`/invoices/${appointment.invoice.id}`}
+            onClick={(event) => {
+              event.preventDefault();
+              onViewInvoice(appointment.invoice!.id);
+            }}
+            className="mt-1 inline-flex text-sm font-semibold text-primary hover:underline"
+          >
+            {appointment.invoice.number}
+          </a>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Estado: {formatInvoiceStatus(appointment.invoice.status)}
+          </p>
+        </div>
+      </section>
+    ) : null}
+
+    {appointment.visit ? (
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4 sm:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Atención realizada</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {safeDate(appointment.visit.visitAt) ? format(safeDate(appointment.visit.visitAt)!, "d MMM yyyy", { locale: es }) : "Visita clínica"}
+            </p>
+            <p className="text-xs text-muted-foreground">Veterinario: {appointment.visit.vet?.name ?? "No registrado"}</p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => onViewVisit(appointment, appointment.visit!.id)}>
+            Ver visita
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {appointment.visit.diagnosis || appointment.visit.treatment || appointment.visit.notes || "Sin resumen registrado."}
+        </p>
+        {appointment.visit.vaccinations.length > 0 ? (
+          <div className="border-t border-border/70 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vacunas relacionadas</p>
+            <div className="mt-2 space-y-2">
+              {appointment.visit.vaccinations.map((vaccination) => (
+                <div key={vaccination.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>{vaccination.vaccineName} · {format(safeDate(vaccination.appliedAt) ?? new Date(), "d MMM yyyy", { locale: es })}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => onViewVaccination(appointment, vaccination.id)}>
+                    Consultar registro
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    ) : null}
+
     {/* Notas (Ocupa dos columnas) */}
     <div className="flex flex-col p-3 rounded-lg border border-border bg-muted/40 sm:col-span-2">
       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Notas Internas</span>
@@ -503,21 +576,8 @@ function AppointmentDetailDialog({
   );
 }
 
-function DetailItem({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: string;
-  className?: string;
-}) {
-  return (
-    <div className={`${className}`}>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-foreground">{value}</p>
-    </div>
-  );
+function formatInvoiceStatus(status: string) {
+  return ({ DRAFT: "Borrador", ISSUED: "Pendiente", PARTIALLY_PAID: "Parcialmente pagada", PAID: "Pagada", VOID: "Anulada" } as Record<string, string>)[status] ?? status;
 }
 
 export default function AppointmentsPage() {
@@ -526,14 +586,15 @@ export default function AppointmentsPage() {
   const profile = useCurrentUserProfile();
   const [view, setView] = useState<"agenda" | "list">("agenda");
   const [selectedDay, setSelectedDay] = useState<Date>(startOfDay(new Date()));
-  const [listViewSelectedDay, setListViewSelectedDay] = useState<string>("");
-  const listDateInitialized = useRef(false);
+  const [listDateMode, setListDateMode] = useState<AppointmentDateRangeMode>("TODAY");
+  const [listDateRange, setListDateRange] = useState<DateRange | undefined>();
   const [listStatusFilter, setListStatusFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [appointments, setAppointments] = useState<AppointmentDTO[]>([]);
+  const [listAppointments, setListAppointments] = useState<AppointmentDTO[]>([]);
   const [clients, setClients] = useState<ClientDTO[]>([]);
   const [pets, setPets] = useState<PetDTO[]>([]);
   const [vets, setVets] = useState<VetDTO[]>([]);
@@ -642,15 +703,45 @@ export default function AppointmentsPage() {
     return () => window.clearInterval(interval);
   }, [refreshAll]);
 
-  // Initialize list view selected day when clinic timezone is set
-  useEffect(() => {
-    if (!listDateInitialized.current && clinicTimezone) {
-      const today = new Date();
-      const clinicDateKey = getClinicDateKey(today, clinicTimezone);
-      setListViewSelectedDay(clinicDateKey);
-      listDateInitialized.current = true;
+  const listDateKeys = useMemo(() => {
+    const todayKey = getClinicDateKey(new Date(), clinicTimezone);
+    const today = parse(todayKey, "yyyy-MM-dd", new Date());
+    if (listDateMode === "ALL") return null;
+    if (listDateMode === "CUSTOM") {
+      if (!listDateRange?.from) return null;
+      return { from: format(listDateRange.from, "yyyy-MM-dd"), to: format(listDateRange.to ?? listDateRange.from, "yyyy-MM-dd") };
     }
-  }, [clinicTimezone]);
+    if (listDateMode === "WEEK") return { from: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"), to: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd") };
+    if (listDateMode === "MONTH") return { from: format(startOfMonth(today), "yyyy-MM-dd"), to: format(endOfMonth(today), "yyyy-MM-dd") };
+    return { from: todayKey, to: todayKey };
+  }, [clinicTimezone, listDateMode, listDateRange]);
+
+  const listDateRangeForPicker = useMemo<DateRange | undefined>(() => {
+    if (listDateMode === "CUSTOM") return listDateRange;
+    if (!listDateKeys) return undefined;
+    return { from: parse(listDateKeys.from, "yyyy-MM-dd", new Date()), to: parse(listDateKeys.to, "yyyy-MM-dd", new Date()) };
+  }, [listDateKeys, listDateMode, listDateRange]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadListAppointments() {
+      if (loading) return;
+      if (!listDateKeys) {
+        if (active) setListAppointments(appointments);
+        return;
+      }
+      const params = new URLSearchParams({ from: getClinicDayRange(new Date(`${listDateKeys.from}T12:00:00Z`), clinicTimezone).start.toISOString(), to: getClinicDayRange(new Date(`${listDateKeys.to}T12:00:00Z`), clinicTimezone).end.toISOString() });
+      if (listStatusFilter !== "ALL") params.set("status", listStatusFilter);
+      try {
+        const rows = await requestJson<AppointmentDTO[]>(`/api/appointments?${params.toString()}`);
+        if (active) setListAppointments(rows);
+      } catch (loadError) {
+        if (active) showAlert("destructive", "No se pudo cargar la lista de citas", getErrorMessage(loadError));
+      }
+    }
+    void loadListAppointments();
+    return () => { active = false; };
+  }, [appointments, clinicTimezone, listDateKeys, listStatusFilter, loading, showAlert]);
 
   // Compute selectedDayStr using clinic timezone instead of browser timezone
   const selectedDayStr = useMemo(() => {
@@ -883,32 +974,9 @@ export default function AppointmentsPage() {
     },
     [calendarDotsByDay]
   );
-  // Filter appointments for list view by selected day and search text
+  // La lista recibe su rango del endpoint; búsqueda y paginación permanecen en DataTable.
   const listViewAppointments = useMemo(() => {
-    const filtered = listViewSelectedDay
-      ? filterAppointmentsByClinicDay(appointments, listViewSelectedDay, clinicTimezone)
-      : appointments;
-
-    // if (listViewSearchText.trim()) {
-    //   const searchLower = listViewSearchText.toLowerCase();
-    //   filtered = filtered.filter((apt) => {
-    //     const searchText = [
-    //       apt.pet?.name,
-    //       apt.client?.fullName,
-    //       apt.vet?.name,
-    //       apt.reason,
-    //       formatAppointmentType(apt.type),
-    //       formatAppointmentStatus(apt.status),
-    //     ]
-    //       .filter(Boolean)
-    //       .join(" ")
-    //       .toLowerCase();
-    //     return searchText.includes(searchLower);
-    //   });
-    // }
-
-    return filtered
-      .filter((apt) => listStatusFilter === "ALL" || apt.status === listStatusFilter)
+    return listAppointments
       .map((apt) => ({
         ...apt,
         searchText: [
@@ -923,7 +991,7 @@ export default function AppointmentsPage() {
           .join(" "),
       }))
       .sort((a, b) => a.startAt.localeCompare(b.startAt));
-  }, [appointments, listViewSelectedDay, listStatusFilter, clinicTimezone]);
+  }, [listAppointments]);
 
   const legendItems = useMemo(
     () =>
@@ -1385,7 +1453,7 @@ export default function AppointmentsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <AppPageHero
         badgeIcon={<CalendarIcon className="size-3.5" />}
         badgeLabel="Agenda clínica"
@@ -1444,15 +1512,15 @@ export default function AppointmentsPage() {
         value={view}
         onValueChange={(value) => setView(value as "agenda" | "list")}
       >
-        <TabsList>
-          <TabsTrigger value="agenda">Agenda</TabsTrigger>
-          <TabsTrigger value="list">Lista</TabsTrigger>
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="agenda" className="flex-1 sm:flex-none">Agenda</TabsTrigger>
+          <TabsTrigger value="list" className="flex-1 sm:flex-none">Lista</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="agenda" className="mt-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <TabsContent value="agenda" className="mt-3 sm:mt-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12">
             <div className="lg:col-span-4">
-              <div className="app-panel-strong p-4">
+              <div className="app-panel-strong p-2 sm:p-4">
                 <Calendar
                   mode="single"
                   selected={selectedDay}
@@ -1461,10 +1529,21 @@ export default function AppointmentsPage() {
                     Boolean(scheduleByDay.get(getWeekdayKey(day))?.closed)
                   }
                   components={{ DayButton: renderCalendarDayButton }}
-                  className="rounded-xl w-full border border-border/70"
+                  className="w-full rounded-xl border border-border/70 p-1 [--cell-size:--spacing(7)] sm:p-3 sm:[--cell-size:--spacing(8)]"
                 />
 
-                <div className="mt-4 border-t border-border/70 pt-4">
+                <details className="mt-2 border-t border-border/70 pt-2 sm:hidden">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-foreground">
+                    Tipos de cita
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-2">
+                    {legendItems.map((item) => (
+                      <LegendItem key={item.label} colorClass={item.color} label={item.label} />
+                    ))}
+                  </div>
+                </details>
+
+                <div className="mt-4 hidden border-t border-border/70 pt-4 sm:block">
                   <p className="mb-3 text-sm font-semibold text-foreground">
                     Tipos de cita
                   </p>
@@ -1479,9 +1558,9 @@ export default function AppointmentsPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-border/70 bg-muted/45 p-3 text-sm text-muted-foreground">
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/45 px-3 py-2 text-xs text-muted-foreground sm:mt-4 sm:block sm:rounded-xl sm:p-3 sm:text-sm">
                   <p className="font-medium text-foreground">Horario del día</p>
-                  <p>
+                  <p className="text-right sm:text-left">
                     {isClosedDay
                       ? "La clínica está cerrada este día"
                       : `${selectedSchedule.open ?? "09:00"} - ${selectedSchedule.close ?? "17:00"}`}
@@ -1492,7 +1571,7 @@ export default function AppointmentsPage() {
 
             <div className="lg:col-span-8">
               <div className="app-panel-strong overflow-hidden">
-                <div className="flex items-center justify-between gap-3 border-b border-border/70 p-4">
+                <div className="flex items-center justify-between gap-2 border-b border-border/70 p-3 sm:gap-3 sm:p-4">
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
@@ -1506,7 +1585,7 @@ export default function AppointmentsPage() {
                     </Button>
 
                     <div className="px-2">
-                      <p className="font-semibold capitalize text-foreground">
+                       <p className="max-w-[12rem] truncate text-sm font-semibold capitalize text-foreground sm:max-w-none sm:text-base">
                         {format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", {
                           locale: es,
                         })}
@@ -1523,7 +1602,7 @@ export default function AppointmentsPage() {
                       onClick={() =>
                         setSelectedDay((current) => addDays(current, 1))
                       }
-                      className="rounded-xl"
+                       className="h-9 rounded-lg px-3 sm:h-10 sm:rounded-xl"
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -1538,7 +1617,7 @@ export default function AppointmentsPage() {
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
+                 <div className="flex flex-col items-stretch gap-2 border-b border-border/70 px-3 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-3">
                   <label
                     htmlFor="agenda-vet-lane"
                     className="text-sm font-medium text-muted-foreground"
@@ -1549,7 +1628,7 @@ export default function AppointmentsPage() {
                     id="agenda-vet-lane"
                     value={slotVetId}
                     onChange={(event) => setSlotVetId(event.target.value)}
-                    className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
+                     className="h-9 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm sm:w-auto"
                   >
                     <option value="__NONE__">Sin asignar</option>
                     {vets.map((vet) => (
@@ -1566,12 +1645,13 @@ export default function AppointmentsPage() {
                     día.
                   </div>
                 ) : (
-                  <div className="flex">
-                    <div className="w-20 border-r border-border/70">
+                   <div className="overflow-x-auto">
+                     <div className="flex min-w-[34rem] sm:min-w-0">
+                     <div className="w-14 shrink-0 border-r border-border/70 sm:w-20">
                       {timeSlots.map((slot) => (
                         <div
                           key={slot}
-                          className="flex items-start px-4 py-3 text-sm text-muted-foreground"
+                           className="flex items-start px-2 py-3 text-xs text-muted-foreground sm:px-4 sm:text-sm"
                            style={{ height: `${getTimelineSlotHeight(slot)}px` }}
                         >
                           {slot}
@@ -1579,8 +1659,8 @@ export default function AppointmentsPage() {
                       ))}
                     </div>
 
-                    <div
-                      className="relative flex-1"
+                     <div
+                       className="relative min-w-0 flex-1"
                       style={{
                         height: `${renderedTimelineHeight}px`,
                       }}
@@ -1640,7 +1720,7 @@ export default function AppointmentsPage() {
                             return (
                               <div
                                 key={appointment.id}
-                                className="pointer-events-auto absolute z-10 overflow-hidden rounded-2xl border border-border/80 bg-card/94 transition-[height,top,box-shadow] duration-150 cursor-pointer hover:z-30 hover:shadow-md"
+                                 className="pointer-events-auto absolute z-10 overflow-hidden rounded-xl border border-border/80 bg-card/94 transition-[height,top,box-shadow] duration-150 cursor-pointer hover:z-30 hover:shadow-md sm:rounded-2xl"
                                 style={{
                                   top: `${displayTop + 4}px`,
                                   height: `${displayHeight}px`,
@@ -1655,70 +1735,71 @@ export default function AppointmentsPage() {
                                   className={`absolute left-0 top-0 h-full w-1.5 ${styles.bar}`}
                                 />
 
-                                  <div className="flex h-full items-start justify-between gap-3 p-4 pl-5">
-                                    <div className="min-h-0">
-                                      <p className="font-semibold text-foreground">
+                                  <div className="flex h-full items-start justify-between gap-2 p-2 pl-4 sm:gap-3 sm:p-4 sm:pl-5">
+                                    <div className="min-h-0 min-w-0">
+                                      <p className="truncate text-sm font-semibold text-foreground sm:text-base">
                                         {appointment.pet?.name ?? "Paciente"}
                                       </p>
                                       <div className="flex flex-wrap items-center gap-2">
-                                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles.badge}`}>
+                                        <span className={`max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-xs ${styles.badge}`}>
                                           {formatAppointmentService(appointment)}
                                         </span>
-                                        <Badge className={`${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
+                                        <Badge className={`px-1.5 text-[10px] sm:text-xs ${STATUS_COLORS[appointment.status] ?? "border-border bg-muted/70 text-muted-foreground"} border`}>
                                           {formatAppointmentStatus(appointment.status)}
                                         </Badge>
                                         {reminderBadge ? <Badge className={`${reminderBadge.className} border`}>{reminderBadge.label}</Badge> : null}
                                       </div>
-                                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                                      <p className="mt-1 hidden truncate text-sm text-muted-foreground sm:block">
                                         {appointment.client?.fullName ?? "Propietario"}
                                       </p>
-                                      <p className="mt-1 text-sm text-muted-foreground">
+                                      <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
                                         {appointment.reason || "Sin motivo registrado"}
                                       </p>
-                                      <p className="mt-2 text-xs text-muted-foreground/80">
+                                      <p className="mt-1 text-xs text-muted-foreground/80 sm:mt-2">
                                         {format(start, "HH:mm")} - {format(end, "HH:mm")}
                                       </p>
-                                      <p className="mt-1 text-xs text-muted-foreground/80">
+                                      <p className="mt-1 hidden text-xs text-muted-foreground/80 sm:block">
                                         Veterinario: {appointment.vet?.name ?? "Sin asignar"}
                                       </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:gap-2">
                                       {canUpdateAppointments && canManageEncounter && canPerformAction(appointment.status, "attend") ? (
-                                        <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>
+                                         <Button variant="outline" size="sm" className="h-7 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm" onClick={(event) => { event.stopPropagation(); void startEncounter(appointment); }}>
                                           Atender
                                         </Button>
                                       ) : null}
                                       {canManageEncounter && appointment.status === "IN_PROGRESS" ? (
-                                        <Button variant="outline" size="sm" onClick={(event) => { event.stopPropagation(); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}>
+                                         <Button variant="outline" size="sm" className="h-7 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm" onClick={(event) => { event.stopPropagation(); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}>
                                           Gestionar atención
                                         </Button>
                                       ) : null}
                                       {canUpdateAppointments && canPerformAction(appointment.status, "reschedule") ? (
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(event) => { event.stopPropagation(); openEdit(appointment); }}>
+                                         <Button variant="ghost" size="icon" className="hidden h-8 w-8 sm:inline-flex" onClick={(event) => { event.stopPropagation(); openEdit(appointment); }}>
                                           <Edit className="h-4 w-4 text-muted-foreground" />
                                         </Button>
                                       ) : null}
                                       {canDeleteAppointments && canPerformAction(appointment.status, "reschedule") ? (
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(event) => { event.stopPropagation(); askDelete(appointment); }}>
+                                         <Button variant="ghost" size="icon" className="hidden h-8 w-8 sm:inline-flex" onClick={(event) => { event.stopPropagation(); askDelete(appointment); }}>
                                           <Trash2 className="h-4 w-4 text-red-500" />
                                         </Button>
                                       ) : null}
-                                    </div>
-                                  </div>
-                              </div>
+                     </div>
+                     </div>
+                   </div>
                             );
                           },
                         )}
                       </div>
                     </div>
                   </div>
+                </div>
                 )}
               </div>
             </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="list" className="mt-6">
+        <TabsContent value="list" className="mt-3 sm:mt-6">
           <div className="app-panel-strong">
             {/* <div className="border-b border-border/70 p-4">
               <p className="mb-3 text-sm font-semibold text-foreground">
@@ -1743,23 +1824,29 @@ export default function AppointmentsPage() {
               searchPlaceholder="Buscar por mascota, cliente o veterinario..."
               emptyMessage="No hay citas para esta fecha"
               actions={
-                <div className="flex w-full gap-2 sm:w-auto">
-                  <select value={listViewSelectedDay ? "DATE" : "ALL"} onChange={(event) => {
+                <div className="flex flex-col gap-2 sm:w-auto">
+                  {/* <Select value={listViewSelectedDay ? "DATE" : "ALL"} onChange={(event) => {
                     if (event.target.value === "ALL") setListViewSelectedDay("");
-                  }} className="h-10 rounded-lg border border-border bg-background px-3 text-sm">
+                  }} className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm sm:flex-none">
                     <option value="ALL">Todas las fechas</option>
                     <option value="DATE" disabled>Elegir fecha abajo</option>
-                  </select>
-                  <Input
-                    type="date"
-                    value={listViewSelectedDay}
-                    onChange={(e) => setListViewSelectedDay(e.target.value)}
-                    className="h-10"
+                  </Select> */}
+                  <AppointmentDateRangePicker
+                    mode={listDateMode}
+                    range={listDateRangeForPicker}
+                    onModeChange={(mode) => {
+                      setListDateMode(mode);
+                      if (mode !== "CUSTOM") setListDateRange(undefined);
+                    }}
+                    onRangeChange={setListDateRange}
                   />
-                  <select value={listStatusFilter} onChange={(event) => setListStatusFilter(event.target.value)} className="h-10 rounded-lg border border-border bg-background px-3 text-sm">
-                    <option value="ALL">Todos los estados</option>
-                    {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
+                  <Select value={listStatusFilter} onValueChange={(value) => setListStatusFilter(value)}>
+                    <SelectTrigger className=""><SelectValue placeholder="Estado" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos los estados</SelectItem>
+                      {statusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               }
             />
@@ -1952,13 +2039,13 @@ export default function AppointmentsPage() {
         open={!!cancelTarget && cancelTarget.status === "IN_PROGRESS"}
         onOpenChange={(open) => { if (!open) { setCancelTarget(null); setCancelReason(""); } }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Cancelar atención</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">La atención no tiene actividad clínica registrada. Indica el motivo para cancelarla.</p>
           <div className="space-y-2">
-            <Label htmlFor="cancel-in-progress-reason">Motivo</Label>
+            <Label htmlFor="cancel-in-progress-reason" required>Motivo</Label>
             <Input id="cancel-in-progress-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Ej. Se inició por error" />
           </div>
           <DialogFooter>
@@ -1978,13 +2065,13 @@ export default function AppointmentsPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Reprogramar cita</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="reschedule-date">Nueva fecha</Label>
+              <Label htmlFor="reschedule-date" required>Nueva fecha</Label>
               <Input
                 id="reschedule-date"
                 type="date"
@@ -1993,7 +2080,7 @@ export default function AppointmentsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="reschedule-time">Hora inicial</Label>
+              <Label htmlFor="reschedule-time" required>Hora inicial</Label>
               <Input
                 id="reschedule-time"
                 type="time"
@@ -2045,6 +2132,9 @@ export default function AppointmentsPage() {
         onEdit={(appointment) => { setSelectedAppointment(null); openEdit(appointment); }}
         onAttend={(appointment) => { setSelectedAppointment(null); void startEncounter(appointment); }}
         onManage={(appointment) => { setSelectedAppointment(null); setEncounter({ appointmentId: appointment.id, petId: appointment.petId, clientId: appointment.clientId }); }}
+        onViewInvoice={(invoiceId) => { setSelectedAppointment(null); router.push(`/invoices/${invoiceId}`); }}
+        onViewVisit={(appointment, visitId) => { setSelectedAppointment(null); router.push(`/pets/${appointment.petId}?visitId=${visitId}`); }}
+        onViewVaccination={(appointment, vaccinationId) => { setSelectedAppointment(null); router.push(`/pets/${appointment.petId}?vaccinationId=${vaccinationId}`); }}
         onReschedule={(appointment) => { setSelectedAppointment(null); const start = safeDate(appointment.startAt) ?? new Date(); setRescheduleDate(format(start, "yyyy-MM-dd")); setRescheduleTime(format(start, "HH:mm")); setRescheduleTarget(appointment); }}
         onCancel={(appointment) => { setSelectedAppointment(null); setCancelReason(""); setCancelTarget(appointment); }}
       />

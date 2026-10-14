@@ -144,6 +144,11 @@ export interface Client {
   email?: string | null;
   address?: string | null;
   notes?: string | null;
+  allergies?: string | null;
+  chronicConditions?: string | null;
+  clinicalHistory?: string | null;
+  currentMedications?: string | null;
+  clinicalWarnings?: string | null;
   createdAt: DateTime;
   updatedAt: DateTime;
 }
@@ -331,10 +336,15 @@ export interface ClinicalVisit {
 
   weightKg?: number | null;
   temperatureC?: number | null;
+  anamnesis?: string | null;
+  heartRateBpm?: number | null;
+  respiratoryRatePpm?: number | null;
 
   diagnosis?: string | null;
   treatment?: string | null;
   notes?: string | null;
+  carePlan?: string | null;
+  nextReviewAt?: DateTime | null;
 
   createdAt: DateTime;
   updatedAt: DateTime;
@@ -386,6 +396,7 @@ export interface VaccinationRecord {
   nextDueAt?: DateTime | null;
 
   batchNumber?: string | null;
+  batchId?: ID | null;
   notes?: string | null;
 
   createdAt: DateTime;
@@ -526,9 +537,19 @@ export interface DashboardVaccinationDTO {
 
 export interface DashboardExpiringProductDTO {
   id: ID;
+  sku?: string | null;
   name: string;
+  category?: string | null;
   expirationDate: string;
   daysUntilExpiration: number;
+}
+
+export interface DashboardExpiredProductDTO {
+  id: ID;
+  name: string;
+  expirationDate: string;
+  category?: string | null;
+  daysSinceExpiration: number;
 }
 
 export interface DashboardDataDTO {
@@ -540,6 +561,7 @@ export interface DashboardDataDTO {
   invoices: DashboardInvoiceDTO[];
   products: DashboardLowStockProductDTO[];
   expiringProducts: DashboardExpiringProductDTO[];
+  expiredProducts: DashboardExpiredProductDTO[];
   vaccinations: DashboardVaccinationDTO[];
   todayAppointmentsCount: number;
   monthlyRevenue: Money;

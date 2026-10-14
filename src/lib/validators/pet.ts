@@ -29,6 +29,11 @@ export const PetCreateSchema = z.object({
   microchip: optionalTrimmedString(80),
   weightKg: optionalNumber,
   notes: optionalTrimmedString(2000),
+  allergies: optionalTrimmedString(4000),
+  chronicConditions: optionalTrimmedString(4000),
+  clinicalHistory: optionalTrimmedString(4000),
+  currentMedications: optionalTrimmedString(4000),
+  clinicalWarnings: optionalTrimmedString(4000),
 });
 
 export const PetUpdateSchema = PetCreateSchema.partial().refine(

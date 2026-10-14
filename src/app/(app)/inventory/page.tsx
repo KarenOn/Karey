@@ -33,10 +33,15 @@ import {
   type StockMovementRow,
 } from "@/lib/api/stock-movements";
 import type { ProductCreateInput } from "@/lib/validators/product";
+import { ProductCreateSchema, zodFieldErrors } from "@/lib/validators/product";
+import { stockMovementReferenceLabels, stockMovementReferenceTypes } from "@/lib/validators/stock-movement";
 import type { StockMovementType } from "@/types/common";
 import AppPageHero from "@/components/shared/AppPageHero";
-import { useCurrentUserAccess } from "@/components/layout/current-user-context";
+import { useCurrentUserAccess, useCurrentUserProfile } from "@/components/layout/current-user-context";
 import { formatCurrency, toMoney } from "@/lib/utility";
+import { formatClinicDate, formatClinicDateTime } from "@/lib/formatters";
+import { getClinicDateKey } from "@/lib/appointment-time";
+import { toast } from "sonner";
 
 type ProductRow = {
   id: number;
@@ -54,6 +59,7 @@ type ProductRow = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  batches?: Array<{ id: number; lotNumber: string; expirationDate: string | null; quantity: number; cost: string | number | null }>;
 };
 
 type ProductFormState = {
@@ -67,6 +73,8 @@ type ProductFormState = {
   stockOnHand: string | number;
   minStock: string | number;
   expirationDate: string;
+  initialBatchNumber: string;
+  initialExpirationDate: string;
   description: string;
   isActive: boolean;
 };
@@ -78,6 +86,8 @@ type MovementFormState = {
   reason: string;
   referenceType: string;
   referenceId: string;
+  batchNumber: string;
+  expirationDate: string;
 };
 
 type AlertState = {
@@ -97,6 +107,8 @@ const emptyProductForm: ProductFormState = {
   stockOnHand: 0,
   minStock: 5,
   expirationDate: "",
+  initialBatchNumber: "",
+  initialExpirationDate: "",
   description: "",
   isActive: true,
 };
@@ -108,6 +120,8 @@ const emptyMovementForm: MovementFormState = {
   reason: "",
   referenceType: "",
   referenceId: "",
+  batchNumber: "",
+  expirationDate: "",
 };
 
 const categoryOptions = [
@@ -158,21 +172,6 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function money(value: number) {
-  return new Intl.NumberFormat("es-BO", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("es-BO", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -187,8 +186,37 @@ function signed(value: number) {
   return `${value > 0 ? "+" : ""}${value}`;
 }
 
+function batchLabel(lotNumber: string) {
+  return lotNumber.startsWith("LEGACY-") ? "Stock anterior" : `Lote ${lotNumber}`;
+}
+
+function batchDate(value: string | null, timezone: string) {
+  if (!value) return null;
+  return formatClinicDate(`${value.slice(0, 10)}T12:00:00Z`, timezone);
+}
+
+function batchStatus(expirationDate: string | null, timezone: string) {
+  if (!expirationDate) return "Sin vencimiento";
+  const today = getClinicDateKey(new Date(), timezone);
+  const date = expirationDate.slice(0, 10);
+  const limit = new Date(`${today}T12:00:00Z`);
+  limit.setUTCDate(limit.getUTCDate() + 5);
+  if (date < today) return "Vencido";
+  if (date <= limit.toISOString().slice(0, 10)) return "Próximo a vencer";
+  return "Vigente";
+}
+
+function statusClass(status: string) {
+  if (status === "Vencido") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (status === "Próximo a vencer") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
 export default function InventoryPage() {
   const access = useCurrentUserAccess();
+  const profile = useCurrentUserProfile();
+  const currency = profile?.clinicCurrency ?? "DOP";
+  const timezone = profile?.clinicTimezone ?? "America/Santo_Domingo";
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [movements, setMovements] = useState<StockMovementRow[]>([]);
@@ -202,12 +230,14 @@ export default function InventoryPage() {
   const [movementProductFilter, setMovementProductFilter] = useState("ALL");
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [movementModalOpen, setMovementModalOpen] = useState(false);
+  const [batchDetailsProduct, setBatchDetailsProduct] = useState<ProductRow | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm);
   const [movementForm, setMovementForm] = useState<MovementFormState>(emptyMovementForm);
   const [selectedDelete, setSelectedDelete] = useState<{ id: number; name: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [productFieldErrors, setProductFieldErrors] = useState<Record<string, string>>({});
   const [savingMovement, setSavingMovement] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
@@ -269,8 +299,14 @@ export default function InventoryPage() {
       const categoryMatches = productCategoryFilter === "ALL" || (product.category || "Otro") === productCategoryFilter;
       const stockMatches = stockFilter === "ALL" || (stockFilter === "LOW" ? product.trackStock && product.stockOnHand <= product.minStock : product.trackStock && product.stockOnHand > product.minStock);
       const today = new Date(); today.setHours(0, 0, 0, 0);
-      const expiry = product.expirationDate ? new Date(`${product.expirationDate.slice(0, 10)}T00:00:00`) : null;
-      const expirationMatches = expirationFilter === "ALL" || (expirationFilter === "EXPIRED" ? !!expiry && expiry < today : expirationFilter === "EXPIRING" ? !!expiry && expiry >= today && expiry <= new Date(today.getTime() + 5 * 86_400_000) : true);
+      const activeBatches = (product.batches ?? []).filter((batch) => batch.quantity > 0);
+      const dates = activeBatches.map((batch) => batch.expirationDate).filter((date): date is string => !!date).map((date) => new Date(`${date.slice(0, 10)}T00:00:00`));
+      const hasExpired = dates.some((date) => date < today);
+      const hasExpiring = dates.some((date) => date >= today && date <= new Date(today.getTime() + 5 * 86_400_000));
+      const hasNoExpiration = activeBatches.length > 0 && activeBatches.some((batch) => !batch.expirationDate);
+      const legacyDate = !activeBatches.length && !(product.batches ?? []).length && product.expirationDate ? new Date(`${product.expirationDate.slice(0, 10)}T00:00:00`) : null;
+      const expirationMatches = expirationFilter === "ALL"
+        || (expirationFilter === "EXPIRED" ? hasExpired || (!!legacyDate && legacyDate < today) : expirationFilter === "EXPIRING" ? hasExpiring || (!!legacyDate && legacyDate >= today && legacyDate <= new Date(today.getTime() + 5 * 86_400_000)) : hasNoExpiration || (!!activeBatches.length && !dates.length));
       return statusMatches && categoryMatches && stockMatches && expirationMatches;
     });
   }, [products, productStatusFilter, productCategoryFilter, stockFilter, expirationFilter]);
@@ -329,6 +365,8 @@ export default function InventoryPage() {
       stockOnHand: product.stockOnHand,
       minStock: product.minStock,
       expirationDate: product.expirationDate?.slice(0, 10) ?? "",
+      initialBatchNumber: "",
+      initialExpirationDate: "",
       description: product.description ?? "",
       isActive: !!product.isActive,
     });
@@ -348,6 +386,7 @@ export default function InventoryPage() {
   const handleProductChange = (event: FormFieldChangeEvent) => {
     const fieldName = event.target.name as keyof ProductFormState;
     setProductForm((prev) => ({ ...prev, [fieldName]: event.target.value as never }));
+    setProductFieldErrors((current) => ({ ...current, [fieldName]: "" }));
   };
 
   const handleMovementChange = (event: FormFieldChangeEvent) => {
@@ -373,16 +412,25 @@ export default function InventoryPage() {
       stockOnHand: toNumber(productForm.stockOnHand),
       minStock: toNumber(productForm.minStock),
       expirationDate: productForm.expirationDate || null,
+      initialBatchNumber: productForm.initialBatchNumber.trim() || null,
+      initialExpirationDate: productForm.initialExpirationDate || null,
       description: productForm.description.trim() || null,
       isActive: !!productForm.isActive,
     };
 
-    if (!payload.name || payload.price == null) {
-      setAlert({ variant: "warning", title: "Completa nombre y precio" });
-      setAlertOpen(true);
+    const parsed = ProductCreateSchema.safeParse(payload);
+    if (!parsed.success) {
+      setProductFieldErrors(zodFieldErrors(parsed.error));
+      toast.error("Revisa los campos obligatorios antes de continuar.");
+      requestAnimationFrame(() => {
+        const first = document.querySelector<HTMLElement>('[data-invalid="true"] input, [data-invalid="true"] textarea, [data-invalid="true"] button');
+        first?.scrollIntoView({ block: "center" });
+        first?.focus();
+      });
       return;
     }
 
+    setProductFieldErrors({});
     setSavingProduct(true);
     try {
       if (editingProduct) await apiUpdateProduct(editingProduct.id, payload);
@@ -432,6 +480,8 @@ export default function InventoryPage() {
         reason: movementForm.reason.trim() || null,
         referenceType: movementForm.referenceType.trim() || null,
         referenceId: movementForm.referenceId.trim() || null,
+        batchNumber: movementForm.batchNumber.trim() || null,
+        expirationDate: movementForm.expirationDate || null,
       });
       setMovementModalOpen(false);
       await loadInventory(false);
@@ -527,38 +577,51 @@ export default function InventoryPage() {
       header: "Precio",
       cell: (row: ProductRow) => (
         <div>
-          <div className="font-semibold text-foreground">{toMoney(toNumber(row.price))}</div>
-          <div className="text-xs text-muted-foreground">Costo: {row.cost == null ? "-" : toMoney(toNumber(row.cost))}</div>
+          <div className="font-semibold text-foreground">{toMoney(toNumber(row.price), currency)}</div>
+          <div className="text-xs text-muted-foreground">Costo: {row.cost == null ? "-" : toMoney(toNumber(row.cost), currency)}</div>
         </div>
       ),
     },
     {
       header: "Vencimiento",
       cell: (row: ProductRow) => {
+        const activeBatches = (row.batches ?? []).filter((batch) => batch.quantity > 0);
+        const datedBatches = activeBatches.filter((batch) => batch.expirationDate);
+        const nearest = datedBatches[0];
+        if (activeBatches.length) {
+          const status = nearest ? batchStatus(nearest.expirationDate, timezone) : "Sin vencimiento";
+          return (
+            <button type="button" className="text-left hover:underline" onClick={() => setBatchDetailsProduct(row)}>
+              {nearest ? <div className="font-medium text-foreground">{batchDate(nearest.expirationDate, timezone)}</div> : <div className="font-medium text-muted-foreground">Sin vencimiento</div>}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {status !== "Sin vencimiento" ? <Badge variant="outline" className={statusClass(status)}>{status}</Badge> : null}
+                <span className="text-xs text-primary">{activeBatches.length} {activeBatches.length === 1 ? "lote" : "lotes"}</span>
+              </div>
+            </button>
+          );
+        }
+        if (row.batches?.length) return <span className="text-muted-foreground/60">Sin existencias por lote</span>;
         if (!row.expirationDate) return <span className="text-muted-foreground/60">No aplica</span>;
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const date = new Date(`${row.expirationDate.slice(0, 10)}T00:00:00`);
-        const expired = date < today;
-        const expiring = !expired && date <= new Date(today.getTime() + 5 * 86_400_000);
-        return <Badge variant="outline" className={expired ? "border-rose-200 bg-rose-50 text-rose-700" : expiring ? "border-amber-200 bg-amber-50 text-amber-700" : ""}>{expired ? "Expirado · " : expiring ? "Próximo · " : ""}{row.expirationDate.slice(0, 10)}</Badge>;
+        const status = batchStatus(row.expirationDate, timezone);
+        return <Badge variant="outline" className={statusClass(status)}>{status} · {batchDate(row.expirationDate, timezone)}</Badge>;
       },
     },
     {
       header: "Acciones",
       cell: (row: ProductRow) => (
-        <div className="flex items-center gap-2">
+        <div className="flex max-w-[12rem] flex-wrap items-center gap-1">
           {canUpdateInventory ? (
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" disabled={!row.trackStock} onClick={() => openMovementModal(row)}>
+            <Button variant="ghost" size="icon" aria-label={`Registrar movimiento para ${row.name}`} title="Registrar movimiento" className="h-9 w-9 rounded-xl" disabled={!row.trackStock} onClick={() => openMovementModal(row)}>
               <Waypoints className="h-4 w-4 text-emerald-700" />
             </Button>
           ) : null}
           {canUpdateInventory ? (
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => openEditProduct(row)}>
+            <Button variant="ghost" size="icon" aria-label={`Editar ${row.name}`} title="Editar producto" className="h-9 w-9 rounded-xl" onClick={() => openEditProduct(row)}>
               <Edit className="h-4 w-4 text-muted-foreground" />
             </Button>
           ) : null}
           {canDeleteInventory ? (
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => { setSelectedDelete({ id: row.id, name: row.name }); setDeleteOpen(true); }}>
+            <Button variant="ghost" size="icon" aria-label={`Eliminar ${row.name}`} title="Eliminar producto" className="h-9 w-9 rounded-xl" onClick={() => { setSelectedDelete({ id: row.id, name: row.name }); setDeleteOpen(true); }}>
               <Trash2 className="h-4 w-4 text-rose-500" />
             </Button>
           ) : null}
@@ -572,7 +635,7 @@ export default function InventoryPage() {
       header: "Fecha",
       cell: (row: StockMovementRow) => (
         <div>
-          <div className="font-medium text-foreground">{formatDateTime(row.createdAt)}</div>
+          <div className="font-medium text-foreground">{formatClinicDateTime(row.createdAt, timezone)}</div>
           <div className="text-xs text-muted-foreground">{row.createdBy?.name || row.createdBy?.email || "Sistema"}</div>
         </div>
       ),
@@ -613,6 +676,7 @@ export default function InventoryPage() {
       cell: (row: StockMovementRow) => (
         <div>
           <div className="text-sm text-muted-foreground">{row.reason || "Sin motivo"}</div>
+          {row.batch ? <div className="text-xs text-muted-foreground">{batchLabel(row.batch.lotNumber)}{row.batch.expirationDate ? ` · vence ${batchDate(row.batch.expirationDate, timezone)}` : ""}</div> : null}
           {(row.referenceType || row.referenceId) && <div className="text-xs text-muted-foreground">Ref: {row.referenceType ? `${row.referenceType} / ` : ""}{row.invoiceId ? <a className="text-primary hover:underline" href={`/invoices/${row.invoiceId}`}>{row.referenceId}</a> : row.referenceId}</div>}
         </div>
       ),
@@ -651,17 +715,37 @@ export default function InventoryPage() {
           </>
         }
         stats={[
-          { label: "Productos", value: products.length, hint: "Productos cargados" },
-          { label: "Stock", value: lowStockProducts.length, hint: "Stock bajo" },
-          { label: "Movimientos", value: movementStats.recent, hint: "Movimientos recientes" },
-          { label: "Valor", value: formatCurrency(totalValue), hint: "Stock valorizado" },
+          {
+            label: "Productos",
+            value: products.length,
+            hint: "Productos cargados",
+          },
+          {
+            label: "Stock",
+            value: lowStockProducts.length,
+            hint: "Stock bajo",
+          },
+          {
+            label: "Movimientos",
+            value: movementStats.recent,
+            hint: "Movimientos recientes",
+          },
+          {
+            label: "Valor",
+            value: formatCurrency(totalValue, currency),
+            hint: "Stock valorizado",
+          },
         ]}
       />
 
       <Tabs defaultValue="products" className="space-y-5">
         <TabsList className="h-10 rounded-lg p-1">
-          <TabsTrigger value="products" className="rounded-md px-4 py-2">Productos</TabsTrigger>
-          <TabsTrigger value="movements" className="rounded-md px-4 py-2">Movimientos</TabsTrigger>
+          <TabsTrigger value="products" className="rounded-md px-4 py-2">
+            Productos
+          </TabsTrigger>
+          <TabsTrigger value="movements" className="rounded-md px-4 py-2">
+            Movimientos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="products" className="space-y-4">
@@ -679,24 +763,62 @@ export default function InventoryPage() {
             searchPlaceholder="Buscar por nombre, SKU o categoria..."
             emptyMessage="No hay productos que coincidan con los filtros."
             actions={
-              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]">
-                <Select value={productStatusFilter} onValueChange={setProductStatusFilter}>
-                  <SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger>
+              <div className="flex w-full gap-3 lg:w-auto lg:flex-row">
+                <Select
+                  value={productStatusFilter}
+                  onValueChange={setProductStatusFilter}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">Todos los estados</SelectItem>
                     <SelectItem value="ACTIVE">Activo</SelectItem>
                     <SelectItem value="INACTIVE">Inactivo</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={productCategoryFilter} onValueChange={setProductCategoryFilter}>
-                  <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
+                <Select
+                  value={productCategoryFilter}
+                  onValueChange={setProductCategoryFilter}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Categoria" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">Todas las categorias</SelectItem>
-                    {productCategories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                    {productCategories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <Select value={stockFilter} onValueChange={setStockFilter}><SelectTrigger><SelectValue placeholder="Estado de stock" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todo el stock</SelectItem><SelectItem value="LOW">Stock bajo</SelectItem><SelectItem value="NORMAL">Stock normal</SelectItem></SelectContent></Select>
-                <Select value={expirationFilter} onValueChange={setExpirationFilter}><SelectTrigger><SelectValue placeholder="Vencimiento" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todo vencimiento</SelectItem><SelectItem value="EXPIRING">Próximos a vencer</SelectItem><SelectItem value="EXPIRED">Expirados</SelectItem></SelectContent></Select>
+                <Select value={stockFilter} onValueChange={setStockFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Estado de stock" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todo el stock</SelectItem>
+                    <SelectItem value="LOW">Stock bajo</SelectItem>
+                    <SelectItem value="NORMAL">Stock normal</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={expirationFilter}
+                  onValueChange={setExpirationFilter}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Vencimiento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todo vencimiento</SelectItem>
+                    <SelectItem value="EXPIRING">Próximos a vencer</SelectItem>
+                    <SelectItem value="EXPIRED">Vencidos</SelectItem>
+                    <SelectItem value="NO_EXPIRATION">
+                      Sin vencimiento
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             }
           />
@@ -713,67 +835,478 @@ export default function InventoryPage() {
             data={filteredMovements}
             searchValue={movementSearch}
             onSearchChange={setMovementSearch}
-            searchPredicate={(movement, query) => !query || [movement.product.name, movement.product.sku, movement.reason, movement.referenceType, movement.referenceId, movement.createdBy?.name, movement.createdBy?.email].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))}
+            searchPredicate={(movement, query) =>
+              !query ||
+              [
+                movement.product.name,
+                movement.product.sku,
+                movement.reason,
+                movement.referenceType,
+                movement.referenceId,
+                movement.createdBy?.name,
+                movement.createdBy?.email,
+              ]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(query))
+            }
             searchPlaceholder="Buscar por producto, referencia o usuario..."
             emptyMessage="No hay movimientos que coincidan con los filtros."
-            actions={<div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]"><Select value={movementTypeFilter} onValueChange={setMovementTypeFilter}><SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los movimientos</SelectItem>{movementTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select><Select value={movementProductFilter} onValueChange={setMovementProductFilter}><SelectTrigger><SelectValue placeholder="Producto" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los productos</SelectItem>{productOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></div>}
+            actions={
+              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-[10rem_12rem]">
+                <Select
+                  value={movementTypeFilter}
+                  onValueChange={setMovementTypeFilter}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos los movimientos</SelectItem>
+                    {movementTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* <Select
+                  value={movementProductFilter}
+                  onValueChange={setMovementProductFilter}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Producto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos los productos</SelectItem>
+                    {productOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select> */}
+              </div>
+            }
           />
         </TabsContent>
       </Tabs>
 
-      <Modal open={productModalOpen} onClose={() => setProductModalOpen(false)} title={editingProduct ? "Editar producto" : "Nuevo producto"} size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setProductModalOpen(false)}>Cancelar</Button>{(editingProduct ? canUpdateInventory : canCreateInventory) ? <Button onClick={submitProduct} className="bg-emerald-700 hover:bg-emerald-800" disabled={savingProduct}>{savingProduct ? "Guardando..." : editingProduct ? "Guardar cambios" : "Crear producto"}</Button> : null}</div>}>
-        <form onSubmit={submitProduct} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Nombre" name="name" value={productForm.name} onChange={handleProductChange} required className="sm:col-span-2" />
-          <FormField label="Categoria" name="category" type="select" value={productForm.category} onChange={handleProductChange} options={categoryOptions} />
-          <FormField label="SKU" name="sku" value={productForm.sku} onChange={handleProductChange} />
-          <FormField label="Unidad" name="unit" value={productForm.unit} onChange={handleProductChange} placeholder="unidad, caja, dosis" />
-          <FormField label="Costo" name="cost" type="number" value={productForm.cost} onChange={handleProductChange} />
-          <FormField label="Precio de venta" name="price" type="number" value={productForm.price} onChange={handleProductChange} required />
-          <FormField label="Stock actual" name="stockOnHand" type="number" value={productForm.stockOnHand} onChange={handleProductChange} />
-          <FormField label="Stock minimo" name="minStock" type="number" value={productForm.minStock} onChange={handleProductChange} />
-          <FormField label="Fecha de vencimiento" name="expirationDate" type="date" value={productForm.expirationDate} onChange={handleProductChange} />
-          <FormField label="Control de stock" name="trackStock" type="switch" value={productForm.trackStock} onChange={handleProductChange} placeholder="Activar seguimiento de inventario" />
-          <FormField label="Activo" name="isActive" type="switch" value={productForm.isActive} onChange={handleProductChange} placeholder="Disponible para venta y uso" />
+      <Modal
+        open={productModalOpen}
+        onClose={() => setProductModalOpen(false)}
+        title={editingProduct ? "Editar producto" : "Nuevo producto"}
+        size="lg"
+        footer={
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setProductModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            {(editingProduct ? canUpdateInventory : canCreateInventory) ? (
+              <Button
+                onClick={submitProduct}
+                className="bg-emerald-700 hover:bg-emerald-800"
+                disabled={savingProduct}
+              >
+                {savingProduct
+                  ? "Guardando..."
+                  : editingProduct
+                    ? "Guardar cambios"
+                    : "Crear producto"}
+              </Button>
+            ) : null}
+          </div>
+        }
+      >
+        <form
+          onSubmit={submitProduct}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
+          <FormField
+            label="Nombre"
+            name="name"
+            value={productForm.name}
+            onChange={handleProductChange}
+            required
+            error={productFieldErrors.name}
+            className="sm:col-span-2"
+          />
+          <FormField
+            label="Categoria"
+            name="category"
+            type="select"
+            value={productForm.category}
+            onChange={handleProductChange}
+            options={categoryOptions}
+          />
+          <FormField
+            label="SKU"
+            name="sku"
+            value={productForm.sku}
+            onChange={handleProductChange}
+          />
+          <FormField
+            label="Unidad"
+            name="unit"
+            value={productForm.unit}
+            onChange={handleProductChange}
+            placeholder="unidad, caja, dosis"
+          />
+          <FormField
+            label="Costo"
+            name="cost"
+            type="number"
+            value={productForm.cost}
+            onChange={handleProductChange}
+          />
+          <FormField
+            label="Precio de venta"
+            name="price"
+            type="number"
+            value={productForm.price}
+            onChange={handleProductChange}
+            required={true}
+            error={productFieldErrors.price}
+          />
+          <FormField
+            label={editingProduct ? "Stock actual" : "Stock inicial"}
+            name="stockOnHand"
+            type="number"
+            value={productForm.stockOnHand}
+            onChange={handleProductChange}
+          />
+          <FormField
+            label="Stock minimo"
+            name="minStock"
+            type="number"
+            value={productForm.minStock}
+            onChange={handleProductChange}
+          />
+          {!editingProduct ? (
+            <>
+              <div className="sm:col-span-2 rounded-lg border border-dashed border-border bg-muted/20 p-4">
+                <p className="text-sm font-semibold text-foreground">
+                  Lote inicial (opcional)
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Úsalo para medicamentos, vacunas u otros productos con
+                  trazabilidad por lote.
+                </p>
+                <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField
+                    label="Número de lote"
+                    name="initialBatchNumber"
+                    value={productForm.initialBatchNumber}
+                    onChange={handleProductChange}
+                    placeholder="Ej. A001"
+                  />
+                  <FormField
+                    label="Vencimiento del lote"
+                    name="initialExpirationDate"
+                    type="date"
+                    value={productForm.initialExpirationDate}
+                    onChange={handleProductChange}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <FormField
+              label="Vencimiento legacy"
+              name="expirationDate"
+              type="date"
+              value={productForm.expirationDate}
+              onChange={handleProductChange}
+              helperText="Compatibilidad con inventario anterior; los lotes tienen prioridad."
+            />
+          )}
+          <FormField
+            label="Control de stock"
+            name="trackStock"
+            type="switch"
+            value={productForm.trackStock}
+            onChange={handleProductChange}
+            placeholder="Activar seguimiento de inventario"
+          />
+          <FormField
+            label="Activo"
+            name="isActive"
+            type="switch"
+            value={productForm.isActive}
+            onChange={handleProductChange}
+            placeholder="Disponible para venta y uso"
+          />
           <div className="sm:col-span-2">
-            <FormField label="Descripcion" name="description" type="textarea" value={productForm.description} onChange={handleProductChange} placeholder="Notas o detalles del producto" />
+            <FormField
+              label="Descripcion"
+              name="description"
+              type="textarea"
+              value={productForm.description}
+              onChange={handleProductChange}
+              placeholder="Notas o detalles del producto"
+            />
           </div>
         </form>
       </Modal>
 
-      <Modal open={movementModalOpen} onClose={() => setMovementModalOpen(false)} title="Registrar movimiento" size="lg" footer={<div className="flex gap-3"><Button variant="outline" onClick={() => setMovementModalOpen(false)}>Cancelar</Button>{canUpdateInventory ? <Button onClick={submitMovement} className="bg-emerald-700 hover:bg-emerald-800" disabled={savingMovement}>{savingMovement ? "Registrando..." : "Guardar movimiento"}</Button> : null}</div>}>
-        <form onSubmit={submitMovement} className="grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+      <Modal
+        open={!!batchDetailsProduct}
+        onClose={() => setBatchDetailsProduct(null)}
+        title="Detalle de lotes"
+        size="lg"
+      >
+        {batchDetailsProduct ? (
+          <div className="space-y-5">
+            <div className="rounded-lg border border-border bg-muted/20 p-4">
+              <p className="text-xs text-muted-foreground">Producto</p>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <p className="font-semibold text-foreground">
+                  {batchDetailsProduct.name}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Stock total:{" "}
+                  <span className="font-semibold text-foreground">
+                    {batchDetailsProduct.stockOnHand}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {(batchDetailsProduct.batches ?? []).map((batch) => {
+                const status = batchStatus(batch.expirationDate, timezone);
+                return (
+                  <div
+                    key={batch.id}
+                    className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-[1.3fr_0.7fr_1fr_auto] sm:items-center"
+                  >
+                    <div>
+                      <p className="text-xs text-muted-foreground">Lote</p>
+                      <p className="font-medium text-foreground">
+                        {batchLabel(batch.lotNumber)}
+                      </p>
+                      {batch.lotNumber.startsWith("LEGACY-") ? (
+                        <p className="text-xs text-muted-foreground">
+                          Número interno oculto
+                        </p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Disponible
+                      </p>
+                      <p className="font-semibold text-foreground">
+                        {batch.quantity} uds.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Vencimiento
+                      </p>
+                      <p className="font-medium text-foreground">
+                        {batchDate(batch.expirationDate, timezone) ?? "Sin vencimiento"}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={
+                        batch.quantity > 0 && status !== "Sin vencimiento"
+                          ? statusClass(status)
+                          : ""
+                      }
+                    >
+                      {batch.quantity > 0 ? status : "Sin existencias"}
+                    </Badge>
+                  </div>
+                );
+              })}
+              {!(batchDetailsProduct.batches ?? []).length ? (
+                <p className="text-sm text-muted-foreground">
+                  Este producto no tiene lotes registrados.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={movementModalOpen}
+        onClose={() => setMovementModalOpen(false)}
+        title="Registrar movimiento"
+        size="xl"
+        footer={
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setMovementModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            {canUpdateInventory ? (
+              <Button
+                onClick={submitMovement}
+                className="bg-emerald-700 hover:bg-emerald-800"
+                disabled={savingMovement}
+              >
+                {savingMovement ? "Registrando..." : "Guardar movimiento"}
+              </Button>
+            ) : null}
+          </div>
+        }
+      >
+        <form
+          onSubmit={submitMovement}
+          className="grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_0.9fr]"
+        >
           <div className="space-y-4">
-            <FormField label="Producto" name="productId" type="select" value={movementForm.productId} onChange={handleMovementChange} options={productOptions} required />
+            <FormField
+              label="Producto"
+              name="productId"
+              type="select"
+              value={movementForm.productId}
+              onChange={handleMovementChange}
+              options={productOptions}
+              required
+            />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField label="Tipo" name="type" type="select" value={movementForm.type} onChange={handleMovementChange} options={movementTypeOptions} required />
-              <FormField label={movementForm.type === "ADJUST" ? "Ajuste (+/-)" : "Cantidad"} name="quantity" type="number" value={movementForm.quantity} onChange={handleMovementChange} placeholder={movementForm.type === "ADJUST" ? "Ej: -3 o 5" : "Ej: 10"} required />
+              <FormField
+                label="Tipo"
+                name="type"
+                type="select"
+                value={movementForm.type}
+                onChange={handleMovementChange}
+                options={movementTypeOptions}
+                required
+              />
+              <FormField
+                label={
+                  movementForm.type === "ADJUST" ? "Ajuste (+/-)" : "Cantidad"
+                }
+                name="quantity"
+                type="number"
+                value={movementForm.quantity}
+                onChange={handleMovementChange}
+                placeholder={
+                  movementForm.type === "ADJUST" ? "Ej: -3 o 5" : "Ej: 10"
+                }
+                required
+              />
             </div>
+            {movementForm.type === "IN" || movementForm.type === "PURCHASE" ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  label="Número de lote (opcional)"
+                  name="batchNumber"
+                  value={movementForm.batchNumber}
+                  onChange={handleMovementChange}
+                  placeholder="Ej. L-2026-04"
+                />
+                <FormField
+                  label="Vencimiento del lote"
+                  name="expirationDate"
+                  type="date"
+                  value={movementForm.expirationDate}
+                  onChange={handleMovementChange}
+                />
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField label="Tipo de referencia" name="referenceType" value={movementForm.referenceType} onChange={handleMovementChange} placeholder="COMPRA, FACTURA..." />
-              <FormField label="ID de referencia" name="referenceId" value={movementForm.referenceId} onChange={handleMovementChange} placeholder="F-1024" />
+              <FormField
+                label="Tipo de referencia"
+                name="referenceType"
+                type="select"
+                value={movementForm.referenceType}
+                onChange={handleMovementChange}
+                options={stockMovementReferenceTypes.map((value) => ({ value, label: stockMovementReferenceLabels[value] }))}
+                placeholder="Sin referencia"
+                emptyMessage="No hay tipos de referencia disponibles."
+              />
+              <FormField
+                label="ID de referencia"
+                name="referenceId"
+                value={movementForm.referenceId}
+                onChange={handleMovementChange}
+                placeholder="F-1024"
+              />
             </div>
-            <FormField label="Motivo" name="reason" type="textarea" value={movementForm.reason} onChange={handleMovementChange} placeholder="Describe por que se realiza este movimiento" />
+            <FormField
+              label="Motivo"
+              name="reason"
+              type="textarea"
+              value={movementForm.reason}
+              onChange={handleMovementChange}
+              placeholder="Describe por que se realiza este movimiento"
+            />
           </div>
           <div className="app-panel-muted p-5">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-foreground">{movementTone[movementForm.type].label}</h4>
-              <Badge className={movementTone[movementForm.type].badge}>{movementTone[movementForm.type].label}</Badge>
+              <h4 className="text-lg font-semibold text-foreground">
+                {movementTone[movementForm.type].label}
+              </h4>
+              <Badge className={movementTone[movementForm.type].badge}>
+                {movementTone[movementForm.type].label}
+              </Badge>
             </div>
             <div className="mt-4 space-y-3">
-              <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Producto</p><p className="mt-2 font-semibold text-foreground">{selectedMovementProduct?.name || "Selecciona un producto"}</p></div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Actual</p><p className="mt-2 text-xl font-semibold text-foreground">{selectedMovementProduct?.stockOnHand ?? "-"}</p></div>
-                <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Delta</p><p className={`mt-2 text-xl font-semibold ${movementDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{movementForm.quantity.trim() ? signed(movementDelta) : "-"}</p></div>
-                <div className="rounded-lg bg-background/80 p-4"><p className="text-xs text-muted-foreground">Final</p><p className={`mt-2 text-xl font-semibold ${invalidMovement ? "text-rose-700" : "text-foreground"}`}>{selectedMovementProduct ? movementNextStock : "-"}</p></div>
+              <div className="rounded-lg bg-background/80 p-4">
+                <p className="text-xs text-muted-foreground">Producto</p>
+                <p className="mt-2 font-semibold text-foreground">
+                  {selectedMovementProduct?.name || "Selecciona un producto"}
+                </p>
               </div>
-              <div className={`rounded-lg border p-4 text-sm ${invalidMovement ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{invalidMovement ? "El movimiento no es valido porque deja el stock en negativo." : "La vista previa te muestra el stock resultante antes de guardar."}</div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-background/80 p-4">
+                  <p className="text-xs text-muted-foreground">Actual</p>
+                  <p className="mt-2 text-xl font-semibold text-foreground">
+                    {selectedMovementProduct?.stockOnHand ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-background/80 p-4">
+                  <p className="text-xs text-muted-foreground">Delta</p>
+                  <p
+                    className={`mt-2 text-xl font-semibold ${movementDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}
+                  >
+                    {movementForm.quantity.trim() ? signed(movementDelta) : "-"}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-background/80 p-4">
+                  <p className="text-xs text-muted-foreground">Final</p>
+                  <p
+                    className={`mt-2 text-xl font-semibold ${invalidMovement ? "text-rose-700" : "text-foreground"}`}
+                  >
+                    {selectedMovementProduct ? movementNextStock : "-"}
+                  </p>
+                </div>
+              </div>
+              <div
+                className={`rounded-lg border p-4 text-sm ${invalidMovement ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}
+              >
+                {invalidMovement
+                  ? "El movimiento no es valido porque deja el stock en negativo."
+                  : "La vista previa te muestra el stock resultante antes de guardar."}
+              </div>
             </div>
           </div>
         </form>
       </Modal>
 
-      <ModalDelete open={deleteOpen} onOpenChange={setDeleteOpen} title="Eliminar producto" itemName={selectedDelete?.name} loading={loadingDelete} onConfirm={removeProduct} />
-      <AppAlert open={alertOpen} onOpenChange={setAlertOpen} variant={alert.variant} title={alert.title} description={alert.description} />
+      <ModalDelete
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Eliminar producto"
+        itemName={selectedDelete?.name}
+        loading={loadingDelete}
+        onConfirm={removeProduct}
+      />
+      <AppAlert
+        open={alertOpen}
+        onOpenChange={setAlertOpen}
+        variant={alert.variant}
+        title={alert.title}
+        description={alert.description}
+      />
     </div>
   );
 }

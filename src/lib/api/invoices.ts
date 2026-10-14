@@ -11,6 +11,7 @@ export type InvoiceListRow = {
   dueDate: string | null;
   paidAt: string | null;
   total: string;
+  paidTotal: string;
   subtotal: string;
   tax: string;
   discount: string;
@@ -23,7 +24,7 @@ export type InvoiceListRow = {
 
 export type InvoiceDetail = {
   id: number;
-  clinic: { name: string };
+  clinic: { name: string; taxName?: string | null; taxId?: string | null };
   number: string;
   status: string;
   issueDate: string;
@@ -34,8 +35,9 @@ export type InvoiceDetail = {
   discount: string;
   total: string;
   notes: string | null;
+  createdBy: { name: string; email: string } | null;
 
-  client: { id: number; fullName: string; phone: string | null; email: string | null; address: string | null };
+  client: { id: number; fullName: string; phone: string | null; email: string | null; address: string | null; identificationType: string | null; identificationNumber: string | null };
   pet: { id: number; name: string; species: string; breed: string | null } | null;
 
   items: Array<{
@@ -54,7 +56,15 @@ export type InvoiceDetail = {
     method: string;
     reference: string | null;
     paidAt: string;
+    createdBy: { name: string; email: string } | null;
   }>;
+};
+
+export type PatientInvoiceListResponse = {
+  data: Array<Pick<InvoiceListRow, "id" | "number" | "status" | "issueDate" | "total" | "paidTotal" | "client" | "pet" | "paymentsCount"> & { dueDate: string | null }>;
+  total: number;
+  page: number;
+  pageSize: number;
 };
 
 export async function apiListInvoices(params?: { q?: string; status?: string; take?: number }): Promise<InvoiceListRow[]> {
@@ -111,6 +121,19 @@ export async function apiCreatePayment(invoiceId: number, data: PaymentCreateInp
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Error registrando pago");
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string" ? payload.error : "No se pudo registrar el pago.";
+    throw new Error(message);
+  }
+  return payload;
+}
+
+export async function apiListPetInvoices(petId: number, params?: { q?: string; status?: string; page?: number; pageSize?: number }): Promise<PatientInvoiceListResponse> {
+  const sp = new URLSearchParams({ page: String(params?.page ?? 0), pageSize: String(params?.pageSize ?? 10) });
+  if (params?.q) sp.set("q", params.q);
+  if (params?.status) sp.set("status", params.status);
+  const res = await fetch(`/api/pets/${petId}/invoices?${sp.toString()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("No se pudieron cargar las facturas");
   return res.json();
 }

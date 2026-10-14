@@ -11,6 +11,8 @@ export type StockMovementRow = {
   referenceType: string | null;
   referenceId: string | null;
   invoiceId: number | null;
+  batchId: number | null;
+  batch: { id: number; lotNumber: string; expirationDate: string | null } | null;
   createdById: string | null;
   createdAt: string;
   product: {

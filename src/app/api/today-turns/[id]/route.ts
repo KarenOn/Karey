@@ -107,17 +107,30 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const exists = await prisma.todayTurn.findFirst({ where: { id, clinicId }, select: { id: true } });
   if (!exists) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
+  if (parsed.data.serviceId !== undefined) {
+    const service = await prisma.service.findFirst({ where: { id: parsed.data.serviceId, clinicId, isActive: true }, select: { id: true, name: true } });
+    if (!service) return NextResponse.json({ error: "Servicio inválido o inactivo." }, { status: 404 });
+  }
+
   const updated = await prisma.todayTurn.update({
     where: { id },
     data: {
-      ...parsed.data,
-      // normaliza vacíos:
-      notes: parsed.data.notes ?? undefined,
+      clientId: parsed.data.clientId ?? undefined,
+      petId: parsed.data.petId ?? undefined,
+      petName: parsed.data.petName ?? undefined,
+      species: parsed.data.species ?? undefined,
+      ownerName: parsed.data.ownerName ?? undefined,
       ownerPhone: parsed.data.ownerPhone ?? undefined,
+      type: parsed.data.service ?? undefined,
+      estimatedDurationMins: parsed.data.estimatedDuration ?? undefined,
+      serviceId: parsed.data.serviceId ?? undefined,
+      serviceName: parsed.data.serviceId ? (await prisma.service.findFirst({ where: { id: parsed.data.serviceId, clinicId }, select: { name: true } }))?.name ?? parsed.data.serviceName : parsed.data.serviceName,
+      notes: parsed.data.notes ?? undefined,
     },
     include: {
       pet: { select: { id: true, name: true, species: true } },
       client: { select: { id: true, fullName: true, phone: true } },
+      service: { select: { id: true, name: true, durationMins: true } },
     },
   });
 

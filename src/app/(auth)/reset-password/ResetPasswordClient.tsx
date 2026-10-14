@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowLeft, KeyRound, Lock, PawPrint } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import PasswordInput from "@/components/shared/PasswordInput";
 import Image from "next/image";
 
@@ -119,9 +120,9 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
         ) : null}
 
         <div>
-          <label className="mb-2 block text-sm font-semibold text-foreground/88">
+          <Label required className="mb-2 text-sm font-semibold text-foreground/88">
             Nueva contraseña
-          </label>
+          </Label>
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <PasswordInput
@@ -137,9 +138,9 @@ export default function ResetPasswordClient({ token }: ResetPasswordClientProps)
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-semibold text-foreground/88">
+          <Label required className="mb-2 text-sm font-semibold text-foreground/88">
             Confirmar contraseña
-          </label>
+          </Label>
           <div className="relative">
             <KeyRound className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <PasswordInput

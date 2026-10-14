@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
-import { serializeAttachment } from "@/lib/storage";
+import { serializeAttachment, storageRefBelongsToMedicalAttachment } from "@/lib/storage";
 import { MedicalAttachmentCreateSchema } from "@/lib/validators/attachments";
+import { deriveAttachmentDisplayName } from "@/lib/attachments";
 
 export const runtime = "nodejs";
 
 async function getVisitOrResponse(visitId: number, clinicId: number) {
   const visit = await prisma.clinicalVisit.findFirst({
     where: { id: visitId, clinicId },
-    select: { id: true, clinicId: true },
+    select: { id: true, clinicId: true, petId: true },
   });
 
   if (!visit) {
@@ -85,14 +86,23 @@ export async function POST(
     return visit;
   }
 
-  const { fileName, fileType, storageRef, url } = parsed.data;
+  const { fileName, displayName, originalFilename, fileType, fileSizeBytes, storageRef, url } = parsed.data;
+  if (storageRef && !storageRefBelongsToMedicalAttachment(storageRef, { clinicId, petId: visit.petId, visitId })) {
+    return NextResponse.json({ message: "El archivo no fue generado para esta visita" }, { status: 403 });
+  }
+  const resolvedOriginalFilename = originalFilename || fileName;
+  const resolvedDisplayName = displayName || deriveAttachmentDisplayName(resolvedOriginalFilename);
 
   const created = await prisma.medicalAttachment.create({
     data: {
       clinicId: visit.clinicId,
+      petId: visit.petId,
       visitId,
-      fileName,
+      fileName: resolvedDisplayName,
+      displayName: resolvedDisplayName,
+      originalFilename: resolvedOriginalFilename,
       fileType: fileType || null,
+      fileSizeBytes: fileSizeBytes ?? null,
       url: storageRef ?? url ?? "",
     },
   });

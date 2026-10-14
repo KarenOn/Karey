@@ -1,18 +1,18 @@
 import type { ClinicalReportData } from "@/types/clinical-report";
 
-export function clinicalDate(value: string | null, _timezone: string) {
-  void _timezone;
+import { DEFAULT_LOCALE, DEFAULT_TIMEZONE, formatClinicDate, formatClinicDateTime } from "@/lib/formatters";
+
+export function clinicalDate(value: string | null, timezone = DEFAULT_TIMEZONE) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(value));
+  return formatClinicDate(value, timezone, DEFAULT_LOCALE);
 }
 
-export function clinicalDateTime(value: string, _timezone: string) {
-  void _timezone;
-  return new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value));
+export function clinicalDateTime(value: string, timezone = DEFAULT_TIMEZONE) {
+  return formatClinicDateTime(value, timezone, DEFAULT_LOCALE);
 }
 
-export function clinicalVisitDate(value: string) {
-  return new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(value));
+export function clinicalVisitDate(value: string, timezone = DEFAULT_TIMEZONE) {
+  return formatClinicDate(value, timezone, DEFAULT_LOCALE);
 }
 
 export function clinicalSpecies(value: string) {

@@ -1,4 +1,5 @@
 import type { InvoicePrintData } from "@/lib/print/getInvoicePrintData";
+import { formatDecimal, formatMoney } from "@/lib/formatters";
 
 function esc(s: unknown) {
   return String(s ?? "")
@@ -9,10 +10,9 @@ function esc(s: unknown) {
     .replaceAll("'", "&#39;");
 }
 
-function money(n: any) {
-  const num = typeof n === "string" ? Number(n) : n;
-  if (Number.isNaN(num)) return "0.00";
-  return num.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function money(n: unknown) {
+  const num = typeof n === "number" ? n : Number(n);
+  return formatMoney(num);
 }
 
 function dt(iso?: string | null, tz?: string | null) {
@@ -58,7 +58,7 @@ export function renderInvoiceA4Html(data: InvoicePrintData) {
             <div class="desc">${esc(it.description)}</div>
             ${it.type ? `<div class="tiny">${esc(it.type)}</div>` : ""}
           </td>
-          <td class="right">${money(it.quantity)}</td>
+          <td class="right">${formatDecimal(it.quantity)}</td>
           <td class="right">${money(it.unitPrice)}</td>
           <td class="right" style="font-weight:800">${money(it.lineTotal)}</td>
         </tr>
@@ -134,6 +134,7 @@ export function renderInvoiceA4Html(data: InvoicePrintData) {
           <div class="logo">${logo}</div>
           <div>
             <div class="clinic-name">${esc(data.clinic.name)}</div>
+            ${data.clinic.fiscalName && data.clinic.fiscalName !== data.clinic.name ? `<div class="muted">Nombre fiscal: ${esc(data.clinic.fiscalName)}</div>` : ""}
             <div class="muted">
               ${data.clinic.address ? `<div>${esc(data.clinic.address)}</div>` : ""}
               <div>
@@ -161,6 +162,7 @@ export function renderInvoiceA4Html(data: InvoicePrintData) {
             <h3>Cliente</h3>
             <div class="kv">
               <div><span>Nombre</span><span>${esc(data.client.fullName)}</span></div>
+              ${data.client.identificationNumber ? `<div><span>Identificación</span><span>${esc(data.client.identificationNumber)}</span></div>` : ""}
               ${data.client.phone ? `<div><span>Tel</span><span>${esc(data.client.phone)}</span></div>` : ""}
               ${data.client.email ? `<div><span>Email</span><span>${esc(data.client.email)}</span></div>` : ""}
               ${data.client.address ? `<div><span>Dirección</span><span>${esc(data.client.address)}</span></div>` : ""}
@@ -229,7 +231,7 @@ export function renderInvoiceA4Html(data: InvoicePrintData) {
 
         <div class="footer">
           <div>Gracias por su visita 🐾</div>
-          <div>Documento generado por el sistema</div>
+          <div>Preparado para futura implementación fiscal; no constituye integración/certificación DGII.</div>
         </div>
       </div>
     </div>

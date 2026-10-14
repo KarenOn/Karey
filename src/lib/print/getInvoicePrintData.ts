@@ -4,11 +4,13 @@ import { resolveStoredFileUrl } from "@/lib/storage";
 export type InvoicePrintData = {
   clinic: {
     name: string;
+    fiscalName?: string | null;
     phone?: string | null;
     email?: string | null;
     address?: string | null;
     rnc?: string | null;
     logoUrl?: string | null;
+    currency?: string | null;
     timezone?: string | null;
     invoiceNotes?: string | null;
     invoiceTerms?: string | null;
@@ -24,8 +26,11 @@ export type InvoicePrintData = {
     tax: string;
     discount: string;
     total: string;
+    fiscalDocumentType?: string | null;
+    ncf?: string | null;
+    eNcf?: string | null;
   };
-  client: { fullName: string; phone?: string | null; email?: string | null; address?: string | null };
+  client: { fullName: string; phone?: string | null; email?: string | null; address?: string | null; identificationType?: string | null; identificationNumber?: string | null };
   pet?: { name: string; species?: string | null; breed?: string | null } | null;
   items: Array<{ description: string; quantity: string; unitPrice: string; lineTotal: string; type?: string | null }>;
   payments?: Array<{ method: string; amount: string; reference?: string | null; paidAt: string }>;
@@ -43,12 +48,14 @@ export async function getInvoicePrintData(opts: { clinicId: number; invoiceId: n
           address: true,
           timezone: true,
           logoUrl: true,
+          currency: true,
           taxId: true,
+          taxName: true,
           invoiceNotes: true,
           invoiceTerms: true,
         },
       },
-      client: { select: { fullName: true, phone: true, email: true, address: true } },
+      client: { select: { fullName: true, phone: true, email: true, address: true, identificationType: true, identificationNumber: true } },
       pet: { select: { name: true, species: true, breed: true } },
       items: { orderBy: { id: "asc" } },
       payments: { orderBy: { paidAt: "asc" } },
@@ -60,6 +67,7 @@ export async function getInvoicePrintData(opts: { clinicId: number; invoiceId: n
   return {
     clinic: {
       name: inv.clinic.name,
+      fiscalName: inv.clinic.taxName ?? null,
       phone: inv.clinic.phone,
       email: inv.clinic.email,
       address: inv.clinic.address,
@@ -68,12 +76,13 @@ export async function getInvoicePrintData(opts: { clinicId: number; invoiceId: n
       logoUrl: await resolveStoredFileUrl(inv.clinic.logoUrl, {
         fileName: `logo-clinica-${opts.clinicId}.png`,
       }),
+      currency: inv.clinic.currency,
       invoiceNotes: inv.clinic.invoiceNotes ?? null,
       invoiceTerms: inv.clinic.invoiceTerms ?? null,
     },
     invoice: {
       number: inv.number,
-      status: inv.status as any,
+      status: inv.status,
       issueDate: inv.issueDate.toISOString(),
       dueDate: inv.dueDate?.toISOString() ?? null,
       paidAt: inv.paidAt?.toISOString() ?? null,
@@ -82,12 +91,17 @@ export async function getInvoicePrintData(opts: { clinicId: number; invoiceId: n
       tax: inv.tax.toString(),
       discount: inv.discount.toString(),
       total: inv.total.toString(),
+      fiscalDocumentType: inv.fiscalDocumentType ?? null,
+      ncf: inv.ncf ?? null,
+      eNcf: inv.eNcf ?? null,
     },
     client: {
       fullName: inv.client.fullName,
       phone: inv.client.phone ?? null,
       email: inv.client.email ?? null,
       address: inv.client.address ?? null,
+      identificationType: inv.client.identificationType ?? null,
+      identificationNumber: inv.client.identificationNumber ?? null,
     },
     pet: inv.pet
       ? { name: inv.pet.name, species: inv.pet.species ?? null, breed: inv.pet.breed ?? null }

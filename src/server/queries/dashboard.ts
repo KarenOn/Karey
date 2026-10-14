@@ -138,9 +138,10 @@
 
 // src/server/queries/dashboard.ts
 import { prisma } from "@/lib/prisma";
-import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
-import { startOfDay, endOfDay } from "@/lib/utility";
+import { format, addDays } from "date-fns";
+import { getClinicDateKey, getClinicDayRange } from "@/lib/appointment-time";
 import { syncInventoryNotifications } from "@/lib/in-app-notifications";
+import { formatClinicTime } from "@/lib/formatters";
 
 export type DashboardVisibility = {
   canViewClients?: boolean;
@@ -151,6 +152,10 @@ export type DashboardVisibility = {
   canViewInvoices?: boolean;
   canViewRevenue?: boolean;
 };
+
+function formatStoredDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
 
 export async function getDashboardData(clinicId: number, visibility: DashboardVisibility = {}) {
   const {
@@ -165,7 +170,7 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
   // ✅ Single clinic (por ahora)
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true, owner: true, email: true, phone: true, mobile: true, inventoryExpiryAlertDays: true },
+    select: { id: true, name: true, owner: true, email: true, phone: true, mobile: true, inventoryExpiryAlertDays: true, timezone: true },
   });
 
   if (!clinic) {
@@ -177,6 +182,7 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
       invoices: [],
       products: [],
       expiringProducts: [],
+      expiredProducts: [],
       vaccinations: [],
       todayAppointmentsCount: 0,
       monthlyRevenue: 0,
@@ -186,11 +192,12 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
   }
 
   const now = new Date();
-  const dayStart = startOfDay(now);
-  const dayEnd = endOfDay(now);
-
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+  const clinicTimezone = clinic.timezone || "America/Santo_Domingo";
+  const { start: dayStart, end: dayEnd } = getClinicDayRange(now, clinicTimezone);
+  const clinicTodayKey = getClinicDateKey(now, clinicTimezone);
+  const [year, month] = clinicTodayKey.split("-").map(Number);
+  const monthStart = getClinicDayRange(new Date(Date.UTC(year, month - 1, 1)), clinicTimezone).start;
+  const monthEnd = getClinicDayRange(new Date(Date.UTC(year, month, 0)), clinicTimezone).end;
 
   const vaccineWindowEnd = addDays(now, 30);
 
@@ -202,6 +209,7 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
     recentInvoicesDb,
     lowStockProductsDb,
     expiringProductsDb,
+    expiredProductsDb,
     upcomingVaccinationsDb,
     monthlyRevenueAgg,
   ] = await Promise.all([
@@ -318,7 +326,14 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
       where: { clinicId: clinic.id, isActive: true, trackStock: true, expirationDate: { gte: dayStart, lte: addDays(now, clinic.inventoryExpiryAlertDays) } },
       orderBy: { expirationDate: "asc" },
       take: 20,
-      select: { id: true, name: true, expirationDate: true },
+      select: { id: true, name: true, category: true, expirationDate: true },
+    }),
+
+    prisma.product.findMany({
+      where: { clinicId: clinic.id, isActive: true, trackStock: true, expirationDate: { lt: dayStart } },
+      orderBy: { expirationDate: "desc" },
+      take: 20,
+      select: { id: true, name: true, category: true, expirationDate: true },
     }),
 
     prisma.vaccinationRecord.findMany({
@@ -356,8 +371,8 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
   // ✅ Mapeo: Upcoming Appointments (para tus componentes actuales)
   const upcomingAppointments = canViewAppointments ? upcomingAppointmentsDb.map((a) => ({
     id: a.id,
-    date: format(a.startAt, "yyyy-MM-dd"),
-    time: format(a.startAt, "HH:mm"),
+    date: getClinicDateKey(a.startAt, clinicTimezone),
+    time: formatClinicTime(a.startAt, clinicTimezone),
     status: a.status,
     reason: a.reason ?? "",
     notes: a.notes ?? "",
@@ -372,7 +387,7 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
     id: i.id,
     number: i.number,
     status: i.status,
-    date: format(i.issueDate, "yyyy-MM-dd"),
+    date: getClinicDateKey(i.issueDate, clinicTimezone),
     total: Number(i.total ?? 0),
     client_id: i.clientId,
     client_name: i.client?.fullName ?? "",
@@ -395,6 +410,14 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
     daysUntilExpiration: Math.max(0, Math.ceil((p.expirationDate!.getTime() - dayStart.getTime()) / 86_400_000)),
   }));
 
+  const expiredProducts = expiredProductsDb.map((p) => ({
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    expirationDate: format(p.expirationDate!, "yyyy-MM-dd"),
+    daysSinceExpiration: Math.max(1, Math.ceil((dayStart.getTime() - p.expirationDate!.getTime()) / 86_400_000)),
+  }));
+
   // ✅ Vacunas próximas
   const vaccinations = canViewVaccines && canViewPatients ? upcomingVaccinationsDb.map((v) => ({
     id: v.id,
@@ -402,8 +425,8 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
     pet_name: v.pet?.name ?? "",
     client_name: v.pet?.client?.fullName ?? "",
     vaccine_name: v.vaccine?.name ?? "",
-    next_due_at: v.nextDueAt ? format(v.nextDueAt, "yyyy-MM-dd") : null,
-    applied_at: v.appliedAt ? format(v.appliedAt, "yyyy-MM-dd") : null,
+    next_due_at: v.nextDueAt ? formatStoredDate(v.nextDueAt) : null,
+    applied_at: v.appliedAt ? formatStoredDate(v.appliedAt) : null,
   })) : [];
 
   const monthlyRevenue = canViewRevenue ? Number(monthlyRevenueAgg._sum.amount ?? 0) : 0;
@@ -442,6 +465,7 @@ export async function getDashboardData(clinicId: number, visibility: DashboardVi
     invoices,
     products: canViewInventory ? products : [],
     expiringProducts: canViewInventory ? expiringProducts : [],
+    expiredProducts: canViewInventory ? expiredProducts : [],
     vaccinations,
 
     todayAppointmentsCount: canViewAppointments ? todayAppointmentsCount : 0,

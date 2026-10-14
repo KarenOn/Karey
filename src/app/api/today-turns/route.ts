@@ -87,6 +87,7 @@ export async function GET(req: Request) {
     include: {
       pet: { select: { id: true, name: true, species: true } },
       client: { select: { id: true, fullName: true, phone: true } },
+      service: { select: { id: true, name: true, durationMins: true } },
     },
   });
 
@@ -179,6 +180,7 @@ export async function POST(req: Request) {
   }
 
   const input = parsed.data;
+  const service = await prisma.service.findFirst({ where: input.serviceId ? { id: input.serviceId, clinicId, isActive: true } : { clinicId, name: input.serviceName, isActive: true }, select: { id: true, name: true } });
   const isExisting = !!input.petId || !!input.clientId;
 
   // EXISTING: requiere ambos (tu zod ya lo exige, pero lo mantenemos seguro)
@@ -253,7 +255,8 @@ export async function POST(req: Request) {
 
         // common
         type: input.service,
-        serviceName: input.serviceName,
+        ...(service ? { service: { connect: { id: service.id } } } : {}),
+        serviceName: service?.name ?? input.serviceName,
         notes: input.notes ?? null,
         estimatedDurationMins: input.estimatedDuration,
         status: "WAITING",
@@ -277,7 +280,8 @@ export async function POST(req: Request) {
       species: input.species!,     // tu zod lo exige en walk-in
 
       type: input.service,
-      serviceName: input.serviceName,
+      ...(service ? { service: { connect: { id: service.id } } } : {}),
+      serviceName: service?.name ?? input.serviceName,
       notes: input.notes ?? null,
       estimatedDurationMins: input.estimatedDuration,
       status: "WAITING",

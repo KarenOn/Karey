@@ -1,10 +1,10 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireClinicPermission } from "@/lib/server-auth";
 import { syncInventoryNotifications } from "@/lib/in-app-notifications";
+import { consumeProductStockFEFO, InventoryStockError } from "@/lib/server/inventory-batches";
+import { parse } from "date-fns";
 import {
   StockMovementCreateSchema,
   stockMovementTypes,
@@ -26,14 +26,6 @@ function getMovementDelta(input: Pick<StockMovementCreateInput, "type" | "quanti
   if (input.type === "ADJUST") return input.quantity;
   if (input.type === "IN" || input.type === "PURCHASE") return input.quantity;
   return -Math.abs(input.quantity);
-}
-
-async function getCurrentUserId() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  return session?.user?.id ?? null;
 }
 
 export async function GET(req: Request) {
@@ -102,7 +94,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { clinicId } = await requireClinicPermission("inventoryMovements.create");
+  const { clinicId, session } = await requireClinicPermission("inventoryMovements.create");
   const body = await req.json().catch(() => null);
   const parsed = StockMovementCreateSchema.safeParse(body);
 
@@ -114,48 +106,33 @@ export async function POST(req: Request) {
   }
 
   const input = parsed.data;
-  const createdById = await getCurrentUserId();
-
-  const product = await prisma.product.findFirst({
-    where: { id: input.productId, clinicId },
-    select: {
-      id: true,
-      stockOnHand: true,
-      trackStock: true,
-    },
-  });
-
-  if (!product) {
-    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
-  }
-
-  if (!product.trackStock) {
-    return NextResponse.json(
-      { error: "Este producto no tiene control de stock activado" },
-      { status: 409 }
-    );
-  }
+  const createdById = session.user.id;
 
   const delta = getMovementDelta(input);
-  const nextStock = product.stockOnHand + delta;
 
-  if (nextStock < 0) {
-    return NextResponse.json({ error: "El movimiento deja el stock en negativo" }, { status: 409 });
-  }
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.findFirst({ where: { id: input.productId, clinicId }, select: { id: true, stockOnHand: true, trackStock: true } });
+      if (!product) throw new InventoryStockError("Producto no encontrado");
+      if (!product.trackStock) throw new InventoryStockError("Este producto no tiene control de stock activado");
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updatedProduct = await tx.product.update({
-      where: { id: product.id },
-      data: { stockOnHand: nextStock },
-      select: { id: true, stockOnHand: true },
-    });
+      let allocations: Array<{ batchId: number | null; quantity: number }> = [];
+      if (delta < 0) {
+        allocations = await consumeProductStockFEFO(tx, { clinicId, productId: product.id, quantity: Math.abs(delta) });
+      } else {
+        const updated = await tx.product.updateMany({ where: { id: product.id }, data: { stockOnHand: { increment: delta } } });
+        if (!updated.count) throw new InventoryStockError("No se pudo actualizar el stock");
+        const batch = input.batchNumber ? await tx.productBatch.upsert({ where: { productId_lotNumber: { productId: product.id, lotNumber: input.batchNumber } }, create: { productId: product.id, lotNumber: input.batchNumber, expirationDate: input.expirationDate ? parse(input.expirationDate, "yyyy-MM-dd", new Date()) : null, quantity: delta }, update: { quantity: { increment: delta }, ...(input.expirationDate ? { expirationDate: parse(input.expirationDate, "yyyy-MM-dd", new Date()) } : {}) } }) : null;
+        allocations = [{ batchId: batch?.id ?? null, quantity: delta }];
+      }
 
-    const movement = await tx.stockMovement.create({
+      const movements = await Promise.all(allocations.map((allocation) => tx.stockMovement.create({
       data: {
         clinicId,
         productId: product.id,
+        batchId: allocation.batchId,
         type: input.type,
-        quantity: input.quantity,
+        quantity: allocation.quantity,
         reason: input.reason ?? null,
         referenceType: input.referenceType ?? null,
         referenceId: input.referenceId ?? null,
@@ -173,6 +150,8 @@ export async function POST(req: Request) {
         invoiceId: true,
         createdById: true,
         createdAt: true,
+      batchId: true,
+      batch: { select: { id: true, lotNumber: true, expirationDate: true } },
         product: {
           select: {
             id: true,
@@ -191,12 +170,16 @@ export async function POST(req: Request) {
           },
         },
       },
+    })));
+
+      return { movement: movements[0], product: await tx.product.findUniqueOrThrow({ where: { id: product.id }, select: { id: true, stockOnHand: true } }) };
     });
 
-    return { movement, product: updatedProduct };
-  });
+    await syncInventoryNotifications(clinicId);
 
-  await syncInventoryNotifications(clinicId);
-
-  return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    if (error instanceof InventoryStockError) return NextResponse.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
 }

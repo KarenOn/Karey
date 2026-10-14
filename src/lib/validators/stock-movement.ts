@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValid, parse } from "date-fns";
 
 export const stockMovementTypes = [
   "IN",
@@ -8,6 +9,14 @@ export const stockMovementTypes = [
   "PURCHASE",
   "EXPIRED",
 ] as const;
+
+// Values used by current integrations. Keep database/API fields as strings for legacy compatibility.
+export const stockMovementReferenceTypes = ["PRODUCT", "INVOICE", "INVOICE_VOID"] as const;
+export const stockMovementReferenceLabels: Record<(typeof stockMovementReferenceTypes)[number], string> = {
+  PRODUCT: "Producto",
+  INVOICE: "Factura",
+  INVOICE_VOID: "Anulación de factura",
+};
 
 const emptyToNull = z
   .string()
@@ -22,6 +31,8 @@ const emptyToNull = z
 export const StockMovementCreateSchema = z
   .object({
     productId: z.coerce.number().int().positive("Producto invalido."),
+    batchNumber: emptyToNull,
+    expirationDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida.").refine((value) => isValid(parse(value, "yyyy-MM-dd", new Date())), "Fecha inválida.").nullable().optional(),
     type: z.enum(stockMovementTypes),
     quantity: z.coerce.number().int(),
     reason: emptyToNull,

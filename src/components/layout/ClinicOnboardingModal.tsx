@@ -300,7 +300,7 @@ export default function ClinicOnboardingModal() {
                 {step === 0 ? (
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="clinic-name">Nombre de la clínica</Label>
+                      <Label htmlFor="clinic-name" required>Nombre de la clínica</Label>
                       <div className="relative">
                         <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -315,7 +315,7 @@ export default function ClinicOnboardingModal() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="clinic-owner">Responsable / propietario</Label>
+                      <Label htmlFor="clinic-owner" required>Responsable / propietario</Label>
                       <Input
                         id="clinic-owner"
                         onChange={(event) =>
